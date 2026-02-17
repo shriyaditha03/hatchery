@@ -408,20 +408,6 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
             {/* Map Area */}
             <div ref={mapContainerRef} className="flex-1 w-full z-0 cursor-crosshair" />
 
-            {/* Live Address Preview Map Label - Improved layout and visibility */}
-            <div className="absolute bottom-4 left-4 right-20 z-[1001] pointer-events-none md:max-w-md">
-                <div className="bg-slate-900/95 backdrop-blur-md px-4 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-start gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                    <div className="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 mt-0.5 border border-primary/30">
-                        {isFetchingAddress ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <MapPin className="w-4 h-4 text-primary" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-[10px] uppercase font-black text-primary tracking-widest mb-1 opacity-80">Pinned Location</div>
-                        <div className="text-xs font-bold text-white leading-relaxed line-clamp-2">
-                            {isFetchingAddress ? 'Detecting address details...' : (liveAddress || 'Tap any spot on the map to define your hatchery')}
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             {/* Controls */}
             <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-3">
