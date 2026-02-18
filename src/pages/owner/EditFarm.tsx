@@ -156,7 +156,7 @@ const EditFarm = () => {
             newSections[sIdx].tanks.push({
                 name: `Tank ${newSections[sIdx].tanks.length + 1}`,
                 type: 'FRP',
-                shape: 'CIRCLE',
+                shape: 'RECTANGLE',
                 length: 0,
                 width: 0,
                 height: 0,
@@ -367,11 +367,13 @@ const EditFarm = () => {
                                                 </div>
                                             </div>
 
-                                            <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-2' : 'grid-cols-3'} gap-3`}>
+                                            <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
                                                 <div className="space-y-1.5">
                                                     <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
                                                     <Input
                                                         type="number"
+                                                        min="0"
+                                                        step="0.1"
                                                         className="h-9 text-xs"
                                                         value={tank.height || ''}
                                                         onChange={(e) => updateTank(sIdx, tIdx, { height: Number(e.target.value) })}
@@ -382,6 +384,8 @@ const EditFarm = () => {
                                                         <Label className="text-[10px] uppercase text-muted-foreground font-bold">Radius (m)</Label>
                                                         <Input
                                                             type="number"
+                                                            min="0"
+                                                            step="0.1"
                                                             className="h-9 text-xs"
                                                             value={tank.radius || ''}
                                                             onChange={(e) => updateTank(sIdx, tIdx, { radius: Number(e.target.value) })}
@@ -393,6 +397,8 @@ const EditFarm = () => {
                                                             <Label className="text-[10px] uppercase text-muted-foreground font-bold">Length (m)</Label>
                                                             <Input
                                                                 type="number"
+                                                                min="0"
+                                                                step="0.1"
                                                                 className="h-9 text-xs"
                                                                 value={tank.length || ''}
                                                                 onChange={(e) => updateTank(sIdx, tIdx, { length: Number(e.target.value) })}
@@ -402,6 +408,8 @@ const EditFarm = () => {
                                                             <Label className="text-[10px] uppercase text-muted-foreground font-bold">Width (m)</Label>
                                                             <Input
                                                                 type="number"
+                                                                min="0"
+                                                                step="0.1"
                                                                 className="h-9 text-xs"
                                                                 value={tank.width || ''}
                                                                 onChange={(e) => updateTank(sIdx, tIdx, { width: Number(e.target.value) })}

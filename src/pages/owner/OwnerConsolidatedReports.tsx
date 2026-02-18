@@ -13,7 +13,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera, Eye, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, getTodayStr, getDateRangeUTC } from '@/lib/date-utils';
 import { format } from 'date-fns';
@@ -34,6 +40,8 @@ const OwnerConsolidatedReports = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<ActivityLog[]>([]);
+    const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
 
     // Default to Today
     const [fromDate, setFromDate] = useState(getTodayStr());
@@ -101,19 +109,50 @@ const OwnerConsolidatedReports = () => {
         } else if (typeLower === 'treatment') {
             return `${data.treatmentType || 'N/A'} - ${data.treatmentDosage || '0'} ${data.treatmentUnit || 'ml'}`;
         } else if (typeLower === 'stocking') {
-            return `Nauplii: ${data.naupliiStocked || '0'}, Source: ${data.source || 'N/A'}`;
+            return (
+                <div className="space-y-0.5">
+                    <div>Nauplii: {data.naupliiStocked || '0'}M, Source: {data.broodstockSource || 'N/A'}</div>
+                    <div className="text-[9px] text-muted-foreground">
+                        Pop: {data.tankStockingNumber || '0'}, Hatchery: {data.hatcheryName || 'N/A'}
+                    </div>
+                    <div className="text-[9px] text-primary/70 font-semibold">
+                        Animal Score: {data.animalConditionScore}/5, Water Score: {data.waterQualityScore}/5
+                    </div>
+                </div>
+            );
         } else if (typeLower === 'observation') {
-            return `Dead Animals: ${data.deadAnimals || '0'}, Survival Rate: ${data.survivalRate || 'N/A'}%`;
+            return (
+                <div className="space-y-0.5">
+                    <div>Dead: {data.deadAnimals || '0'}, Pop: {data.presentPopulation || '0'}</div>
+                    {data.sample1AvgWt && <div className="text-[9px] text-muted-foreground">Avg Wt: S1:{data.sample1AvgWt}g, S2:{data.sample2AvgWt || '-'}g</div>}
+                    <div className="text-[9px] text-primary/70 font-semibold">
+                        Animal Score: {data.animalQualityScore}/5, Water Score: {data.waterQualityScore}/5
+                    </div>
+                </div>
+            );
         } else if (typeLower === 'water quality') {
             const waterData = data.waterData || {};
             const params = Object.entries(waterData)
-                .filter(([_, value]) => value)
+                .filter(([_, value]) => value && value !== '')
                 .map(([key, value]) => `${key}: ${value}`)
-                .slice(0, 3)
                 .join(', ');
-            return params || 'No parameters recorded';
+            return <div className="text-[10px] leading-tight">{params || 'No parameters recorded'}</div>;
         } else if (typeLower === 'animal quality') {
-            return `Size: ${data.animalSize || 'N/A'}`;
+            const ratings = data.animalRatings || {};
+            const ratingStr = Object.entries(ratings)
+                .filter(([_, val]) => val)
+                .map(([key, val]) => `${key.replace(/([A-Z])/g, ' $1').trim()}: ${val}`)
+                .join(', ');
+
+            return (
+                <div className="space-y-0.5">
+                    <div>Size/Wt: {data.animalSize || 'N/A'}</div>
+                    {ratingStr && <div className="text-[9px] text-muted-foreground line-clamp-1">{ratingStr}</div>}
+                    {data.hasDiseaseIdentified === 'Yes' && (
+                        <div className="text-[9px] text-red-500 font-bold">Symptoms: {data.diseaseSymptoms}</div>
+                    )}
+                </div>
+            );
         }
 
         return '-';
@@ -229,84 +268,206 @@ const OwnerConsolidatedReports = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="glass-card rounded-2xl border shadow-sm overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50">
-                                        <TableHead className="font-bold">Date & Time</TableHead>
-                                        <TableHead className="font-bold">Activity Type</TableHead>
-                                        <TableHead className="font-bold">Farm</TableHead>
-                                        <TableHead className="font-bold">Section</TableHead>
-                                        <TableHead className="font-bold">Tank</TableHead>
-                                        <TableHead className="font-bold">Details</TableHead>
-                                        <TableHead className="font-bold">Comments</TableHead>
-                                        <TableHead className="font-bold">Photo</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {logs.map((log) => (
-                                        <TableRow key={log.id} className="hover:bg-muted/30">
-                                            <TableCell className="whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-semibold">
-                                                        {formatDate(log.created_at, 'dd-MM-yyyy')}
-                                                    </span>
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                        {formatDate(log.created_at, 'hh:mm a')}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
-                                                    {log.activity_type}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {log.farms?.name || 'N/A'}
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">
-                                                {log.sections?.name || 'N/A'}
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {log.tanks?.name || 'N/A'}
-                                            </TableCell>
-                                            <TableCell className="max-w-xs">
-                                                <span className="text-xs">
-                                                    {formatActivityData(log.activity_type, log.data)}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="max-w-xs">
-                                                <span className="text-xs text-muted-foreground italic">
-                                                    {log.data?.comments || '-'}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>
-                                                {log.data?.photo_url ? (
-                                                    <a
-                                                        href={log.data.photo_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="block w-8 h-8 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
-                                                    >
-                                                        <img
-                                                            src={log.data.photo_url}
-                                                            alt="Activity"
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    </a>
-                                                ) : (
-                                                    <span className="text-muted-foreground/30"><Camera className="w-3 h-3" /></span>
-                                                )}
-                                            </TableCell>
+                    <div className="space-y-4">
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block glass-card rounded-2xl border shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50">
+                                            <TableHead className="font-bold">Date & Time</TableHead>
+                                            <TableHead className="font-bold">Activity Type</TableHead>
+                                            <TableHead className="font-bold">Farm</TableHead>
+                                            <TableHead className="font-bold">Section</TableHead>
+                                            <TableHead className="font-bold">Tank</TableHead>
+                                            <TableHead className="font-bold text-center w-16">Details</TableHead>
+                                            <TableHead className="font-bold">Comments</TableHead>
+                                            <TableHead className="font-bold">Photo</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {logs.map((log) => (
+                                            <TableRow key={log.id} className="hover:bg-muted/30">
+                                                <TableCell className="whitespace-nowrap">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-semibold">
+                                                            {formatDate(log.created_at, 'dd-MM-yyyy')}
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {formatDate(log.created_at, 'hh:mm a')}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
+                                                        {log.activity_type}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    {log.farms?.name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">
+                                                    {log.sections?.name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    {log.tanks?.name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell className="text-center w-16">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 w-7 p-0 hover:bg-primary/10 hover:text-primary"
+                                                        onClick={() => {
+                                                            setSelectedLog(log);
+                                                            setIsDetailOpen(true);
+                                                        }}
+                                                    >
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                </TableCell>
+                                                <TableCell className="max-w-xs">
+                                                    <span className="text-xs text-muted-foreground italic truncate block">
+                                                        {log.data?.comments || '-'}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {log.data?.photo_url ? (
+                                                        <a
+                                                            href={log.data.photo_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="block w-8 h-8 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
+                                                        >
+                                                            <img
+                                                                src={log.data.photo_url}
+                                                                alt="Activity"
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-muted-foreground/30"><Camera className="w-3 h-3" /></span>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-3">
+                            {logs.map((log) => (
+                                <div key={log.id} className="glass-card rounded-2xl p-4 border shadow-sm space-y-3">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold">{formatDate(log.created_at, 'dd MMM yyyy')}</span>
+                                                <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{formatDate(log.created_at, 'hh:mm a')}</span>
+                                            </div>
+                                            <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getActivityTypeColor(log.activity_type)}`}>
+                                                {log.activity_type}
+                                            </span>
+                                            <p className="text-xs font-semibold text-primary uppercase">{log.farms?.name} / {log.tanks?.name}</p>
+                                        </div>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="h-10 w-10 p-0 rounded-full shadow-sm"
+                                            onClick={() => {
+                                                setSelectedLog(log);
+                                                setIsDetailOpen(true);
+                                            }}
+                                        >
+                                            <Eye className="w-5 h-5" />
+                                        </Button>
+                                    </div>
+
+                                    {log.data?.comments && (
+                                        <p className="text-xs text-muted-foreground italic line-clamp-2 mt-2 border-t pt-2 border-dashed">
+                                            "{log.data.comments}"
+                                        </p>
+                                    )}
+
+                                    {log.data?.photo_url && (
+                                        <a
+                                            href={log.data.photo_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block h-24 w-full rounded-xl overflow-hidden border border-border mt-2"
+                                        >
+                                            <img
+                                                src={log.data.photo_url}
+                                                alt="Activity"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </a>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Detail Modal */}
+            <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+                <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="w-5 h-5 text-primary" />
+                            Activity Details
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedLog && (
+                        <div className="space-y-6 pt-2">
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b pb-1">Recorded Parameters</h3>
+                                <div className="grid gap-3">
+                                    {Object.entries(selectedLog.data || {}).map(([key, value]: [string, any]) => {
+                                        if (['date', 'time', 'ampm', 'comments', 'photo_url'].includes(key)) return null;
+
+                                        // Handle nested objects (like waterData)
+                                        if (typeof value === 'object' && value !== null) {
+                                            return Object.entries(value).map(([subKey, subValue]: [string, any]) => (
+                                                <div key={`${key}-${subKey}`} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0">
+                                                    <span className="text-sm text-muted-foreground capitalize">{subKey.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                    <span className="text-sm font-bold text-foreground">{subValue || '—'}</span>
+                                                </div>
+                                            ));
+                                        }
+
+                                        return (
+                                            <div key={key} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0">
+                                                <span className="text-sm text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                <span className="text-sm font-bold text-foreground">{value || '—'}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {selectedLog.data?.comments && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Comments</h3>
+                                    <div className="bg-muted/30 p-3 rounded-xl text-sm italic text-muted-foreground">
+                                        "{selectedLog.data.comments}"
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedLog.data?.photo_url && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Attached Photo</h3>
+                                    <div className="rounded-xl overflow-hidden border">
+                                        <img src={selectedLog.data.photo_url} alt="Activity" className="w-full h-auto" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

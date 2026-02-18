@@ -29,6 +29,7 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [liveAddress, setLiveAddress] = useState<string>('');
     const [isFetchingAddress, setIsFetchingAddress] = useState(false);
+    const [hasPolygon, setHasPolygon] = useState(false);
 
     const safeLat = typeof initialLat === 'number' ? initialLat : 17.3850;
     const safeLng = typeof initialLng === 'number' ? initialLng : 78.4867;
@@ -276,7 +277,60 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
 
     const drawingMarkersRef = useRef<L.CircleMarker[]>([]);
 
-    // 5. Click Handler (Location & Drawing)
+    // 5. Drawing Preview Effect (Prevents layer leaks)
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !drawingMode || points.length < 2) {
+            // If we are not drawing or dont have enough points, 
+            // the dashed line should ideally be gone UNLESS we're showing a finished solid polygon.
+            // But we handle finished vs drawing markers separately.
+            return;
+        }
+
+        // Update visual polygon preview (dashed line)
+        if (polygonRef.current) polygonRef.current.remove();
+        polygonRef.current = L.polygon(points, {
+            color: '#0ea5e9',
+            fillOpacity: 0.3,
+            weight: 3,
+            dashArray: '5, 5'
+        }).addTo(map);
+    }, [points, drawingMode]);
+
+    const handleClearArea = () => {
+        const map = mapRef.current;
+
+        // 1. Clear tracked refs
+        if (polygonRef.current) {
+            polygonRef.current.remove();
+            polygonRef.current = null;
+        }
+        drawingMarkersRef.current.forEach(m => m.remove());
+        drawingMarkersRef.current = [];
+
+        // 2. Nuclear option: Remove any other leftover plot artifacts from map
+        if (map) {
+            map.eachLayer((layer) => {
+                // Remove any polygons or circle markers that aren't the primary ones
+                if ((layer instanceof L.Polygon || layer instanceof L.CircleMarker) &&
+                    layer !== (markerRef.current as any) &&
+                    layer !== (accuracyCircleRef.current as any)) {
+                    map.removeLayer(layer);
+                }
+            });
+        }
+
+        // 3. Clear states
+        setPoints([]);
+        setHasPolygon(false);
+        setDrawingMode(false);
+
+        if (onPlotAreaSelect) {
+            onPlotAreaSelect(0, 0, 0);
+        }
+    };
+
+    // 6. Click Handler (Location & Drawing)
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
@@ -288,31 +342,17 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
 
         const onMapClick = (e: L.LeafletMouseEvent) => {
             if (drawingMode) {
-                setPoints(prev => {
-                    const newPoints = [...prev, e.latlng];
+                // Add a small interactive marker for this point (side effect outside setPoints)
+                const marker = L.circleMarker(e.latlng, {
+                    radius: 5,
+                    fillColor: '#0ea5e9',
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 1
+                }).addTo(map);
+                drawingMarkersRef.current.push(marker);
 
-                    // Add a small interactive marker for this point
-                    const marker = L.circleMarker(e.latlng, {
-                        radius: 5,
-                        fillColor: '#0ea5e9',
-                        color: '#fff',
-                        weight: 2,
-                        fillOpacity: 1
-                    }).addTo(map);
-                    drawingMarkersRef.current.push(marker);
-
-                    // Update visual polygon preview
-                    if (newPoints.length >= 2) {
-                        if (polygonRef.current) polygonRef.current.remove();
-                        polygonRef.current = L.polygon(newPoints, {
-                            color: '#0ea5e9',
-                            fillOpacity: 0.3,
-                            weight: 3,
-                            dashArray: '5, 5'
-                        }).addTo(map);
-                    }
-                    return newPoints;
-                });
+                setPoints(prev => [...prev, e.latlng]);
             } else {
                 const { lat, lng } = e.latlng;
                 if (markerRef.current) {
@@ -335,7 +375,9 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
         map.on('click', onMapClick);
         return () => {
             map.off('click', onMapClick);
-            if (!drawingMode) cleanupMarkers();
+            // Cleanup markers whenever drawing mode updates or unmounts
+            drawingMarkersRef.current.forEach(m => m.remove());
+            drawingMarkersRef.current = [];
         };
     }, [drawingMode, onLocationSelect, onPlotAreaSelect]);
 
@@ -453,19 +495,17 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
                                     fetchReverseGeocode(center.lat, center.lng);
                                 }
                             }
+                            setHasPolygon(true);
                             setDrawingMode(false);
-                            setPoints([]);
-                            drawingMarkersRef.current.forEach(m => m.remove());
-                            drawingMarkersRef.current = [];
                             toast.success("Plot area defined!");
                         } else {
                             if (drawingMode) {
-                                setPoints([]);
-                                if (polygonRef.current) { polygonRef.current.remove(); polygonRef.current = null; }
-                                drawingMarkersRef.current.forEach(m => m.remove());
-                                drawingMarkersRef.current = [];
+                                handleClearArea();
+                            } else {
+                                // Start fresh: clear any previous polygon
+                                handleClearArea();
+                                setDrawingMode(true);
                             }
-                            setDrawingMode(!drawingMode);
                         }
                     }}
                     className={`h-12 px-5 rounded-xl shadow-2xl font-black text-[10px] uppercase tracking-widest transform transition-all active:scale-95 border flex items-center gap-2 ${drawingMode

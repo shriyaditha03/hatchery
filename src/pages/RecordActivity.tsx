@@ -377,7 +377,7 @@ const RecordActivity = () => {
         {/* Date / Time */}
         <div className="glass-card rounded-2xl p-4 space-y-4">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Date</Label>
               <Input
@@ -557,7 +557,7 @@ const RecordActivity = () => {
         {activity === 'Water Quality' && (
           <div className="glass-card rounded-2xl p-4 space-y-4 animate-fade-in-up">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Water Quality Parameters</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
               {waterFields.map(field => {
                 const rangeLabel = WATER_QUALITY_RANGES[field];
 
@@ -600,14 +600,14 @@ const RecordActivity = () => {
                 onChange={e => {
                   const val = e.target.value;
                   // Allow numbers and '/' only
-                  if (val === '' || /^[0-9/]*$/.test(val)) {
+                  if (val === '' || /^[0-9/.]*$/.test(val)) {
                     setAnimalSize(val);
                   }
                 }}
                 placeholder="Enter size / avg weight (e.g. 10/12)"
                 className="h-11"
               />
-              <p className="text-[10px] text-muted-foreground">Only numbers and '/' allowed</p>
+              <p className="text-[10px] text-muted-foreground">Only numbers, '.', and '/' allowed</p>
             </div>
             <div className="space-y-4">
               {ANIMAL_RATING_FIELDS.map(f => (
