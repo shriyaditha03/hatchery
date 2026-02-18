@@ -1,26 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, FileText, Loader2, Utensils, Beaker, Waves, Search, Layers, Eye, Calendar, Pencil } from 'lucide-react';
-import { useActivities } from '@/hooks/useActivities';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, FileText, Loader2, Utensils, Beaker, Waves, Search, Layers, Eye, Calendar, Pencil, Camera, Info } from 'lucide-react';
+import { useActivities, ActivityRecord } from '@/hooks/useActivities';
 import { formatDate, isTodayLocal, getNowLocal } from '@/lib/date-utils';
 
-const iconMap: Record<string, any> = {
-    'Feed': Utensils,
-    'Treatment': Beaker,
-    'Water Quality': Waves,
-    'Animal Quality': Search,
-    'Stocking': Layers,
-    'Observation': Eye
-};
-
-const colorMap: Record<string, string> = {
-    'Feed': 'text-orange-600 bg-orange-100',
-    'Treatment': 'text-blue-600 bg-blue-100',
-    'Water Quality': 'text-cyan-600 bg-cyan-100',
-    'Animal Quality': 'text-rose-600 bg-rose-100',
-    'Stocking': 'text-emerald-600 bg-emerald-100',
-    'Observation': 'text-purple-600 bg-purple-100'
+const getActivityTypeColor = (type: string) => {
+    const colors: Record<string, string> = {
+        'Feed': 'bg-orange-100 text-orange-700',
+        'Treatment': 'bg-blue-100 text-blue-700',
+        'Water Quality': 'bg-cyan-100 text-cyan-700',
+        'Animal Quality': 'bg-rose-100 text-rose-700',
+        'Stocking': 'bg-emerald-100 text-emerald-700',
+        'Observation': 'bg-purple-100 text-purple-700',
+    };
+    return colors[type] || 'bg-gray-100 text-gray-700';
 };
 
 const UserDailyReport = () => {
@@ -28,6 +36,8 @@ const UserDailyReport = () => {
     const { activities, loading, fetchActivities } = useActivities();
 
     const [now, setNow] = useState(getNowLocal());
+    const [selectedLog, setSelectedLog] = useState<ActivityRecord | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
 
     useEffect(() => {
         fetchActivities();
@@ -81,59 +91,156 @@ const UserDailyReport = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {todayActivities.map((act) => {
-                            const Icon = iconMap[act.activity_type] || FileText;
-                            const colors = colorMap[act.activity_type] || 'text-slate-600 bg-slate-100';
-
-                            return (
-                                <div key={act.id} className="bg-card rounded-2xl p-4 shadow-sm border flex items-start gap-4">
-                                    <div className={`p-3 rounded-xl shrink-0 ${colors}`}>
-                                        <Icon className="w-6 h-6" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                            <h3 className="font-bold text-foreground truncate">{act.activity_type}</h3>
-                                            <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">
+                    <div className="glass-card rounded-2xl border shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="font-bold whitespace-nowrap">Time</TableHead>
+                                        <TableHead className="font-bold whitespace-nowrap">Activity</TableHead>
+                                        <TableHead className="font-bold whitespace-nowrap">Location</TableHead>
+                                        <TableHead className="font-bold text-center">Details</TableHead>
+                                        <TableHead className="font-bold text-center">Edit</TableHead>
+                                        <TableHead className="font-bold">Comments</TableHead>
+                                        <TableHead className="font-bold">Photo</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {todayActivities.map((act) => (
+                                        <TableRow key={act.id} className="hover:bg-muted/30">
+                                            <TableCell className="whitespace-nowrap font-medium text-xs">
                                                 {formatDate(new Date(act.created_at), 'hh:mm a')}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm font-semibold text-primary mb-1">
-                                            {act.sections?.name || act.tanks?.sections?.name || 'Unknown'} - {act.tanks?.name || 'Unknown'}
-                                        </p>
-
-                                        {/* Activity Data Summary */}
-                                        <div className="text-xs text-muted-foreground line-clamp-2">
-                                            {act.activity_type === 'Feed' && (
-                                                <>{act.data.feedType}: {act.data.feedQty} {act.data.feedUnit}</>
-                                            )}
-                                            {act.activity_type === 'Treatment' && (
-                                                <>{act.data.treatmentType}: {act.data.treatmentDosage} {act.data.treatmentUnit}</>
-                                            )}
-                                            {act.activity_type === 'Water Quality' && (
-                                                <>pH: {act.data.waterData?.pH || '—'}, Temp: {act.data.waterData?.Temperature || '—'}°C</>
-                                            )}
-                                            {act.data.comments && (
-                                                <span className="block italic mt-1 font-normal italic">
-                                                    "{act.data.comments}"
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getActivityTypeColor(act.activity_type)}`}>
+                                                    {act.activity_type}
                                                 </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => navigate(`/user/activity/${(act.activity_type || '').toLowerCase()}?edit=${act.id}`)}
-                                        className="text-muted-foreground hover:text-primary hover:bg-primary/5 h-8 w-8 self-center shrink-0"
-                                    >
-                                        <Pencil className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            );
-                        })}
+                                            </TableCell>
+                                            <TableCell className="max-w-[150px]">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-semibold truncate capitalize">
+                                                        {act.farms?.name || 'N/A'}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground truncate uppercase">
+                                                        {act.sections?.name || act.tanks?.sections?.name || 'N/A'} - {act.tanks?.name || 'N/A'}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
+                                                    onClick={() => {
+                                                        setSelectedLog(act);
+                                                        setIsDetailOpen(true);
+                                                    }}
+                                                    title="View Details"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                                                    onClick={() => navigate(`/user/activity/${(act.activity_type || '').toLowerCase()}?edit=${act.id}`)}
+                                                    title="Edit Activity"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell className="max-w-[150px]">
+                                                <span className="text-xs text-muted-foreground italic truncate block">
+                                                    {act.data?.comments || '-'}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {act.data?.photo_url ? (
+                                                    <a
+                                                        href={act.data.photo_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block w-8 h-8 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
+                                                    >
+                                                        <img
+                                                            src={act.data.photo_url}
+                                                            alt="Activity"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-muted-foreground/30"><Camera className="w-3.5 h-3.5" /></span>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </div>
                 )}
             </div>
+
+            {/* Detail Modal */}
+            <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+                <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl glass-card">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="w-5 h-5 text-primary" />
+                            Activity Details
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedLog && (
+                        <div className="space-y-6 pt-2">
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b pb-1">Recorded Parameters</h3>
+                                <div className="grid gap-3">
+                                    {Object.entries(selectedLog.data || {}).map(([key, value]: [string, any]) => {
+                                        if (['date', 'time', 'ampm', 'comments', 'photo_url'].includes(key)) return null;
+
+                                        // Handle nested objects (like waterData)
+                                        if (typeof value === 'object' && value !== null) {
+                                            return Object.entries(value).map(([subKey, subValue]: [string, any]) => (
+                                                <div key={`${key}-${subKey}`} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0 hover:bg-muted/5 transition-colors px-1 rounded-md">
+                                                    <span className="text-sm text-muted-foreground capitalize">{subKey.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                    <span className="text-sm font-bold text-foreground">{subValue || '—'}</span>
+                                                </div>
+                                            ));
+                                        }
+
+                                        return (
+                                            <div key={key} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0 hover:bg-muted/5 transition-colors px-1 rounded-md">
+                                                <span className="text-sm text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                <span className="text-sm font-bold text-foreground">{value || '—'}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {selectedLog.data?.comments && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Comments</h3>
+                                    <div className="bg-muted/50 p-4 rounded-2xl text-sm italic text-muted-foreground">
+                                        "{selectedLog.data.comments}"
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedLog.data?.photo_url && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Attached Photo</h3>
+                                    <div className="rounded-2xl overflow-hidden border shadow-sm">
+                                        <img src={selectedLog.data.photo_url} alt="Activity" className="w-full h-auto" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

@@ -268,143 +268,88 @@ const OwnerConsolidatedReports = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {/* Desktop Table View */}
-                        <div className="hidden md:block glass-card rounded-2xl border shadow-sm overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead className="font-bold">Date & Time</TableHead>
-                                            <TableHead className="font-bold">Activity Type</TableHead>
-                                            <TableHead className="font-bold">Farm</TableHead>
-                                            <TableHead className="font-bold">Section</TableHead>
-                                            <TableHead className="font-bold">Tank</TableHead>
-                                            <TableHead className="font-bold text-center w-16">Details</TableHead>
-                                            <TableHead className="font-bold">Comments</TableHead>
-                                            <TableHead className="font-bold">Photo</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {logs.map((log) => (
-                                            <TableRow key={log.id} className="hover:bg-muted/30">
-                                                <TableCell className="whitespace-nowrap">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-semibold">
-                                                            {formatDate(log.created_at, 'dd-MM-yyyy')}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {formatDate(log.created_at, 'hh:mm a')}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
-                                                        {log.activity_type}
+                    <div className="glass-card rounded-2xl border shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="font-bold">Date & Time</TableHead>
+                                        <TableHead className="font-bold">Activity Type</TableHead>
+                                        <TableHead className="font-bold">Farm</TableHead>
+                                        <TableHead className="font-bold">Section</TableHead>
+                                        <TableHead className="font-bold">Tank</TableHead>
+                                        <TableHead className="font-bold text-center w-16">Details</TableHead>
+                                        <TableHead className="font-bold">Comments</TableHead>
+                                        <TableHead className="font-bold">Photo</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {logs.map((log) => (
+                                        <TableRow key={log.id} className="hover:bg-muted/30">
+                                            <TableCell className="whitespace-nowrap">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-semibold">
+                                                        {formatDate(log.created_at, 'dd-MM-yyyy')}
                                                     </span>
-                                                </TableCell>
-                                                <TableCell className="font-medium">
-                                                    {log.farms?.name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {log.sections?.name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell className="font-medium">
-                                                    {log.tanks?.name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell className="text-center w-16">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0 hover:bg-primary/10 hover:text-primary"
-                                                        onClick={() => {
-                                                            setSelectedLog(log);
-                                                            setIsDetailOpen(true);
-                                                        }}
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {formatDate(log.created_at, 'hh:mm a')}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
+                                                    {log.activity_type}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {log.farms?.name || 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {log.sections?.name || 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {log.tanks?.name || 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="text-center w-16">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-7 w-7 p-0 hover:bg-primary/10 hover:text-primary"
+                                                    onClick={() => {
+                                                        setSelectedLog(log);
+                                                        setIsDetailOpen(true);
+                                                    }}
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell className="max-w-xs">
+                                                <span className="text-xs text-muted-foreground italic truncate block">
+                                                    {log.data?.comments || '-'}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {log.data?.photo_url ? (
+                                                    <a
+                                                        href={log.data.photo_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block w-8 h-8 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
                                                     >
-                                                        <Eye className="w-4 h-4" />
-                                                    </Button>
-                                                </TableCell>
-                                                <TableCell className="max-w-xs">
-                                                    <span className="text-xs text-muted-foreground italic truncate block">
-                                                        {log.data?.comments || '-'}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {log.data?.photo_url ? (
-                                                        <a
-                                                            href={log.data.photo_url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="block w-8 h-8 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
-                                                        >
-                                                            <img
-                                                                src={log.data.photo_url}
-                                                                alt="Activity"
-                                                                className="w-full h-full object-cover"
-                                                            />
-                                                        </a>
-                                                    ) : (
-                                                        <span className="text-muted-foreground/30"><Camera className="w-3 h-3" /></span>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-
-                        {/* Mobile Card View */}
-                        <div className="md:hidden space-y-3">
-                            {logs.map((log) => (
-                                <div key={log.id} className="glass-card rounded-2xl p-4 border shadow-sm space-y-3">
-                                    <div className="flex items-start justify-between">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-bold">{formatDate(log.created_at, 'dd MMM yyyy')}</span>
-                                                <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{formatDate(log.created_at, 'hh:mm a')}</span>
-                                            </div>
-                                            <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getActivityTypeColor(log.activity_type)}`}>
-                                                {log.activity_type}
-                                            </span>
-                                            <p className="text-xs font-semibold text-primary uppercase">{log.farms?.name} / {log.tanks?.name}</p>
-                                        </div>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            className="h-10 w-10 p-0 rounded-full shadow-sm"
-                                            onClick={() => {
-                                                setSelectedLog(log);
-                                                setIsDetailOpen(true);
-                                            }}
-                                        >
-                                            <Eye className="w-5 h-5" />
-                                        </Button>
-                                    </div>
-
-                                    {log.data?.comments && (
-                                        <p className="text-xs text-muted-foreground italic line-clamp-2 mt-2 border-t pt-2 border-dashed">
-                                            "{log.data.comments}"
-                                        </p>
-                                    )}
-
-                                    {log.data?.photo_url && (
-                                        <a
-                                            href={log.data.photo_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block h-24 w-full rounded-xl overflow-hidden border border-border mt-2"
-                                        >
-                                            <img
-                                                src={log.data.photo_url}
-                                                alt="Activity"
-                                                className="w-full h-full object-cover"
-                                            />
-                                        </a>
-                                    )}
-                                </div>
-                            ))}
+                                                        <img
+                                                            src={log.data.photo_url}
+                                                            alt="Activity"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-muted-foreground/30"><Camera className="w-3 h-3" /></span>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </div>
                     </div>
                 )}

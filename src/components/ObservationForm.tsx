@@ -46,13 +46,13 @@ const ObservationForm = ({
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 pr-2 font-medium text-muted-foreground"></th>
-                <th className="text-center py-2 px-1 font-medium text-muted-foreground">Sample 1</th>
-                <th className="text-center py-2 px-1 font-medium text-muted-foreground">Sample 2</th>
+                <th className="text-center py-2 px-1 font-medium text-muted-foreground">Sample 1 *</th>
+                <th className="text-center py-2 px-1 font-medium text-muted-foreground">Sample 2 *</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b border-border/50">
-                <td className="py-2 pr-2 font-medium">Animal Count</td>
+                <td className="py-2 pr-2 font-medium">Animal Count *</td>
                 <td className="py-2 px-1">
                   <Input
                     type="number"
@@ -87,7 +87,7 @@ const ObservationForm = ({
                 </td>
               </tr>
               <tr className="border-b border-border/50">
-                <td className="py-2 pr-2 font-medium">Weight</td>
+                <td className="py-2 pr-2 font-medium">Weight *</td>
                 <td className="py-2 px-1">
                   <Input
                     type="number"
@@ -164,7 +164,7 @@ const ObservationForm = ({
 
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Number of Molts Collected</Label>
+        <Label className="text-xs">Number of Molts Collected *</Label>
         <p className="text-[10px] text-muted-foreground -mt-1">To help us calculate Molting Cycle</p>
         <Input
           type="number"
@@ -182,7 +182,7 @@ const ObservationForm = ({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Number of Dead Animals (Mortality)</Label>
+        <Label className="text-xs">Number of Dead Animals (Mortality) *</Label>
         <Input
           type="number"
           min="0"
@@ -199,7 +199,7 @@ const ObservationForm = ({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Number of Nauplii Stocked in Million</Label>
+        <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
         <Input
           type="number"
           min="0"
@@ -234,7 +234,7 @@ const ObservationForm = ({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Tank Stocking Number (Population)</Label>
+        <Label className="text-xs">Tank Stocking Number (Population) *</Label>
         <Input
           type="number"
           min="0"
@@ -251,7 +251,7 @@ const ObservationForm = ({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Number of Nauplii Stocked in Million</Label>
+        <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
         <Input
           type="number"
           min="0"
@@ -279,6 +279,7 @@ const ObservationForm = ({
 
 
       <div className="space-y-1.5 pt-2 border-t border-dashed">
+        <Label className="text-xs">Activity Photo *</Label>
         <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
       </div>
 

@@ -26,18 +26,18 @@ const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Dis
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
 
 const ANIMAL_RATING_FIELDS = [
-  { key: 'swimmingActivity', label: 'Swimming Activity' },
+  { key: 'swimmingActivity', label: 'Swimming Activity', required: true },
   { key: 'homogenousStage', label: 'Homogenous Stage', required: true },
-  { key: 'hepatopancreas', label: 'Hepatopancreas' },
-  { key: 'intestinalContent', label: 'Intestinal Content' },
-  { key: 'fecalStrings', label: 'Fecal Strings' },
-  { key: 'necrosis', label: 'Necrosis' },
-  { key: 'deformities', label: 'Deformities' },
+  { key: 'hepatopancreas', label: 'Hepatopancreas', required: true },
+  { key: 'intestinalContent', label: 'Intestinal Content', required: true },
+  { key: 'fecalStrings', label: 'Fecal Strings', required: true },
+  { key: 'necrosis', label: 'Necrosis', required: true },
+  { key: 'deformities', label: 'Deformities', required: true },
   { key: 'fouling', label: 'Fouling', required: true },
-  { key: 'epibionts', label: 'Epibionts' },
-  { key: 'muscleGutRatio', label: 'Muscle Gut Ratio' },
+  { key: 'epibionts', label: 'Epibionts', required: true },
+  { key: 'muscleGutRatio', label: 'Muscle Gut Ratio', required: true },
   { key: 'size', label: 'Size', required: true },
-  { key: 'nextStageConversion', label: 'Time taken for Next Stage Conversion' },
+  { key: 'nextStageConversion', label: 'Time taken for Next Stage Conversion', required: true },
 ];
 
 const waterFields = [
@@ -278,6 +278,11 @@ const RecordActivity = () => {
       return;
     }
 
+    if (!photoUrl) {
+      toast.error('Activity photo is required');
+      return;
+    }
+
     if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim())) {
       toast.error('Feed Type and Quantity are required');
       return;
@@ -288,19 +293,50 @@ const RecordActivity = () => {
       return;
     }
 
-    if (activity === 'Stocking' && (!stockingData.broodstockSource?.trim() || !stockingData.tankStockingNumber || !stockingData.naupliiStocked || !stockingData.animalConditionScore || !stockingData.waterQualityScore)) {
-      toast.error('Source, Stocking numbers, and Scores are required');
-      return;
+    if (activity === 'Stocking') {
+      const required = ['broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
+      const missing = required.filter(f => !stockingData[f] || (typeof stockingData[f] === 'string' && !stockingData[f].trim()));
+      if (missing.length > 0) {
+        toast.error('Please fill in all stocking details');
+        return;
+      }
     }
 
-    if (activity === 'Observation' && (!observationData.animalQualityScore || !observationData.waterQualityScore || !observationData.presentPopulation)) {
-      toast.error('Scores and Present Population are required');
-      return;
+    if (activity === 'Observation') {
+      const required = ['animalQualityScore', 'waterQualityScore', 'presentPopulation', 'sample1Count', 'sample2Count', 'sample1Weight', 'sample2Weight', 'sample1AvgWt', 'sample2AvgWt', 'moltsCollected', 'deadAnimals', 'tankStockingNumber', 'naupliiStocked', 'naupliiStockedMillion'];
+      const missing = required.filter(f => !observationData[f] || (typeof observationData[f] === 'string' && !observationData[f].trim()));
+      if (missing.length > 0) {
+        toast.error('Please fill in all observation details');
+        return;
+      }
     }
 
-    if (activity === 'Animal Quality' && !animalSize.trim()) {
-      toast.error('Animal Size and Avg. Wt. is required');
-      return;
+    if (activity === 'Animal Quality') {
+      if (!animalSize.trim()) {
+        toast.error('Animal Size and Avg. Wt. is required');
+        return;
+      }
+      const missingRatings = ANIMAL_RATING_FIELDS.filter(f => !animalRatings[f.key]);
+      if (missingRatings.length > 0) {
+        toast.error('Please provide all animal quality ratings');
+        return;
+      }
+      if (!hasDiseaseIdentified) {
+        toast.error('Please specify if disease was identified');
+        return;
+      }
+      if (hasDiseaseIdentified === 'Yes' && !diseaseSymptoms.trim()) {
+        toast.error('Disease symptoms are required when disease is detected');
+        return;
+      }
+    }
+
+    if (activity === 'Water Quality') {
+      const missing = waterFields.filter(f => !waterData[f]?.trim());
+      if (missing.length > 0) {
+        toast.error(`Please fill all water quality parameters: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}`);
+        return;
+      }
     }
 
     let selectedTank: any = null;
@@ -341,7 +377,13 @@ const RecordActivity = () => {
         toast.success('Activity recorded!');
       }
 
-      const target = user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard';
+      let target;
+      if (editId) {
+        target = user?.role === 'owner' ? '/owner/consolidated-reports' : '/user/daily-report';
+      } else {
+        target = user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard';
+      }
+
       setTimeout(() => navigate(target), 1500);
     } catch (err: any) {
       console.error(err);
@@ -498,6 +540,7 @@ const RecordActivity = () => {
               </div>
             </div>
             <div className="space-y-1.5 pt-2 border-t border-dashed">
+              <Label className="text-xs">Activity Photo *</Label>
               <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
             </div>
             <div className="space-y-1.5">
@@ -545,6 +588,7 @@ const RecordActivity = () => {
               </div>
             </div>
             <div className="space-y-1.5 pt-2 border-t border-dashed">
+              <Label className="text-xs">Activity Photo *</Label>
               <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
             </div>
             <div className="space-y-1.5">
@@ -563,8 +607,8 @@ const RecordActivity = () => {
 
                 return (
                   <div key={field} className="space-y-1">
-                    <Label className="text-[10px] font-medium flex justify-between">
-                      {field}
+                    <Label className="text-[10px] font-medium flex justify-between uppercase">
+                      {field} *
                       {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
                     </Label>
                     <Input
@@ -581,6 +625,7 @@ const RecordActivity = () => {
               })}
             </div>
             <div className="space-y-1.5 pt-2 border-t border-dashed">
+              <Label className="text-xs">Activity Photo *</Label>
               <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
             </div>
             <div className="space-y-1.5">
@@ -622,7 +667,7 @@ const RecordActivity = () => {
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-dashed">
-              <Label className="text-xs">Any identification of disease?</Label>
+              <Label className="text-xs">Any identification of disease? *</Label>
               <Select value={hasDiseaseIdentified} onValueChange={v => setHasDiseaseIdentified(v as any)}>
                 <SelectTrigger className="h-11">
                   <SelectValue placeholder="Select Yes/No" />
@@ -652,6 +697,7 @@ const RecordActivity = () => {
               <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11" />
             </div>
             <div className="space-y-1.5 pt-2 border-t border-dashed">
+              <Label className="text-xs">Activity Photo *</Label>
               <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
             </div>
 

@@ -40,7 +40,7 @@ const StockingForm = ({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Name of the Hatchery or Section</Label>
+        <Label className="text-xs">Name of the Hatchery or Section *</Label>
         <Input
           value={data.hatcheryName || ''}
           onChange={e => handleChange('hatcheryName', e.target.value)}
@@ -103,6 +103,7 @@ const StockingForm = ({
 
 
       <div className="space-y-1.5 pt-2 border-t border-dashed">
+        <Label className="text-xs">Activity Photo *</Label>
         <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
       </div>
 
