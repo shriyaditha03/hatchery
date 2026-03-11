@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -11,16 +14,32 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
-    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText
+    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown
 } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 
-import { formatDate } from '@/lib/date-utils';
-import { Loader2 } from 'lucide-react';
-
 const OwnerDashboard = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, activeFarmId, setActiveFarmId } = useAuth();
     const navigate = useNavigate();
+    const [farms, setFarms] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (user?.hatchery_id) {
+            supabase
+                .from('farms')
+                .select('id, name')
+                .eq('hatchery_id', user.hatchery_id)
+                .order('created_at', { ascending: true })
+                .then(({ data }) => {
+                    if (data && data.length > 0) {
+                        setFarms(data);
+                        if (!activeFarmId) {
+                            setActiveFarmId(data[0].id);
+                        }
+                    }
+                });
+        }
+    }, [user, activeFarmId, setActiveFarmId]);
 
     if (!user) return null;
 
@@ -33,27 +52,18 @@ const OwnerDashboard = () => {
         { name: 'Observation', icon: Eye, route: '/owner/reports/observation', color: 'bg-purple-100 text-purple-600' },
     ];
 
-
-
     const handleLogout = async () => {
         await logout();
         navigate('/login');
     };
 
-    const getActivityIcon = (type: string) => {
-        const act = activities.find(a => a.name === type);
-        return act ? act.icon : FileText;
-    };
-
-    const getActivityColor = (type: string) => {
-        const act = activities.find(a => a.name === type);
-        return act ? act.color : 'bg-gray-100 text-gray-600';
-    };
+    const activeFarmName = farms.find(f => f.id === activeFarmId)?.name || 'Select Farm';
 
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
             <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-4" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />
@@ -91,14 +101,49 @@ const OwnerDashboard = () => {
                     </DropdownMenu>
                 </div>
 
-                <div className="mt-6 text-white/90">
-                    <p className="text-sm uppercase tracking-wider opacity-80">Owner Portal</p>
-                    <h2 className="text-2xl font-bold">Welcome, {user.name}</h2>
+                <div className="mt-4 flex items-center justify-between">
+                    <div className="text-white/90">
+                        <p className="text-sm uppercase tracking-wider opacity-80">Owner Portal</p>
+                        <h2 className="text-2xl font-bold">Welcome, {user.name}</h2>
+                    </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                    <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Farm</label>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-12 font-semibold">
+                                {activeFarmName}
+                                <ChevronDown className="h-4 w-4 opacity-70" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-full sm:w-64">
+                            <DropdownMenuLabel>Switch Farm</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {farms.length > 0 ? (
+                                farms.map(farm => (
+                                    <DropdownMenuItem 
+                                        key={farm.id} 
+                                        onClick={() => setActiveFarmId(farm.id)}
+                                        className={farm.id === activeFarmId ? "font-bold bg-muted" : ""}
+                                    >
+                                        <Warehouse className="mr-2 h-4 w-4 opacity-50" /> {farm.name}
+                                    </DropdownMenuItem>
+                                ))
+                            ) : (
+                                <DropdownMenuItem disabled>No farms available</DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => navigate('/owner/create-farm')}>
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add New Farm
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 
             {/* Main Grid */}
-            <div className="px-4 -mt-6">
+            <div className="px-4 -mt-6 relative z-10">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
 
                     {/* 6 Activity Icons */}
@@ -118,11 +163,8 @@ const OwnerDashboard = () => {
                         </Button>
                     ))}
 
-
                 </div>
             </div>
-
-
 
             {/* Quick Actions Footer */}
             <div className="px-4 mt-10">
@@ -133,7 +175,7 @@ const OwnerDashboard = () => {
                         <span className="text-[10px] font-bold">Add Staff</span>
                     </Button>
                     <Button variant="ghost" className="h-20 flex flex-col bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100/50 rounded-2xl text-emerald-700 gap-2" onClick={() => navigate('/owner/create-farm')}>
-                        <PlusCircle className="w-6 h-6" />
+                        <PlusCircle className="mr-2 h-4 w-4" />
                         <span className="text-[10px] font-bold">New Farm</span>
                     </Button>
                 </div>

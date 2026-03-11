@@ -12,6 +12,7 @@ import RatingScale from '@/components/RatingScale';
 import StockingForm from '@/components/StockingForm';
 import ObservationForm from '@/components/ObservationForm';
 import ImageUpload from '@/components/ImageUpload';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import { toast } from 'sonner';
 import { formatDate, getNowLocal, getTodayStr } from '@/lib/date-utils';
 import { useActivities } from '@/hooks/useActivities';
@@ -21,7 +22,7 @@ const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Sto
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
-const FEED_UNITS = ['kg', 'gms'];
+const FEED_UNITS = ['kg', 'gms', 'L', 'ml'];
 const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
 
@@ -67,7 +68,7 @@ const WATER_QUALITY_RANGES: Record<string, string> = {
 
 const RecordActivity = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, activeFarmId } = useAuth();
   const [searchParams] = useSearchParams();
   const { type } = useParams();
   const editId = searchParams.get('edit');
@@ -75,6 +76,8 @@ const RecordActivity = () => {
 
   const [loading, setLoading] = useState(false);
   const [availableTanks, setAvailableTanks] = useState<any[]>([]);
+  const [dbFeedTypes, setDbFeedTypes] = useState<string[]>(FEED_TYPES);
+  const [dbTreatmentTypes, setDbTreatmentTypes] = useState<string[]>(TREATMENT_TYPES);
   const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
 
@@ -155,6 +158,29 @@ const RecordActivity = () => {
     }
   };
 
+  // Load Feed and Treatment Types from DB
+  useEffect(() => {
+    if (user?.hatchery_id) {
+      supabase.from('feed_types').select('name').eq('hatchery_id', user.hatchery_id).eq('is_active', true)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setDbFeedTypes(data.map(d => d.name));
+          } else {
+            setDbFeedTypes(FEED_TYPES);
+          }
+        });
+
+      supabase.from('treatment_types').select('name').eq('hatchery_id', user.hatchery_id).eq('is_active', true)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setDbTreatmentTypes(data.map(d => d.name));
+          } else {
+            setDbTreatmentTypes(TREATMENT_TYPES);
+          }
+        });
+    }
+  }, [user]);
+
   // Pre-fill data if editing
   useEffect(() => {
     if (editId) {
@@ -214,6 +240,18 @@ const RecordActivity = () => {
       setLoading(false);
     }
   };
+
+  // Derive section from tank if missing (for older records)
+  useEffect(() => {
+    if (editId && tankId && !selectedSectionId && availableTanks.length > 0) {
+      for (const sec of availableTanks) {
+        if (sec.tanks.some((t: any) => t.id === tankId)) {
+          setSelectedSectionId(sec.id);
+          break;
+        }
+      }
+    }
+  }, [editId, tankId, selectedSectionId, availableTanks]);
 
   // Auto-select activity from URL (if not editing)
   useEffect(() => {
@@ -394,9 +432,10 @@ const RecordActivity = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-12">
       {/* Header */}
-      <div className="ocean-gradient p-4 pb-6 rounded-b-2xl">
+      <div className="ocean-gradient p-4 pb-6 rounded-b-2xl shadow-sm mb-6">
+        <Breadcrumbs lightTheme className="mb-2" />
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -457,29 +496,47 @@ const RecordActivity = () => {
         {/* Tank & Activity */}
         <div className="glass-card rounded-2xl p-4 space-y-4">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            {type ? 'Select Tank' : 'Tank & Activity'}
+            {type ? 'Select Location' : 'Location & Activity'}
           </h2>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Select Tank *</Label>
-            <Select value={tankId} onValueChange={setTankId}>
-              <SelectTrigger className="h-11">
-                <SelectValue placeholder="Choose tank" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableTanks.map(section => (
-                  <SelectGroup key={section.id}>
-                    <SelectLabel className="bg-muted/50 text-xs py-1 px-2 font-bold text-primary">
-                      {section.farm_name} - {section.name}
-                    </SelectLabel>
-                    {section.tanks.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Select Section *</Label>
+              <Select 
+                value={selectedSectionId} 
+                onValueChange={(val) => {
+                  setSelectedSectionId(val);
+                  setTankId(''); // reset tank when section changes
+                }}
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Choose section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(activeFarmId ? availableTanks.filter(s => s.farm_id === activeFarmId) : availableTanks).map(section => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {activeFarmId ? section.name : `${section.farm_name} - ${section.name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Select Tank *</Label>
+              <Select value={tankId} onValueChange={setTankId} disabled={!selectedSectionId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Choose tank" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(availableTanks.find(s => s.id === selectedSectionId)?.tanks || []).map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {!type && (
@@ -507,9 +564,11 @@ const RecordActivity = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Feed Type *</Label>
               <Select value={feedType} onValueChange={setFeedType}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="Select feed type" /></SelectTrigger>
+                <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {FEED_TYPES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  {dbFeedTypes.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -556,9 +615,11 @@ const RecordActivity = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Treatment Type *</Label>
               <Select value={treatmentType} onValueChange={setTreatmentType}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="Select treatment type" /></SelectTrigger>
+                <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {TREATMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {dbTreatmentTypes.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

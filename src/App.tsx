@@ -20,6 +20,7 @@ import AddUser from "./pages/owner/AddUser";
 import ManageUsers from "./pages/owner/ManageUsers";
 import OwnerProfile from "./pages/owner/OwnerProfile";
 import ManageFarms from "./pages/owner/ManageFarms";
+import ManageTypes from "./pages/owner/ManageTypes";
 import OwnerActivityLogs from "./pages/owner/OwnerActivityLogs";
 import OwnerConsolidatedReports from "./pages/owner/OwnerConsolidatedReports";
 
@@ -94,6 +95,7 @@ const App = () => (
             <Route path="/owner/manage-users" element={<OwnerRoute><ManageUsers /></OwnerRoute>} />
             <Route path="/owner/profile" element={<OwnerRoute><OwnerProfile /></OwnerRoute>} />
             <Route path="/owner/farms" element={<OwnerRoute><ManageFarms /></OwnerRoute>} />
+            <Route path="/owner/manage-types" element={<OwnerRoute><ManageTypes /></OwnerRoute>} />
             <Route path="/owner/reports/:type" element={<OwnerRoute><OwnerActivityLogs /></OwnerRoute>} />
             <Route path="/owner/consolidated-reports" element={<OwnerRoute><OwnerConsolidatedReports /></OwnerRoute>} />
             <Route path="/owner/activity/:type" element={<OwnerRoute><RecordActivity /></OwnerRoute>} />

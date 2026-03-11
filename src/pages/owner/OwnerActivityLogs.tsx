@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
     Table,
     TableBody,
@@ -36,7 +37,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const OwnerActivityLogs = () => {
     const { type } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, activeFarmId } = useAuth();
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<any[]>([]);
     const [selectedLog, setSelectedLog] = useState<any>(null);
@@ -50,7 +51,7 @@ const OwnerActivityLogs = () => {
         if (user?.hatchery_id && type) {
             fetchLogs();
         }
-    }, [user, type, fromDate, toDate]);
+    }, [user, type, fromDate, toDate, activeFarmId]);
 
     const fetchLogs = async () => {
         if (!type || !user?.hatchery_id) return;
@@ -69,7 +70,7 @@ const OwnerActivityLogs = () => {
 
             const { startDate, endDate } = getDateRangeUTC(fromDate, toDate);
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('activity_logs')
                 .select(`
                     *,
@@ -80,16 +81,25 @@ const OwnerActivityLogs = () => {
                         name
                     ),
                     farms (
-                        name
+                        name,
+                        hatchery_id
                     )
                 `)
                 .eq('activity_type', dbType)
                 .gte('created_at', startDate)
-                .lte('created_at', endDate)
-                .order('created_at', { ascending: true });
+                .lte('created_at', endDate);
+
+            if (activeFarmId) {
+                query = query.eq('farm_id', activeFarmId);
+            }
+
+            const { data, error } = await query.order('created_at', { ascending: true });
 
             if (error) throw error;
-            setLogs(data || []);
+            
+            const filteredData = data?.filter(log => log.farms?.hatchery_id === user.hatchery_id) || [];
+            
+            setLogs(filteredData);
         } catch (err: any) {
             console.error('Error fetching logs:', err);
             toast.error('Failed to load activity logs');
@@ -281,6 +291,7 @@ const OwnerActivityLogs = () => {
         <div className="min-h-screen bg-background pb-20">
             {/* Header */}
             <div className="ocean-gradient p-4 pb-6 rounded-b-2xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-2" />
                 <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"

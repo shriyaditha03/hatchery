@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,6 +40,7 @@ const UserDashboard = () => {
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
             <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-4" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />

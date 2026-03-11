@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
     Table,
     TableBody,
@@ -37,7 +38,7 @@ interface ActivityLog {
 
 const OwnerConsolidatedReports = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, activeFarmId } = useAuth();
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
@@ -51,7 +52,7 @@ const OwnerConsolidatedReports = () => {
         if (user?.hatchery_id) {
             fetchLogs();
         }
-    }, [user, fromDate, toDate]);
+    }, [user, fromDate, toDate, activeFarmId]);
 
     const fetchLogs = async () => {
         if (!user?.hatchery_id) return;
@@ -87,8 +88,11 @@ const OwnerConsolidatedReports = () => {
 
             if (error) throw error;
 
-            // Filter by hatchery_id
-            const filteredData = data?.filter(log => log.farms?.hatchery_id === user.hatchery_id) || [];
+            // Filter by hatchery_id and activeFarmId
+            let filteredData = data?.filter(log => log.farms?.hatchery_id === user.hatchery_id) || [];
+            if (activeFarmId) {
+                filteredData = filteredData.filter(log => log.farm_id === activeFarmId);
+            }
 
             setLogs(filteredData);
         } catch (err: any) {
@@ -174,6 +178,7 @@ const OwnerConsolidatedReports = () => {
         <div className="min-h-screen bg-background pb-20">
             {/* Header */}
             <div className="ocean-gradient p-4 pb-6 rounded-b-2xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-2" />
                 <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"

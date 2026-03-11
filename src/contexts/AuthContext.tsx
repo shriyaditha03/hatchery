@@ -23,6 +23,8 @@ interface AuthContextType {
   loginWithUsername: (username: string, password: string) => Promise<{ error: any }>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  activeFarmId: string | null;
+  setActiveFarmId: (id: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeFarmId, setActiveFarmId] = useState<string | null>(null);
 
   useEffect(() => {
     // Check active session
@@ -52,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         fetchProfile(session.user.id, session.user.email);
       } else {
         setUser(null);
+        setActiveFarmId(null);
         setLoading(false);
       }
     });
@@ -103,6 +107,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       setUser(userData);
+
+      // Load last active farm from localStorage if exists, or keep null
+      const savedFarmId = localStorage.getItem(`activeFarm_${userData.id}`);
+      if (savedFarmId) {
+        setActiveFarmId(savedFarmId);
+      }
+
       return userData;
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -169,10 +180,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    setActiveFarmId(null);
+  };
+
+  const handleSetActiveFarmId = (id: string | null) => {
+    setActiveFarmId(id);
+    if (user && id) {
+      localStorage.setItem(`activeFarm_${user.id}`, id);
+    } else if (user && !id) {
+      localStorage.removeItem(`activeFarm_${user.id}`);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, loginWithUsername, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      loading, 
+      loginWithUsername, 
+      logout, 
+      isAuthenticated: !!user,
+      activeFarmId,
+      setActiveFarmId: handleSetActiveFarmId
+    }}>
       {children}
     </AuthContext.Provider>
   );

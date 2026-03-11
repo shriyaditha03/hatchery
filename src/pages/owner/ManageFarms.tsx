@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import { ArrowLeft, Warehouse, Layers, Cylinder, Plus, MoreVertical, Pencil, Trash2, Settings, Utensils, Beaker, Waves } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
@@ -246,9 +247,12 @@ const ManageFarms = () => {
 
     return (
         <div className="min-h-screen bg-background p-4 sm:p-6 pb-20">
+            <div className="max-w-3xl mx-auto">
+                <Breadcrumbs className="mb-4" />
+            </div>
             <div className="max-w-3xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <Button variant="ghost" onClick={() => navigate('/owner/dashboard')} className="pl-0 hover:bg-transparent">
+                    <Button variant="ghost" onClick={() => navigate('/owner/dashboard')} className="pl-0 hover:bg-transparent -ml-3">
                         <ArrowLeft className="w-5 h-5 mr-1" /> Back to Dashboard
                     </Button>
                     <Button size="sm" onClick={() => navigate('/owner/create-farm')}>
