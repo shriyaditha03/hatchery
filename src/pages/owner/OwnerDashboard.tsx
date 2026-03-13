@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
-    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown
+    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags
 } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 
@@ -92,6 +92,9 @@ const OwnerDashboard = () => {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate('/owner/profile')}>
                                 <User className="mr-2 h-4 w-4" /> Personal Info
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate('/owner/manage-types')}>
+                                <Tags className="mr-2 h-4 w-4" /> Manage Types
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={handleLogout} className="text-red-600">
