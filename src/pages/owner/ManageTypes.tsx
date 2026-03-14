@@ -66,6 +66,15 @@ const ManageTypes = () => {
             toast.error('Name is required');
             return;
         }
+
+        const isDuplicate = items.some(item => 
+            item.name.toLowerCase() === newName.trim().toLowerCase()
+        );
+
+        if (isDuplicate) {
+            toast.error(`A ${activeTab} type with this name already exists`);
+            return;
+        }
         
         setSaving(true);
         try {
@@ -236,7 +245,7 @@ const ManageTypes = () => {
                                     <Input 
                                         value={newName} 
                                         onChange={(e) => setNewName(e.target.value)} 
-                                        placeholder="e.g. Starter Feed"
+                                        placeholder={`e.g. ${activeTab === 'feed' ? 'Starter Feed' : 'Probiotics'}`}
                                     />
                                 </div>
                                 <div className="space-y-1">

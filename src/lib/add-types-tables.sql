@@ -45,65 +45,33 @@ ALTER TABLE public.treatment_types ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view feed types in their hatchery" 
 ON public.feed_types FOR SELECT 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid()
-  )
-);
+USING (public.is_hatchery_member(hatchery_id));
 
 CREATE POLICY "Owners can insert feed types" 
 ON public.feed_types FOR INSERT 
-WITH CHECK (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+WITH CHECK (public.is_hatchery_owner(hatchery_id));
 
 CREATE POLICY "Owners can update feed types" 
 ON public.feed_types FOR UPDATE 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+USING (public.is_hatchery_owner(hatchery_id));
 
 CREATE POLICY "Owners can delete feed types" 
 ON public.feed_types FOR DELETE 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+USING (public.is_hatchery_owner(hatchery_id));
 
 -- Treatment Types Policies
 CREATE POLICY "Users can view treatment types in their hatchery" 
 ON public.treatment_types FOR SELECT 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid()
-  )
-);
+USING (public.is_hatchery_member(hatchery_id));
 
 CREATE POLICY "Owners can insert treatment types" 
 ON public.treatment_types FOR INSERT 
-WITH CHECK (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+WITH CHECK (public.is_hatchery_owner(hatchery_id));
 
 CREATE POLICY "Owners can update treatment types" 
 ON public.treatment_types FOR UPDATE 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+USING (public.is_hatchery_owner(hatchery_id));
 
 CREATE POLICY "Owners can delete treatment types" 
 ON public.treatment_types FOR DELETE 
-USING (
-  hatchery_id IN (
-    SELECT hatchery_id FROM public.profiles WHERE id = auth.uid() AND role = 'owner'
-  )
-);
+USING (public.is_hatchery_owner(hatchery_id));

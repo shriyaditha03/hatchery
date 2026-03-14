@@ -503,7 +503,6 @@ const OwnerActivityLogs = () => {
                                 <TableHeader>
                                     <TableRow className="bg-muted/50">
                                         <TableHead className="font-bold">Date & Time</TableHead>
-                                        <TableHead className="font-bold">Farm</TableHead>
                                         <TableHead className="font-bold">Section</TableHead>
                                         <TableHead className="font-bold">Tank</TableHead>
                                         <TableHead className="font-bold text-center w-16">Details</TableHead>
@@ -523,9 +522,6 @@ const OwnerActivityLogs = () => {
                                                         {formatDate(log.created_at, 'hh:mm a')}
                                                     </span>
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="font-medium text-xs">
-                                                {log.farms?.name || 'N/A'}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground text-[10px] uppercase">
                                                 {log.sections?.name || 'N/A'}

@@ -280,7 +280,6 @@ const OwnerConsolidatedReports = () => {
                                     <TableRow className="bg-muted/50">
                                         <TableHead className="font-bold">Date & Time</TableHead>
                                         <TableHead className="font-bold">Activity Type</TableHead>
-                                        <TableHead className="font-bold">Farm</TableHead>
                                         <TableHead className="font-bold">Section</TableHead>
                                         <TableHead className="font-bold">Tank</TableHead>
                                         <TableHead className="font-bold text-center w-16">Details</TableHead>
@@ -305,9 +304,6 @@ const OwnerConsolidatedReports = () => {
                                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
                                                     {log.activity_type}
                                                 </span>
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {log.farms?.name || 'N/A'}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {log.sections?.name || 'N/A'}

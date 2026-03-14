@@ -515,7 +515,7 @@ const RecordActivity = () => {
                 <SelectContent>
                   {(activeFarmId ? availableTanks.filter(s => s.farm_id === activeFarmId) : availableTanks).map(section => (
                     <SelectItem key={section.id} value={section.id}>
-                      {activeFarmId ? section.name : `${section.farm_name} - ${section.name}`}
+                      {user?.role === 'owner' && !activeFarmId ? `${section.farm_name} - ${section.name}` : section.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
