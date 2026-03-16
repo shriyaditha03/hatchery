@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trash2, User, UserPlus, ShieldAlert, Key, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, User, UserPlus, ShieldAlert, Key, Loader2, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     Dialog,
@@ -39,13 +39,16 @@ const ManageUsers = () => {
     const { user } = useAuth();
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [farms, setFarms] = useState<any[]>([]);
-    const [userAccess, setUserAccess] = useState<Record<string, string[]>>({});
+    const [userAccess, setUserAccess] = useState<Record<string, { farms: string[], sections: string[], tanks: string[] }>>({});
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
 
     const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
     const [selectedFarms, setSelectedFarms] = useState<string[]>([]);
+    const [selectedSections, setSelectedSections] = useState<string[]>([]);
+    const [selectedTanks, setSelectedTanks] = useState<string[]>([]);
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (user?.hatchery_id) {
@@ -67,10 +70,18 @@ const ManageUsers = () => {
             if (profileError) throw profileError;
             setUsers(profiles || []);
 
-            // 2. Fetch all Farms for this hatchery
+            // 2. Fetch all Farms with full hierarchy
             const { data: hatcheryFarms } = await supabase
                 .from('farms')
-                .select('id, name')
+                .select(`
+                    id, 
+                    name,
+                    sections (
+                        id, 
+                        name,
+                        tanks (id, name)
+                    )
+                `)
                 .eq('hatchery_id', user!.hatchery_id);
             setFarms(hatcheryFarms || []);
 
@@ -79,13 +90,15 @@ const ManageUsers = () => {
             if (userIds.length > 0) {
                 const { data: access } = await supabase
                     .from('farm_access')
-                    .select('user_id, farm_id')
+                    .select('user_id, farm_id, section_id, tank_id')
                     .in('user_id', userIds);
 
-                const accessMap: Record<string, string[]> = {};
+                const accessMap: Record<string, any> = {};
                 access?.forEach(a => {
-                    if (!accessMap[a.user_id]) accessMap[a.user_id] = [];
-                    accessMap[a.user_id].push(a.farm_id);
+                    if (!accessMap[a.user_id]) accessMap[a.user_id] = { farms: [], sections: [], tanks: [] };
+                    if (a.tank_id) accessMap[a.user_id].tanks.push(a.tank_id);
+                    else if (a.section_id) accessMap[a.user_id].sections.push(a.section_id);
+                    else accessMap[a.user_id].farms.push(a.farm_id);
                 });
                 setUserAccess(accessMap);
             }
@@ -99,9 +112,32 @@ const ManageUsers = () => {
 
     const handleOpenAccessDialog = (u: UserProfile) => {
         setEditingUser(u);
-        setSelectedFarms(userAccess[u.id] || []);
+        const access = userAccess[u.id] || { farms: [], sections: [], tanks: [] };
+        setSelectedFarms(access.farms || []);
+        setSelectedSections(access.sections || []);
+        setSelectedTanks(access.tanks || []);
         setIsAccessDialogOpen(true);
     };
+
+    const toggleExpand = (id: string) => {
+        setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const handleToggle = (type: 'farm' | 'section' | 'tank', id: string) => {
+        if (type === 'farm') {
+            setSelectedFarms(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+        } else if (type === 'section') {
+            setSelectedSections(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+        } else {
+            setSelectedTanks(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+        }
+    };
+
+    const isFarmSelected = (farmId: string) => selectedFarms.includes(farmId);
+    const isSectionSelected = (sectionId: string, farmId: string) => 
+        isFarmSelected(farmId) || selectedSections.includes(sectionId);
+    const isTankSelected = (tankId: string, sectionId: string, farmId: string) => 
+        isSectionSelected(sectionId, farmId) || selectedTanks.includes(tankId);
 
     const handleSaveAccess = async () => {
         if (!editingUser) return;
@@ -115,12 +151,38 @@ const ManageUsers = () => {
                 .eq('user_id', editingUser.id);
             if (deleteError) throw deleteError;
 
-            // 2. Insert new access
-            if (selectedFarms.length > 0) {
-                const accessData = selectedFarms.map(farmId => ({
-                    user_id: editingUser.id,
-                    farm_id: farmId
-                }));
+            // 2. Insert new granular access
+            const accessData: any[] = [];
+            
+            selectedFarms.forEach(id => {
+                accessData.push({ user_id: editingUser.id, farm_id: id });
+            });
+
+            selectedSections.forEach(sid => {
+                const farm = farms.find(f => f.sections?.some((s: any) => s.id === sid));
+                if (farm && !selectedFarms.includes(farm.id)) {
+                    accessData.push({ user_id: editingUser.id, farm_id: farm.id, section_id: sid });
+                }
+            });
+
+            selectedTanks.forEach(tid => {
+                let farmId = '';
+                let sectionId = '';
+                for (const f of farms) {
+                    for (const s of (f.sections || [])) {
+                        if (s.tanks?.some((t: any) => t.id === tid)) {
+                            farmId = f.id;
+                            sectionId = s.id;
+                            break;
+                        }
+                    }
+                }
+                if (farmId && !selectedFarms.includes(farmId) && !selectedSections.includes(sectionId)) {
+                    accessData.push({ user_id: editingUser.id, farm_id: farmId, section_id: sectionId, tank_id: tid });
+                }
+            });
+
+            if (accessData.length > 0) {
                 const { error: insertError } = await supabase
                     .from('farm_access')
                     .insert(accessData);
@@ -130,7 +192,7 @@ const ManageUsers = () => {
             // 3. Update local state
             setUserAccess(prev => ({
                 ...prev,
-                [editingUser.id]: selectedFarms
+                [editingUser.id]: { farms: selectedFarms, sections: selectedSections, tanks: selectedTanks }
             }));
 
             toast.success(`Access updated for ${editingUser.username}`);
@@ -273,41 +335,87 @@ const ManageUsers = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest pl-1">Assign Farms</Label>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest pl-1">Assign Permissions</Label>
                             {farms.length === 0 ? (
                                 <p className="text-sm text-yellow-600 p-2 bg-yellow-50 rounded-lg border border-yellow-100 italic text-center">No farms created yet.</p>
                             ) : (
-                                <div className="grid gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                     {farms.map(farm => (
-                                        <div
-                                            key={farm.id}
-                                            className={`flex items-center space-x-3 p-3 rounded-xl border transition-all cursor-pointer ${selectedFarms.includes(farm.id)
-                                                    ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10'
-                                                    : 'hover:bg-accent border-transparent'
-                                                }`}
-                                            onClick={() => {
-                                                setSelectedFarms(prev =>
-                                                    prev.includes(farm.id)
-                                                        ? prev.filter(id => id !== farm.id)
-                                                        : [...prev, farm.id]
-                                                );
-                                            }}
-                                        >
-                                            <Checkbox
-                                                id={`farm-${farm.id}`}
-                                                checked={selectedFarms.includes(farm.id)}
-                                                onCheckedChange={() => { }} // Handled by div click
-                                                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                                            />
-                                            <label
-                                                htmlFor={`farm-${farm.id}`}
-                                                className="text-sm font-semibold flex-1 cursor-pointer"
-                                            >
-                                                {farm.name}
-                                            </label>
-                                            {selectedFarms.includes(farm.id) && (
-                                                <Check className="w-4 h-4 text-primary" />
+                                        <div key={farm.id} className="border rounded-lg overflow-hidden border-muted/50">
+                                            <div className={`flex items-center gap-2 p-2 hover:bg-accent transition-colors ${isFarmSelected(farm.id) ? 'bg-primary/5' : ''}`}>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => toggleExpand(farm.id)} 
+                                                    className="p-1 hover:bg-muted rounded"
+                                                >
+                                                    {expanded[farm.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                                </button>
+                                                <Checkbox
+                                                    id={`edit-farm-${farm.id}`}
+                                                    checked={isFarmSelected(farm.id)}
+                                                    onCheckedChange={() => handleToggle('farm', farm.id)}
+                                                />
+                                                <Label 
+                                                    htmlFor={`edit-farm-${farm.id}`} 
+                                                    className="text-sm font-bold flex-1 cursor-pointer py-1"
+                                                >
+                                                    {farm.name} (Farm)
+                                                </Label>
+                                            </div>
+                                            
+                                            {expanded[farm.id] && (
+                                                <div className="bg-muted/30 pl-8 pr-2 py-1 space-y-1">
+                                                    {farm.sections?.map((section: any) => (
+                                                        <div key={section.id} className="space-y-1">
+                                                            <div className="flex items-center gap-2 py-1">
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => toggleExpand(section.id)} 
+                                                                    className="p-0.5 hover:bg-muted rounded"
+                                                                >
+                                                                    {expanded[section.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                                                </button>
+                                                                <Checkbox
+                                                                    id={`edit-section-${section.id}`}
+                                                                    checked={isSectionSelected(section.id, farm.id)}
+                                                                    disabled={isFarmSelected(farm.id)}
+                                                                    onCheckedChange={() => handleToggle('section', section.id)}
+                                                                />
+                                                                <Label 
+                                                                    htmlFor={`edit-section-${section.id}`} 
+                                                                    className={`text-xs flex-1 cursor-pointer ${isFarmSelected(farm.id) ? 'opacity-50' : 'font-medium'}`}
+                                                                >
+                                                                    {section.name} (Section)
+                                                                </Label>
+                                                            </div>
+
+                                                            {expanded[section.id] && (
+                                                                <div className="pl-6 space-y-1 pb-2 border-l border-muted-foreground/10 ml-1.5">
+                                                                    {section.tanks?.map((tank: any) => (
+                                                                        <div key={tank.id} className="flex items-center gap-2 py-0.5">
+                                                                            <Checkbox
+                                                                                id={`edit-tank-${tank.id}`}
+                                                                                checked={isTankSelected(tank.id, section.id, farm.id)}
+                                                                                disabled={isSectionSelected(section.id, farm.id)}
+                                                                                onCheckedChange={() => handleToggle('tank', tank.id)}
+                                                                            />
+                                                                            <Label 
+                                                                                htmlFor={`edit-tank-${tank.id}`} 
+                                                                                className={`text-xs cursor-pointer ${isSectionSelected(section.id, farm.id) ? 'opacity-50' : ''}`}
+                                                                            >
+                                                                                {tank.name} (Tank)
+                                                                            </Label>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                    {(!farm.sections || farm.sections.length === 0) && (
+                                                        <p className="text-[10px] text-muted-foreground py-1">No sections available</p>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     ))}

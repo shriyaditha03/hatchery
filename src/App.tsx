@@ -38,13 +38,35 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
+// allow Owners and Supervisors
+const ManagementRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'owner' && user.role !== 'supervisor') return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+};
+
 // Only allow Owners
 const OwnerRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return null;
 
-  if (!user) return <Navigate to="/owner/login" replace />;
-  if (user.role !== 'owner') return <Navigate to="/user/dashboard" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'owner') return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+};
+
+// Only allow Supervisors
+const SupervisorRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'supervisor') return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
 };
@@ -97,8 +119,8 @@ const App = () => (
             <Route path="/owner/farms" element={<OwnerRoute><ManageFarms /></OwnerRoute>} />
             <Route path="/owner/manage-types" element={<OwnerRoute><ManageTypes /></OwnerRoute>} />
             <Route path="/owner/reports/:type" element={<OwnerRoute><OwnerActivityLogs /></OwnerRoute>} />
-            <Route path="/owner/consolidated-reports" element={<OwnerRoute><OwnerConsolidatedReports /></OwnerRoute>} />
-            <Route path="/owner/activity/:type" element={<OwnerRoute><RecordActivity /></OwnerRoute>} />
+            <Route path="/owner/consolidated-reports" element={<ManagementRoute><OwnerConsolidatedReports /></ManagementRoute>} />
+            <Route path="/owner/activity/:type" element={<ManagementRoute><RecordActivity /></ManagementRoute>} />
 
             {/* USER PORTAL */}
             <Route path="/user/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />

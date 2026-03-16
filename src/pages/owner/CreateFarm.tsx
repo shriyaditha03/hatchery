@@ -5,9 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Plus, ArrowRight, Check } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Plus, ArrowRight, Check, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -73,6 +74,46 @@ const TankCountInput = ({ count, onChange }: { count: number, onChange: (val: nu
     );
 };
 
+const DuplicateTankPopover = ({ onDuplicate }: { onDuplicate: (count: number) => void }) => {
+    const [count, setCount] = useState<number | string>(1);
+    const [open, setOpen] = useState(false);
+
+    const handleDuplicate = () => {
+        const num = Number(count);
+        if (num > 0 && !isNaN(num)) {
+            onDuplicate(num);
+            setOpen(false);
+            setCount(1);
+        }
+    };
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10 transition-colors" title="Duplicate Tank">
+                    <Copy className="w-4 h-4" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60" align="end">
+                <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Duplicate Tank</h4>
+                    <div className="flex items-center gap-2">
+                        <Input 
+                            type="number" 
+                            min="1" 
+                            max="50"
+                            value={count} 
+                            onChange={(e) => setCount(e.target.value)} 
+                            className="h-9"
+                        />
+                        <Button size="sm" onClick={handleDuplicate}>Copy</Button>
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 const CreateFarm = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -127,7 +168,7 @@ const CreateFarm = () => {
             const newSections = [...prev];
             const currentTanks = newSections[sIdx].tanks;
             const newTank: TankConfig = {
-                name: `Tank ${currentTanks.length + 1}`,
+                name: `S${sIdx + 1}_T${currentTanks.length + 1}`,
                 type: currentTanks[currentTanks.length - 1]?.type || 'FRP',
                 shape: 'RECTANGLE',
                 length: 0,
@@ -161,7 +202,7 @@ const CreateFarm = () => {
                 // Add tanks
                 const additionalCount = count - currentTanks.length;
                 const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => ({
-                    name: `Tank ${currentTanks.length + i + 1}`,
+                    name: `S${sIdx + 1}_T${currentTanks.length + i + 1}`,
                     type: (currentTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
                     shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
                     length: 0,
@@ -192,6 +233,23 @@ const CreateFarm = () => {
 
             return newSections;
         });
+    };
+
+    const duplicateTank = (sIdx: number, tIdx: number, count: number) => {
+        setSections(prev => {
+            const newSections = [...prev];
+            const currentTanks = newSections[sIdx].tanks;
+            const tankToCopy = currentTanks[tIdx];
+            
+            const newTanks = Array.from({ length: count }).map((_, i) => ({
+                ...tankToCopy,
+                name: `S${sIdx + 1}_T${currentTanks.length + i + 1}`
+            }));
+            
+            newSections[sIdx].tanks = [...currentTanks, ...newTanks];
+            return newSections;
+        });
+        toast.success(`Duplicated tank ${count} times`);
     };
 
     const handleSubmit = async () => {
@@ -390,9 +448,12 @@ const CreateFarm = () => {
                                                                 onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
                                                             />
                                                         </div>
-                                                        <span className="text-[9px] bg-muted px-2 py-0.5 rounded-md font-bold text-muted-foreground uppercase tracking-wider">
-                                                            {section.name.charAt(0)}{sIdx + 1}.{tIdx + 1}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
+                                                            <span className="text-[9px] bg-muted px-2 py-0.5 rounded-md font-bold text-muted-foreground uppercase tracking-wider">
+                                                                {section.name.charAt(0)}{sIdx + 1}.{tIdx + 1}
+                                                            </span>
+                                                        </div>
                                                     </div>
 
                                                     <div className="grid grid-cols-2 gap-4 pt-1">

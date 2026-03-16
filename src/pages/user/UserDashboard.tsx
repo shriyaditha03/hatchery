@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,17 +11,118 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-    User, LogOut, FileText,
-    Utensils, Beaker, Eye, Search, Layers, Waves
-} from 'lucide-react';
+import { User, LogOut, FileText, ClipboardList, Utensils, Beaker, Eye, Search, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Trash2, Plus } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 const UserDashboard = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, activeFarmId, setActiveFarmId, activeSectionId, setActiveSectionId } = useAuth();
     const navigate = useNavigate();
+    const [instructions, setInstructions] = useState<any[]>([]);
+    const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     if (!user) return null;
+
+    // Filter access records to find unique sections across all farms
+    const sections = useMemo(() => {
+        const allSections = (user.access || [])
+            .filter(a => a.section_id)
+            .map(a => ({ 
+                id: a.section_id as string, 
+                name: a.section_name as string,
+                farm_id: a.farm_id,
+                farm_name: a.farm_name
+            }));
+        
+        // Remove duplicates (in case user has multiple tank-level records for same section)
+        return Array.from(new Set(allSections.map(s => s.id)))
+            .map(id => allSections.find(s => s.id === id)!);
+    }, [user.access]);
+
+    useEffect(() => {
+        if (!activeSectionId && sections.length > 0) {
+            const first = sections[0];
+            setActiveFarmId(first.farm_id);
+            setActiveSectionId(first.id);
+        }
+    }, [activeSectionId, sections]);
+
+    useEffect(() => {
+        if (activeSectionId) {
+            fetchInstructions();
+        }
+        if (user?.role === 'supervisor') {
+            fetchSupervisorInstructions();
+        }
+
+        // Refetch when window gains focus (e.g. after returning from recording an activity)
+        const handleFocus = () => {
+            if (activeSectionId) fetchInstructions();
+            if (user?.role === 'supervisor') fetchSupervisorInstructions();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [activeSectionId]);
+
+    const fetchInstructions = async () => {
+        try {
+            setLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Fetch all instructions for this section + farm level instructions
+            const { data, error } = await supabase
+                .from('activity_charts')
+                .select(`
+                    *,
+                    farms (name),
+                    sections (name),
+                    tanks (name)
+                `)
+                .or(`section_id.eq.${activeSectionId},and(farm_id.eq.${activeFarmId},section_id.is.null,tank_id.is.null)`)
+                .eq('scheduled_date', today)
+                .eq('is_completed', false)
+                .order('scheduled_time', { ascending: true });
+
+            if (error) throw error;
+            setInstructions(data || []);
+        } catch (error) {
+            console.error('Error fetching instructions:', error);
+            toast.error('Failed to load today\'s tasks');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchSupervisorInstructions = async () => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data, error } = await supabase
+                .from('activity_charts')
+                .select(`*, tanks(name), sections(name)`)
+                .eq('created_by', user?.id)
+                .eq('scheduled_date', today)
+                .order('scheduled_time', { ascending: true });
+            if (!error) setSupervisorInstructions(data || []);
+        } catch (err) {
+            console.error('Failed to load supervisor instructions:', err);
+        }
+    };
+
+    const handleDeleteInstruction = async (id: string) => {
+        try {
+            const { error } = await supabase.from('activity_charts').delete().eq('id', id);
+            if (error) throw error;
+            setSupervisorInstructions(prev => prev.filter(i => i.id !== id));
+            toast.success('Instruction deleted');
+        } catch (err: any) {
+            toast.error('Failed to delete: ' + err.message);
+        }
+    };
+
+    const activeSection = sections.find(s => s.id === activeSectionId);
+    const displayLabel = activeSection?.name || 'Select Section';
 
     const activities = [
         { name: 'Feed', icon: Utensils, route: '/user/activity/feed', color: 'bg-orange-100 text-orange-600' },
@@ -29,11 +131,22 @@ const UserDashboard = () => {
         { name: 'Animal Quality', icon: Search, route: '/user/activity/animal', color: 'bg-rose-100 text-rose-600' },
         { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
         { name: 'Observation', icon: Eye, route: '/user/activity/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
+        { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
     ];
 
     const handleLogout = async () => {
         await logout();
         navigate('/login');
+    };
+
+    const handleSectionSelect = (sectionId: string) => {
+        const section = sections.find(s => s.id === sectionId);
+        if (section) {
+            // We set both so the rest of the app knows the context
+            setActiveFarmId(section.farm_id);
+            setActiveSectionId(section.id);
+        }
     };
 
     return (
@@ -44,8 +157,8 @@ const UserDashboard = () => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />
-                        <span className="text-white font-bold text-xl">
-                            {user.hatchery_name || 'My Farm'}
+                        <span className="text-white font-bold text-xl truncate max-w-[220px]">
+                            {user.hatchery_name || 'My Hatchery'}
                         </span>
                     </div>
 
@@ -73,6 +186,38 @@ const UserDashboard = () => {
                     <p className="text-sm uppercase tracking-wider opacity-80">{user.role}</p>
                     <h2 className="text-2xl font-bold">Hello, {user.name}</h2>
                 </div>
+
+                {/* Location Picker for Workers/Supervisors */}
+                {(user.role === 'worker' || user.role === 'supervisor') && sections.length > 0 && (
+                    <div className="mt-6 flex flex-wrap gap-2 animate-fade-in">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="secondary" size="sm" className="bg-white/20 hover:bg-white/30 text-white border-0 h-10 px-4 rounded-xl gap-2 backdrop-blur-sm shadow-inner transition-all hover:scale-[1.02] active:scale-95">
+                                    <div className="p-1 px-2 rounded-lg bg-white/20 text-white flex items-center gap-2">
+                                        <Layers className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] uppercase font-black tracking-tighter">Current Section</span>
+                                    </div>
+                                    <span className="text-xs font-bold">{displayLabel}</span>
+                                    <ChevronDown className="w-3 h-3 opacity-60 ml-auto" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 rounded-xl border-white/10 shadow-2xl p-1">
+                                <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground px-2 py-2">Assigned Sections</DropdownMenuLabel>
+                                {sections.map(s => (
+                                    <DropdownMenuItem 
+                                        key={s.id} 
+                                        onClick={() => handleSectionSelect(s.id)}
+                                        className={`rounded-lg cursor-pointer py-2 px-3 mb-1 transition-colors ${activeSectionId === s.id ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-accent'}`}
+                                    >
+                                        <div className="flex flex-col">
+                                            <span>{s.name}</span>
+                                        </div>
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )}
             </div>
 
             {/* Main Grid */}
@@ -96,22 +241,176 @@ const UserDashboard = () => {
                         </Button>
                     ))}
 
-                    {/* 7th Icon: Daily Consolidated Report */}
+                    {/* 7th Icon: Daily Report (Worker) OR Consolidated Reports (Supervisor) */}
                     <Button
                         variant="outline"
                         className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                        onClick={() => navigate('/user/daily-report')}
+                        onClick={() => navigate(user.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
                     >
-                        <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+                        <div className={`p-1.5 rounded-lg ${user.role === 'supervisor' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
                             <FileText className="w-5 h-5" />
                         </div>
                         <span className="font-semibold text-foreground text-xs text-left">
-                            Daily Report
+                            {user.role === 'supervisor' ? 'Reports' : 'Daily Report'}
                         </span>
                     </Button>
 
                 </div>
             </div>
+
+            {/* Today's Tasks/Instructions - Only for workers */}
+            {user.role !== 'supervisor' && (
+            <div className="px-4 mt-8 pb-10">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">Today's Instructions</h3>
+                    {instructions.length > 0 && (
+                        <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {instructions.length} Pending
+                        </span>
+                    )}
+                </div>
+
+                {loading ? (
+                    <div className="space-y-3">
+                        {[1, 2].map(i => (
+                            <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
+                        ))}
+                    </div>
+                ) : instructions.length === 0 ? (
+                    <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                            <CheckCircle2 className="w-6 h-6 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-sm font-semibold text-muted-foreground">No pending tasks for today</p>
+                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1">Enjoy your day!</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {instructions.map((instr) => (
+                            <div key={instr.id} className="relative group">
+                                <div className="absolute -left-1 top-4 bottom-4 w-1 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
+                                <div className="bg-card border shadow-sm rounded-2xl p-4 transition-all hover:shadow-md">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="p-1 rounded bg-muted">
+                                                    {instr.activity_type === 'Feed' ? <Utensils className="w-3 h-3" /> : <Beaker className="w-3 h-3" />}
+                                                </div>
+                                                <span className="text-xs font-bold truncate">
+                                                    {instr.activity_type} - {instr.tanks?.name || instr.sections?.name || 'Section Wide'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground line-clamp-2 italic mb-2">
+                                                "{instr.instruction_text || 'No specific notes'}"
+                                            </p>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-lg">
+                                                    <Clock className="w-3 h-3" />
+                                                    {instr.scheduled_time?.slice(0, 5)}
+                                                </div>
+                                                <div className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 italic">
+                                                    {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Button 
+                                            size="sm" 
+                                            variant="secondary"
+                                            className="rounded-xl h-14 w-14 flex-shrink-0 flex flex-col gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
+                                            onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase()}?instruction=${instr.id}`)}
+                                        >
+                                            <ClipboardList className="w-5 h-5" />
+                                            <span className="text-[8px] font-black uppercase tracking-tighter">Record</span>
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            )}
+
+            {/* Supervisor: My Instructions for Today */}
+            {user.role === 'supervisor' && (
+            <div className="px-4 mt-8 pb-10">
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">My Instructions for Today</h3>
+                        <p className="text-[9px] text-muted-foreground/50 mt-0.5">Resets automatically at midnight</p>
+                    </div>
+                </div>
+
+                {supervisorInstructions.length === 0 ? (
+                    <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                            <ClipboardList className="w-6 h-6 text-muted-foreground opacity-50" />
+                        </div>
+                        <p className="text-sm font-semibold text-muted-foreground">No instructions set for today</p>
+                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1">Tap "New Instruction" to add one</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {supervisorInstructions.map((instr) => (
+                            <div key={instr.id} className={`bg-card border rounded-2xl p-4 shadow-sm transition-all ${instr.is_completed ? 'opacity-50 border-green-200 bg-green-50/30' : ''}`}>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            {instr.is_completed ? (
+                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">✓ Done by worker</span>
+                                            ) : (
+                                                <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">⏳ Pending</span>
+                                            )}
+                                            <span className="text-xs font-bold text-foreground truncate">
+                                                {instr.activity_type} — {instr.tanks?.name || instr.sections?.name || 'Section Wide'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                            <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                                                <Clock className="w-3 h-3" />
+                                                {instr.scheduled_time?.slice(0,5) || '—'}
+                                            </div>
+                                            {instr.planned_data?.amount && (
+                                                <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 font-medium">
+                                                    {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
+                                                </span>
+                                            )}
+                                            {instr.planned_data?.instructions && (
+                                                <span className="text-[10px] text-muted-foreground italic truncate max-w-[160px]">
+                                                    "{instr.planned_data.instructions}"
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {!instr.is_completed && (
+                                        <div className="flex gap-1.5 flex-shrink-0">
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-primary hover:bg-primary/10"
+                                                onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?editInstruction=${instr.id}`)}
+                                                title="Edit instruction"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                                onClick={() => handleDeleteInstruction(instr.id)}
+                                                title="Delete instruction"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            )}
         </div>
     );
 };

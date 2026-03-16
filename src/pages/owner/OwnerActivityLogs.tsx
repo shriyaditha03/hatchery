@@ -296,7 +296,7 @@ const OwnerActivityLogs = () => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => navigate('/owner/dashboard')}
+                        onClick={() => navigate('/dashboard')}
                         className="text-primary-foreground hover:bg-primary-foreground/10"
                     >
                         <ArrowLeft className="w-5 h-5" />

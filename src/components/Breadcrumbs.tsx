@@ -30,11 +30,15 @@ const activityNames: Record<string, string> = {
 
 export const Breadcrumbs = ({ className = "", lightTheme = false }: { className?: string, lightTheme?: boolean }) => {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, activeFarmId, activeSectionId } = useAuth();
   const paths = location.pathname.split('/').filter(p => p);
 
   // Don't show breadcrumbs on login or splash
   if (paths.length === 0 || paths[0] === 'login') return null;
+
+  // Find active names from access data
+  const activeFarm = user?.access?.find(a => a.farm_id === activeFarmId);
+  const activeSection = user?.access?.find(a => a.section_id === activeSectionId);
 
   const textColor = lightTheme ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-primary";
   const activeColor = lightTheme ? "text-white font-bold" : "text-foreground font-semibold";
@@ -43,13 +47,39 @@ export const Breadcrumbs = ({ className = "", lightTheme = false }: { className?
   // Filter out the generic root terms like 'owner' and 'user' from the visual path
   const visualPaths = paths.filter(p => p !== 'owner' && p !== 'user');
 
+  // Construct the "Home" label (Identity)
+  let homeLabel = user?.hatchery_name || (user?.role === 'owner' ? 'Owner' : 'Staff');
+  const showFarmCrumb = activeFarmId && activeFarm;
+
   return (
     <nav className={`flex items-center text-[10px] sm:text-xs whitespace-nowrap overflow-x-auto pb-2 mb-2 w-full no-scrollbar ${className}`}>
-      <Link to={user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard'} className={`flex items-center transition-colors ${textColor}`}>
-        <Home className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" />
-        <span className="font-semibold">{user?.hatchery_name || (user?.role === 'owner' ? 'Owner System' : 'Staff System')}</span>
+      <Link to={user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard'} className={`flex items-center transition-colors ${textColor} max-w-[150px]`}>
+        <Home className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 flex-shrink-0" />
+        <span className="font-semibold truncate">
+          {homeLabel}
+        </span>
       </Link>
       
+      {/* Inject Farm Crumb if active and not already homeLabel */}
+      {showFarmCrumb && (
+        <div className="flex items-center">
+          <ChevronRight className={`w-3 h-3 sm:w-3.5 sm:h-3.5 mx-1 flex-shrink-0 ${chevronOp}`} />
+          <span className={`truncate max-w-[100px] ${visualPaths.length === 1 && visualPaths[0] === 'dashboard' && !activeSectionId ? activeColor : textColor}`}>
+            {activeFarm.farm_name}
+          </span>
+        </div>
+      )}
+
+      {/* Inject Section Crumb if active */}
+      {user?.role !== 'owner' && activeSectionId && activeSection && (
+        <div className="flex items-center">
+          <ChevronRight className={`w-3 h-3 sm:w-3.5 sm:h-3.5 mx-1 flex-shrink-0 ${chevronOp}`} />
+          <span className={`truncate max-w-[100px] ${activeSectionId && visualPaths.length === 1 && visualPaths[0] === 'dashboard' ? activeColor : textColor}`}>
+            {activeSection.section_name}
+          </span>
+        </div>
+      )}
+
       {visualPaths.map((path, index) => {
         const isLast = index === visualPaths.length - 1;
         

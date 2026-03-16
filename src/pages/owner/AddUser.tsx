@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, UserPlus } from 'lucide-react';
+import { Loader2, ArrowLeft, UserPlus, ChevronDown, ChevronRight } from 'lucide-react';
 
 const AddUser = () => {
     const navigate = useNavigate();
@@ -19,8 +19,13 @@ const AddUser = () => {
     const [formData, setFormData] = useState({
         username: '',
         password: '',
+        role: 'worker' as 'worker' | 'supervisor',
         selectedFarms: [] as string[],
+        selectedSections: [] as string[],
+        selectedTanks: [] as string[],
     });
+
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         fetchFarms();
@@ -30,26 +35,46 @@ const AddUser = () => {
         if (!user?.hatchery_id) return;
         const { data } = await supabase
             .from('farms')
-            .select('id, name')
+            .select(`
+                id, 
+                name,
+                sections (
+                    id, 
+                    name,
+                    tanks (id, name)
+                )
+            `)
             .eq('hatchery_id', user.hatchery_id);
         if (data) setFarms(data);
     };
 
-    const handleFarmToggle = (farmId: string) => {
+    const toggleExpand = (id: string) => {
+        setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const handleToggle = (type: 'farm' | 'section' | 'tank', id: string) => {
         setFormData(prev => {
-            const selected = prev.selectedFarms.includes(farmId)
-                ? prev.selectedFarms.filter(id => id !== farmId)
-                : [...prev.selectedFarms, farmId];
-            return { ...prev, selectedFarms: selected };
+            const key = type === 'farm' ? 'selectedFarms' : type === 'section' ? 'selectedSections' : 'selectedTanks';
+            const selected = prev[key].includes(id)
+                ? prev[key].filter(i => i !== id)
+                : [...prev[key], id];
+            return { ...prev, [key]: selected };
         });
     };
+
+    const isFarmSelected = (farmId: string) => formData.selectedFarms.includes(farmId);
+    const isSectionSelected = (sectionId: string, farmId: string) => 
+        isFarmSelected(farmId) || formData.selectedSections.includes(sectionId);
+    const isTankSelected = (tankId: string, sectionId: string, farmId: string) => 
+        isSectionSelected(sectionId, farmId) || formData.selectedTanks.includes(tankId);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user?.hatchery_id) return;
 
-        if (!formData.username.trim() || !formData.password.trim() || formData.selectedFarms.length === 0) {
-            toast.error("Please fill in all fields and select at least one farm");
+        if (!formData.username.trim() || !formData.password.trim() || 
+            (formData.selectedFarms.length === 0 && formData.selectedSections.length === 0 && formData.selectedTanks.length === 0)) {
+            toast.error("Please fill in all fields and select at least one permission");
             return;
         }
 
@@ -113,7 +138,7 @@ const AddUser = () => {
                     .update({
                         auth_user_id: authData.user.id,
                         email: emailToUse,
-                        role: 'worker',
+                        role: formData.role,
                         hatchery_id: user?.hatchery_id
                     })
                     .eq('username', formData.username.trim());
@@ -125,7 +150,7 @@ const AddUser = () => {
                     .from('profiles')
                     .insert([{
                         username: formData.username.trim(),
-                        role: 'worker',
+                        role: formData.role,
                         hatchery_id: user?.hatchery_id,
                         full_name: formData.username,
                         auth_user_id: authData.user.id,
@@ -145,17 +170,47 @@ const AddUser = () => {
                 .delete()
                 .eq('user_id', targetProfileId);
 
-            if (formData.selectedFarms.length > 0) {
-                const accessData = formData.selectedFarms.map(farmId => ({
-                    user_id: targetProfileId,
-                    farm_id: farmId
-                }));
+            if (formData.selectedFarms.length > 0 || formData.selectedSections.length > 0 || formData.selectedTanks.length > 0) {
+                const accessData: any[] = [];
+                
+                // Add Farm Level Access
+                formData.selectedFarms.forEach(id => {
+                    accessData.push({ user_id: targetProfileId, farm_id: id });
+                });
 
-                const { error: accessError } = await supabase
-                    .from('farm_access')
-                    .insert(accessData);
+                // Add Section Level Access (if parent farm not selected)
+                formData.selectedSections.forEach(sid => {
+                    const farm = farms.find(f => f.sections.some((s: any) => s.id === sid));
+                    if (farm && !formData.selectedFarms.includes(farm.id)) {
+                        accessData.push({ user_id: targetProfileId, farm_id: farm.id, section_id: sid });
+                    }
+                });
 
-                if (accessError) throw accessError;
+                // Add Tank Level Access (if parent section/farm not selected)
+                formData.selectedTanks.forEach(tid => {
+                    let farmId = '';
+                    let sectionId = '';
+                    for (const f of farms) {
+                        for (const s of f.sections) {
+                            if (s.tanks.some((t: any) => t.id === tid)) {
+                                farmId = f.id;
+                                sectionId = s.id;
+                                break;
+                            }
+                        }
+                    }
+                    if (farmId && !formData.selectedFarms.includes(farmId) && !formData.selectedSections.includes(sectionId)) {
+                        accessData.push({ user_id: targetProfileId, farm_id: farmId, section_id: sectionId, tank_id: tid });
+                    }
+                });
+
+                if (accessData.length > 0) {
+                    const { error: accessError } = await supabase
+                        .from('farm_access')
+                        .insert(accessData);
+
+                    if (accessError) throw accessError;
+                }
             }
 
             toast.success(`User "${formData.username}" created successfully!`);
@@ -205,26 +260,110 @@ const AddUser = () => {
                         />
                     </div>
 
+                    <div className="space-y-2">
+                        <Label htmlFor="role">User Role *</Label>
+                        <Select 
+                            value={formData.role} 
+                            onValueChange={(value: any) => setFormData({ ...formData, role: value })}
+                        >
+                            <SelectTrigger id="role" className="bg-background">
+                                <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="worker">Worker</SelectItem>
+                                <SelectItem value="supervisor">Supervisor</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground">
+                            Supervisors and Workers both follow the same permission layout below.
+                        </p>
+                    </div>
+
 
                     <div className="space-y-3">
-                        <Label>Assign Farm Access *</Label>
+                        <Label>Assign Permissions *</Label>
+                        <p className="text-[10px] text-muted-foreground -mt-1 mb-2">
+                            Assign at Farm, Section or Tank level. Selecting a parent automatically includes all its children.
+                        </p>
                         {farms.length === 0 ? (
                             <p className="text-sm text-yellow-600">No farms created yet.</p>
                         ) : (
-                            <div className="grid gap-2">
+                            <div className="space-y-1 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                                 {farms.map(farm => (
-                                    <div key={farm.id} className="flex items-center space-x-2 border p-3 rounded-lg hover:bg-accent transition-colors">
-                                        <Checkbox
-                                            id={farm.id}
-                                            checked={formData.selectedFarms.includes(farm.id)}
-                                            onCheckedChange={() => handleFarmToggle(farm.id)}
-                                        />
-                                        <label
-                                            htmlFor={farm.id}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                                        >
-                                            {farm.name}
-                                        </label>
+                                    <div key={farm.id} className="border rounded-lg overflow-hidden border-muted/50">
+                                        <div className={`flex items-center gap-2 p-2 hover:bg-accent transition-colors ${isFarmSelected(farm.id) ? 'bg-primary/5' : ''}`}>
+                                            <button 
+                                                type="button"
+                                                onClick={() => toggleExpand(farm.id)} 
+                                                className="p-1 hover:bg-muted rounded"
+                                            >
+                                                {expanded[farm.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                            </button>
+                                            <Checkbox
+                                                id={`farm-${farm.id}`}
+                                                checked={isFarmSelected(farm.id)}
+                                                onCheckedChange={() => handleToggle('farm', farm.id)}
+                                            />
+                                            <Label 
+                                                htmlFor={`farm-${farm.id}`} 
+                                                className="text-sm font-bold flex-1 cursor-pointer py-1"
+                                            >
+                                                {farm.name} (Farm)
+                                            </Label>
+                                        </div>
+                                        
+                                        {expanded[farm.id] && (
+                                            <div className="bg-muted/30 pl-8 pr-2 py-1 space-y-1">
+                                                {farm.sections?.map((section: any) => (
+                                                    <div key={section.id} className="space-y-1">
+                                                        <div className="flex items-center gap-2 py-1">
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => toggleExpand(section.id)} 
+                                                                className="p-0.5 hover:bg-muted rounded"
+                                                            >
+                                                                {expanded[section.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                                            </button>
+                                                            <Checkbox
+                                                                id={`section-${section.id}`}
+                                                                checked={isSectionSelected(section.id, farm.id)}
+                                                                disabled={isFarmSelected(farm.id)}
+                                                                onCheckedChange={() => handleToggle('section', section.id)}
+                                                            />
+                                                            <Label 
+                                                                htmlFor={`section-${section.id}`} 
+                                                                className={`text-xs flex-1 cursor-pointer ${isFarmSelected(farm.id) ? 'opacity-50' : 'font-medium'}`}
+                                                            >
+                                                                {section.name} (Section)
+                                                            </Label>
+                                                        </div>
+
+                                                        {expanded[section.id] && (
+                                                            <div className="pl-6 space-y-1 pb-2 border-l border-muted-foreground/10 ml-1.5">
+                                                                {section.tanks?.map((tank: any) => (
+                                                                    <div key={tank.id} className="flex items-center gap-2 py-0.5">
+                                                                        <Checkbox
+                                                                            id={`tank-${tank.id}`}
+                                                                            checked={isTankSelected(tank.id, section.id, farm.id)}
+                                                                            disabled={isSectionSelected(section.id, farm.id)}
+                                                                            onCheckedChange={() => handleToggle('tank', tank.id)}
+                                                                        />
+                                                                        <Label 
+                                                                            htmlFor={`tank-${tank.id}`} 
+                                                                            className={`text-xs cursor-pointer ${isSectionSelected(section.id, farm.id) ? 'opacity-50' : ''}`}
+                                                                        >
+                                                                            {tank.name} (Tank)
+                                                                        </Label>                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                {(!farm.sections || farm.sections.length === 0) && (
+                                                    <p className="text-[10px] text-muted-foreground py-1">No sections available</p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

@@ -24,13 +24,13 @@ const LoginPage = () => {
 
     if (result.error) {
       toast.error(result.error.message || 'Login failed');
-      setLoading(false);
     } else {
       // Redirect based on role logic happens here if not handled by useEffect
       // However, fetchProfile updates 'user' state, so we can check it in a useEffect 
       // or here if we have the result from fetchProfile.
       // Let's rely on the useEffect for cleaner navigation after state update.
     }
+    setLoading(false);
   };
 
   // Improved redirection logic

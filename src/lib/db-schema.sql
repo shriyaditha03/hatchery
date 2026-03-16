@@ -37,7 +37,7 @@ create table public.profiles (
   auth_user_id uuid references auth.users on delete set null, -- Linked Auth ID
   username text unique not null,
   full_name text,
-  role text default 'worker' check (role in ('owner', 'technician', 'worker')),
+  role text default 'worker' check (role in ('owner', 'technician', 'worker', 'supervisor')),
   hatchery_id uuid references public.hatcheries(id),
   email text,
   phone text,

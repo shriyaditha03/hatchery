@@ -16,6 +16,9 @@ interface TypeItem {
     is_active: boolean;
 }
 
+const DEFAULT_FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
+const DEFAULT_TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
+
 const ManageTypes = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -52,12 +55,58 @@ const ManageTypes = () => {
                 .order('name');
             
             if (error) throw error;
-            setItems(data || []);
+            const fetchedItems = data || [];
+            setItems(fetchedItems);
+
+            // Automatically seed defaults if list is empty
+            if (fetchedItems.length === 0) {
+                handleLoadDefaults();
+            }
         } catch (error: any) {
             console.error('Error fetching types:', error);
             toast.error(`Failed to load ${activeTab} types`);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleLoadDefaults = async () => {
+        if (!user?.hatchery_id) return;
+        
+        const defaults = activeTab === 'feed' ? DEFAULT_FEED_TYPES : DEFAULT_TREATMENT_TYPES;
+        setSaving(true);
+        
+        try {
+            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
+            
+            // Check for existing names to avoid duplicates
+            const existingNames = items.map(i => i.name.toLowerCase());
+            const newDefaults = defaults.filter(name => !existingNames.includes(name.toLowerCase()));
+            
+            if (newDefaults.length === 0) {
+                toast.info("All default types are already present");
+                setSaving(false);
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from(table)
+                .insert(newDefaults.map(name => ({
+                    name,
+                    hatchery_id: user.hatchery_id,
+                    description: 'Default type'
+                })))
+                .select();
+
+            if (error) throw error;
+            
+            toast.success(`Loaded ${newDefaults.length} default ${activeTab} types`);
+            fetchItems();
+        } catch (error: any) {
+            console.error('Error loading defaults:', error);
+            toast.error(error.message || 'Failed to load defaults');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -229,11 +278,18 @@ const ManageTypes = () => {
                 <div className="glass-card rounded-2xl border shadow-sm p-4 sm:p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-lg font-bold capitalize">{activeTab} Types</h2>
-                        {!isAdding && (
-                            <Button onClick={() => setIsAdding(true)} size="sm" className="gap-2">
-                                <Plus className="w-4 h-4" /> Add New
-                            </Button>
-                        )}
+                        <div className="flex gap-2">
+                            {!isAdding && (
+                                <Button variant="outline" onClick={handleLoadDefaults} size="sm" disabled={saving}>
+                                    Load Defaults
+                                </Button>
+                            )}
+                            {!isAdding && (
+                                <Button onClick={() => setIsAdding(true)} size="sm" className="gap-2">
+                                    <Plus className="w-4 h-4" /> Add New
+                                </Button>
+                            )}
+                        </div>
                     </div>
 
                     {isAdding && (
@@ -304,6 +360,9 @@ const ManageTypes = () => {
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-semibold text-foreground">{item.name}</h3>
+                                                {(activeTab === 'feed' ? DEFAULT_FEED_TYPES : DEFAULT_TREATMENT_TYPES).includes(item.name) && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Default</span>
+                                                )}
                                                 {!item.is_active && (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Disabled</span>
                                                 )}

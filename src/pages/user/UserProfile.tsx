@@ -36,8 +36,16 @@ const UserProfile = () => {
                                 <Building2 className="w-4 h-4" />
                             </div>
                             <div className="flex-1">
-                                <p className="text-xs text-muted-foreground">Farm Access</p>
-                                <p className="font-medium">{user.hatchery_name || 'Assigned Farm'}</p>
+                                <p className="text-xs text-muted-foreground">Organization</p>
+                                <p className="font-medium">{user.hatchery_name || 'AquaNexus'}</p>
+                                {user.assigned_farms && user.assigned_farms.length > 0 && (
+                                    <>
+                                        <p className="text-xs text-muted-foreground mt-2">Farm Access</p>
+                                        <p className="font-medium text-sm text-primary/80">
+                                            {user.assigned_farms.join(', ')}
+                                        </p>
+                                    </>
+                                )}
                             </div>
                         </div>
 

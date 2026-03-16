@@ -20,7 +20,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera, Eye, Info } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera, Eye, Info, AlertTriangle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, getTodayStr, getDateRangeUTC } from '@/lib/date-utils';
 import { format } from 'date-fns';
@@ -30,6 +30,9 @@ interface ActivityLog {
     activity_type: string;
     created_at: string;
     data: any;
+    farm_id: string;
+    section_id: string | null;
+    tank_id: string | null;
     farms: { name: string; hatchery_id: string } | null;
     sections: { name: string } | null;
     tanks: { name: string } | null;
@@ -87,11 +90,40 @@ const OwnerConsolidatedReports = () => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
+            if (!data) return;
+
+            // 2. Get permissions if Supervisor
+            let allowedFarmIds: string[] = [];
+            let allowedSectionIds: string[] = [];
+            let allowedTankIds: string[] = [];
+
+            if (user.role === 'supervisor') {
+                const { data: accessData } = await supabase
+                    .from('farm_access')
+                    .select('farm_id, section_id, tank_id')
+                    .eq('user_id', user.id);
+                
+                if (accessData) {
+                    allowedFarmIds = accessData.filter(a => !a.section_id && !a.tank_id).map(a => a.farm_id);
+                    allowedSectionIds = accessData.filter(a => a.section_id && !a.tank_id).map(a => a.section_id!);
+                    allowedTankIds = accessData.filter(a => a.tank_id).map(a => a.tank_id!);
+                }
+            }
 
             // Filter by hatchery_id and activeFarmId
-            let filteredData = data?.filter(log => log.farms?.hatchery_id === user.hatchery_id) || [];
+            let filteredData = data.filter(log => log.farms?.hatchery_id === user.hatchery_id);
+            
             if (activeFarmId) {
                 filteredData = filteredData.filter(log => log.farm_id === activeFarmId);
+            }
+
+            // 3. Supervisor specific sub-filtering (if no activeFarmId or to ensure they have access to it)
+            if (user.role === 'supervisor') {
+                filteredData = filteredData.filter(log => 
+                    allowedFarmIds.includes(log.farm_id) || 
+                    (log.section_id && allowedSectionIds.includes(log.section_id)) ||
+                    (log.tank_id && allowedTankIds.includes(log.tank_id))
+                );
             }
 
             setLogs(filteredData);
@@ -162,6 +194,24 @@ const OwnerConsolidatedReports = () => {
         return '-';
     };
 
+    const getVarianceDetails = (log: ActivityLog) => {
+        const { data } = log;
+        if (!data.planned_data || !data.applied_instruction_id) return null;
+
+        const planned = data.planned_data;
+        const actual = {
+            item: data.feedType || data.treatmentType || '',
+            amount: data.feedQty || data.treatmentDosage || '',
+            unit: data.feedUnit || data.treatmentUnit || ''
+        };
+
+        const hasDifference = planned.item !== actual.item || 
+                            parseFloat(planned.amount) !== parseFloat(actual.amount) || 
+                            planned.unit !== actual.unit;
+
+        return { planned, actual, hasDifference };
+    };
+
     const getActivityTypeColor = (type: string) => {
         const colors: Record<string, string> = {
             'Feed': 'bg-orange-100 text-orange-700',
@@ -183,7 +233,7 @@ const OwnerConsolidatedReports = () => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => navigate('/owner/dashboard')}
+                        onClick={() => navigate('/dashboard')}
                         className="text-primary-foreground hover:bg-primary-foreground/10"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -282,6 +332,7 @@ const OwnerConsolidatedReports = () => {
                                         <TableHead className="font-bold">Activity Type</TableHead>
                                         <TableHead className="font-bold">Section</TableHead>
                                         <TableHead className="font-bold">Tank</TableHead>
+                                        <TableHead className="font-bold text-center">Variance</TableHead>
                                         <TableHead className="font-bold text-center w-16">Details</TableHead>
                                         <TableHead className="font-bold">Comments</TableHead>
                                         <TableHead className="font-bold">Photo</TableHead>
@@ -310,6 +361,23 @@ const OwnerConsolidatedReports = () => {
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 {log.tanks?.name || 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {(() => {
+                                                    const variance = getVarianceDetails(log);
+                                                    if (!variance) return <span className="text-[10px] text-muted-foreground italic">Self-initiated</span>;
+                                                    return variance.hasDifference ? (
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <AlertTriangle className="w-4 h-4 text-orange-500" />
+                                                            <span className="text-[8px] font-bold text-orange-600 uppercase">Difference</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                                            <span className="text-[8px] font-bold text-emerald-600 uppercase">Correct</span>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </TableCell>
                                             <TableCell className="text-center w-16">
                                                 <Button
@@ -392,6 +460,34 @@ const OwnerConsolidatedReports = () => {
                                     })}
                                 </div>
                             </div>
+
+                            {/* Variance Comparison Section */}
+                            {(() => {
+                                const variance = getVarianceDetails(selectedLog);
+                                if (!variance) return null;
+                                return (
+                                    <div className="space-y-4">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b pb-1 flex items-center gap-2">
+                                            Instruction vs Actual
+                                            {variance.hasDifference ? <AlertTriangle className="w-3 h-3 text-orange-500" /> : <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                                        </h3>
+                                        <div className="bg-muted/30 rounded-xl p-3 grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">Planned (Supervisor)</p>
+                                                <p className="text-sm font-semibold">{variance.planned.item}</p>
+                                                <p className="text-lg font-black text-primary">{variance.planned.amount} {variance.planned.unit}</p>
+                                            </div>
+                                            <div className="border-l border-dashed pl-4">
+                                                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2">Recorded (Worker)</p>
+                                                <p className="text-sm font-semibold">{variance.actual.item}</p>
+                                                <p className={`text-lg font-black ${variance.hasDifference ? 'text-orange-600' : 'text-emerald-600'}`}>
+                                                    {variance.actual.amount} {variance.actual.unit}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             {selectedLog.data?.comments && (
                                 <div className="space-y-2">
