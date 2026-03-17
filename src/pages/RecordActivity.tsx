@@ -562,34 +562,46 @@ const RecordActivity = () => {
       return;
     }
 
+    if (selectionScope === 'single' && !tankId) {
+      toast.error('Please select a tank');
+      return;
+    }
+
     try {
       setLoading(true);
       const records = targets.map(tId => {
-        let farmId = '';
-        let sectionId = '';
+        let farmId = null;
+        let sectionId = null;
         const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
         if (section) {
-          sectionId = section.id;
-          farmId = section.farm_id;
+          sectionId = section.id || null;
+          farmId = section.farm_id || null;
         }
 
-        return {
-          hatchery_id: user?.hatchery_id,
+        const record = {
+          hatchery_id: user?.hatchery_id || null,
           farm_id: farmId,
           section_id: sectionId,
-          tank_id: tId,
-          activity_type: activity,
+          tank_id: tId || null,
+          activity_type: activity.trim(), // Sanitize
           scheduled_date: date,
           scheduled_time: time,
           planned_data: {
             item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : 'Instruction'),
             amount: activity === 'Feed' ? feedQty : (activity === 'Treatment' ? treatmentDosage : ''),
             unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
-            instructions: comments
+            instructions: comments,
+            stockingData: activity === 'Stocking' ? stockingData : undefined,
+            observationData: activity === 'Observation' ? observationData : undefined,
+            artemiaData: activity === 'Artemia' ? artemiaData : undefined,
+            algaeData: activity === 'Algae' ? algaeData : undefined
           },
-          created_by: user?.id,
+          created_by: user?.id || null,
           is_completed: false
         };
+        
+        console.log('DEBUG - Saving Instruction Record:', record);
+        return record;
       });
 
       if (editInstructionId) {
@@ -600,6 +612,7 @@ const RecordActivity = () => {
           unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
           instructions: comments
         };
+        console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
           .from('activity_charts')
           .update({ planned_data: plannedData, scheduled_time: time, scheduled_date: date })
@@ -608,8 +621,12 @@ const RecordActivity = () => {
         toast.success('Instruction updated!');
       } else {
         // INSERT new instructions
+        console.log('DEBUG - Inserting multiple records:', records);
         const { error } = await supabase.from('activity_charts').insert(records);
-        if (error) throw error;
+        if (error) {
+          console.error('SERVER ERROR - INSERT:', error);
+          throw error;
+        }
         toast.success(targets.length > 1 ? `${targets.length} instructions scheduled!` : 'Instruction scheduled successfully!');
       }
 
@@ -1170,8 +1187,8 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {/* Supervisor Instruction Banners */}
-        {activeInstructions.length > 0 && (
+        {/* Supervisor Instruction Banners - Only visible during recording, not planning */}
+        {activeInstructions.length > 0 && isPlanningMode === false && (
           <div className="space-y-3">
             {activeInstructions.map((instr) => (
               <div 

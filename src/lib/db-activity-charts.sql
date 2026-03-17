@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.activity_charts (
   farm_id uuid REFERENCES public.farms(id) ON DELETE CASCADE NOT NULL,
   section_id uuid REFERENCES public.sections(id) ON DELETE CASCADE,
   tank_id uuid REFERENCES public.tanks(id) ON DELETE CASCADE,
-  activity_type text NOT NULL CHECK (activity_type IN ('Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation')),
+  activity_type text NOT NULL CHECK (activity_type IN ('Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae')),
   scheduled_date date NOT NULL,
   scheduled_time time,
   planned_data jsonb NOT NULL, -- Stores type, quantity, unit, and specific instructions
