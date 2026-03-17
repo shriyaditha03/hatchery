@@ -95,11 +95,23 @@ const ObservationForm = ({
       {/* 1. Read-only Stocking Stats */}
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-xl border border-dashed relative group">
+          <div className="space-y-0.5 col-span-2">
+            <p className="text-[10px] uppercase font-bold text-muted-foreground">Batch ID (Stocking ID)</p>
+            <p className="text-sm font-black text-foreground">{data.stockingId || '—'}</p>
+          </div>
           <div className="space-y-0.5">
+            <p className="text-[10px] uppercase font-bold text-muted-foreground">Broodstock Type</p>
+            <p className="text-sm font-black text-foreground capitalize truncate" title={data.broodstockSource}>{data.broodstockSource || '—'}</p>
+          </div>
+          <div className="space-y-0.5 mb-2">
+            <p className="text-[10px] uppercase font-bold text-muted-foreground">Hatchery / Section Name</p>
+            <p className="text-sm font-black text-foreground capitalize truncate" title={data.hatcheryName}>{data.hatcheryName || '—'}</p>
+          </div>
+          <div className="space-y-0.5 border-t border-dashed border-muted-foreground/20 pt-2">
             <p className="text-[10px] uppercase font-bold text-muted-foreground">Tank Stocking No.</p>
             <p className="text-sm font-black text-foreground">{data.tankStockingNumber || '—'}</p>
           </div>
-          <div className="space-y-0.5 text-right">
+          <div className="space-y-0.5 text-right border-t border-dashed border-muted-foreground/20 pt-2">
             <p className="text-[10px] uppercase font-bold text-muted-foreground">Nauplii Stocked (M)</p>
             <p className="text-sm font-black text-foreground">{data.naupliiStockedMillion || '—'}</p>
           </div>

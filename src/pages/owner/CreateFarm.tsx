@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Plus, ArrowRight, Check, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Plus, ArrowRight, Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -123,6 +123,7 @@ const CreateFarm = () => {
     const [farmName, setFarmName] = useState('');
     const [sectionCount, setSectionCount] = useState<number | string>(1);
     const [sections, setSections] = useState<SectionConfig[]>([]);
+    const [collapsedSections, setCollapsedSections] = useState<number[]>([]);
 
     const calculateTank = (tank: TankConfig): { volume: number, area: number } => {
         let volume = 0;
@@ -181,6 +182,8 @@ const CreateFarm = () => {
             newSections[sIdx].tanks = [...currentTanks, newTank];
             return newSections;
         });
+        // Ensure section is expanded when adding a tank
+        setCollapsedSections(prev => prev.filter(idx => idx !== sIdx));
         toast.success(`Added new tank to ${sections[sIdx].name}`);
     };
 
@@ -190,6 +193,8 @@ const CreateFarm = () => {
             tanks: []
         };
         setSections(prev => [...prev, newSection]);
+        // Expand the newly added section
+        setCollapsedSections(prev => prev.filter(idx => idx !== sections.length));
         toast.success("Added new section");
     };
 
@@ -249,7 +254,14 @@ const CreateFarm = () => {
             newSections[sIdx].tanks = [...currentTanks, ...newTanks];
             return newSections;
         });
+        setCollapsedSections(prev => prev.filter(idx => idx !== sIdx));
         toast.success(`Duplicated tank ${count} times`);
+    };
+
+    const toggleSection = (sIdx: number) => {
+        setCollapsedSections(prev => 
+            prev.includes(sIdx) ? prev.filter(idx => idx !== sIdx) : [...prev, sIdx]
+        );
     };
 
     const handleSubmit = async () => {
@@ -384,58 +396,72 @@ const CreateFarm = () => {
                     <div className="space-y-8 animate-in fade-in duration-500">
                         {sections.map((section, sIdx) => (
                             <div key={sIdx} className="space-y-4">
-                                <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-sm">
+                                <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md" onClick={() => toggleSection(sIdx)}>
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                                             <Layers className="w-5 h-5" />
                                         </div>
                                         <div>
-                                            <Input
-                                                className="h-6 font-bold border-none bg-transparent p-0 text-lg focus-visible:ring-0 w-32"
-                                                value={section.name}
-                                                onChange={(e) => {
-                                                    const newSections = [...sections];
-                                                    newSections[sIdx].name = e.target.value;
-                                                    setSections(newSections);
-                                                }}
-                                            />
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    className="h-6 font-bold border-none bg-transparent p-0 text-lg focus-visible:ring-0 w-32"
+                                                    value={section.name}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onChange={(e) => {
+                                                        const newSections = [...sections];
+                                                        newSections[sIdx].name = e.target.value;
+                                                        setSections(newSections);
+                                                    }}
+                                                />
+                                                {collapsedSections.includes(sIdx) && (
+                                                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                                        {section.tanks.length} TANKS
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure Section</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => addTank(sIdx)}
-                                            className="h-9 px-3 border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-xs rounded-xl transition-all"
-                                        >
-                                            <Plus className="w-4 h-4 mr-1" /> Add Tank
-                                        </Button>
-                                        <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-muted">
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => addTank(sIdx)}
+                                                className="h-9 px-3 border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-xs rounded-xl transition-all"
+                                            >
+                                                <Plus className="w-4 h-4 mr-1" /> Add Tank
+                                            </Button>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
                                             <TankCountInput
                                                 count={section.tanks.length}
                                                 onChange={(val) => updateTankCount(sIdx, val)}
                                             />
                                         </div>
+                                        <div className="ml-1 text-muted-foreground">
+                                            {collapsedSections.includes(sIdx) ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="grid gap-4 pl-4 border-l-2 border-dashed border-muted ml-5">
-                                    {section.tanks.length === 0 ? (
-                                        <div className="py-8 bg-muted/20 border border-dashed rounded-2xl text-center">
-                                            <p className="text-xs text-muted-foreground font-medium italic">No tanks added to this section yet.</p>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => addTank(sIdx)}
-                                                className="mt-2 text-primary hover:bg-primary/10 font-bold"
-                                            >
-                                                Click to add tank
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        section.tanks.map((tank, tIdx) => (
-                                            <Card key={tIdx} className="rounded-2xl border shadow-sm overflow-hidden bg-card/40 transition-all hover:bg-card">
+                                {!collapsedSections.includes(sIdx) && (
+                                    <div className="grid gap-4 pl-4 border-l-2 border-dashed border-muted ml-5 animate-in slide-in-from-top-2 duration-300">
+                                        {section.tanks.length === 0 ? (
+                                            <div className="py-8 bg-muted/20 border border-dashed rounded-2xl text-center">
+                                                <p className="text-xs text-muted-foreground font-medium italic">No tanks added to this section yet.</p>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => addTank(sIdx)}
+                                                    className="mt-2 text-primary hover:bg-primary/10 font-bold"
+                                                >
+                                                    Click to add tank
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            section.tanks.map((tank, tIdx) => (
+                                                <Card key={tIdx} className="rounded-2xl border shadow-sm overflow-hidden bg-card/40 transition-all hover:bg-card">
                                                 <CardContent className="p-4 space-y-4">
                                                     <div className="flex justify-between items-center bg-muted/20 -mx-4 -mt-4 px-4 py-3 border-b mb-2">
                                                         <div className="flex items-center gap-2">
@@ -569,7 +595,8 @@ const CreateFarm = () => {
                                             </Card>
                                         ))
                                     )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
 

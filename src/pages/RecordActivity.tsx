@@ -99,6 +99,7 @@ const RecordActivity = () => {
   const [isPlanningMode, setIsPlanningMode] = useState(user?.role === 'supervisor');
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
+  const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
 
   // Live Time Update Effect
   useEffect(() => {
@@ -400,7 +401,10 @@ const RecordActivity = () => {
           setWaterData(data.data.waterData || {});
         } else if (actType === 'Animal Quality') {
           setAnimalSize(data.data.animalSize || '');
+          setAnimalStage(data.data.animalStage || '');
+          setAnimalDoc(data.data.animalDoc || '');
           setAnimalRatings(data.data.animalRatings || {});
+          setHasDiseaseIdentified(data.data.hasDiseaseIdentified || '');
           setDiseaseSymptoms(data.data.diseaseSymptoms || '');
           setAdditionalObservations(data.data.additionalObservations || data.data.otherAnimal || '');
         } else if (actType === 'Stocking') {
@@ -466,6 +470,9 @@ const RecordActivity = () => {
       if (!error && data && data.data) {
         setObservationData(prev => ({
           ...prev,
+          stockingId: data.data.stockingId,
+          broodstockSource: data.data.broodstockSource,
+          hatcheryName: data.data.hatcheryName,
           tankStockingNumber: data.data.tankStockingNumber,
           naupliiStockedMillion: data.data.naupliiStocked || data.data.naupliiStockedMillion
         }));
@@ -506,6 +513,8 @@ const RecordActivity = () => {
 
   // Animal quality fields
   const [animalSize, setAnimalSize] = useState('');
+  const [animalStage, setAnimalStage] = useState('');
+  const [animalDoc, setAnimalDoc] = useState('');
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>({});
   const [hasDiseaseIdentified, setHasDiseaseIdentified] = useState<'Yes' | 'No' | ''>('');
   const [diseaseSymptoms, setDiseaseSymptoms] = useState('');
@@ -526,13 +535,65 @@ const RecordActivity = () => {
   const [photoUrl, setPhotoUrl] = useState('');
   const [isRedirectedFromObservation, setIsRedirectedFromObservation] = useState(false);
 
+  // Fetch recent Artemia Pre-Harvest IDs for linking
+  useEffect(() => {
+    if (activity === 'Artemia') {
+      const fetchPreHarvestIds = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('activity_logs')
+            .select('data')
+            .eq('activity_type', 'Artemia')
+            .eq('farm_id', activeFarmId || selectedFarmId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+          if (!error && data) {
+            const ids = data
+              .filter((d: any) => d.data?.phase === 'pre' && d.data?.sampleId)
+              .map((d: any) => d.data.sampleId);
+            // Unique IDs only
+            setAvailableArtemiaPreHarvestIds([...new Set(ids)]);
+          }
+        } catch (err) {
+          console.error('Error fetching artemia ids:', err);
+        }
+      };
+      fetchPreHarvestIds();
+    }
+  }, [activity, activeFarmId, selectedFarmId]);
+
+  // Auto-populate Inoculum Source ID for Algae
+  useEffect(() => {
+    if (activity === 'Algae' && !editId && !algaeData.inoculumSourceId) {
+      const fetchLatestAlgae = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('activity_logs')
+            .select('data')
+            .eq('activity_type', 'Algae')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!error && data?.data?.inoculumSourceId) {
+            setAlgaeData(prev => ({ ...prev, inoculumSourceId: data.data.inoculumSourceId }));
+          }
+        } catch (err) {
+          console.error('Error fetching latest algae record:', err);
+        }
+      };
+      fetchLatestAlgae();
+    }
+  }, [activity, editId]);
+
   const buildData = (): Record<string, any> => {
     const baseData = { date, time, ampm, comments, photo_url: photoUrl };
     switch (activity) {
       case 'Feed': return { ...baseData, feedType, feedQty, feedUnit };
       case 'Treatment': return { ...baseData, treatmentType, treatmentDosage, treatmentUnit };
       case 'Water Quality': return { ...baseData, waterData };
-      case 'Animal Quality': return { ...baseData, animalSize, animalRatings, hasDiseaseIdentified, diseaseSymptoms, additionalObservations };
+      case 'Animal Quality': return { ...baseData, animalSize, animalStage, animalDoc, animalRatings, hasDiseaseIdentified, diseaseSymptoms, additionalObservations };
       case 'Stocking': return { ...baseData, ...stockingData, photo_url: photoUrl };
       case 'Observation': return { ...baseData, ...observationData, photo_url: photoUrl };
       case 'Artemia': return { ...baseData, ...artemiaData, photo_url: photoUrl };
@@ -548,6 +609,8 @@ const RecordActivity = () => {
     }
 
     let targets = [];
+    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
+
     if (selectionScope === 'all') {
       const section = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
       if (section) targets = section.tanks.map((t: any) => t.id);
@@ -557,25 +620,82 @@ const RecordActivity = () => {
       targets = [tankId];
     }
 
-    if (targets.length === 0) {
-      toast.error('Please select at least one tank');
-      return;
-    }
-
-    if (selectionScope === 'single' && !tankId) {
-      toast.error('Please select a tank');
-      return;
+    if (!isSpecialActivity) {
+      if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
+        toast.error('Please select at least one tank');
+        return;
+      }
+    } else {
+      // For Algae/Artemia, if no targets, create one record with null tank
+      if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
+        targets = [null];
+      }
     }
 
     try {
       setLoading(true);
       const records = targets.map(tId => {
-        let farmId = null;
+        let farmId = activeFarmId;
         let sectionId = null;
-        const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
-        if (section) {
-          sectionId = section.id || null;
-          farmId = section.farm_id || null;
+        
+        if (tId) {
+          const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
+          if (section) {
+            sectionId = section.id || null;
+            farmId = section.farm_id || null;
+          }
+        }
+
+        if (activity === 'Stocking') {
+          if (!stockingData.stockingId) {
+            toast.error('Stocking ID is required');
+            return;
+          }
+        }
+
+        if (activity === 'Algae') {
+          if (!algaeData.algaeSpecies) {
+            toast.error('Algae Species is required');
+            return;
+          }
+          if (!algaeData.containerSize) {
+            toast.error('Container Size is required');
+            return;
+          }
+          if (!algaeData.inoculumQuantity) {
+            toast.error('Inoculum Quantity is required');
+            return;
+          }
+        }
+
+        if (activity === 'Artemia') {
+          if (artemiaData.phase === 'pre') {
+            if (!artemiaData.sampleId) {
+              toast.error('Sample ID is required');
+              return;
+            }
+            if (!artemiaData.cystWeight) {
+              toast.error('Cyst Weight is required');
+              return;
+            }
+          } else {
+            if (!artemiaData.linkedSampleId) {
+              toast.error('Please choose a Pre-Harvest ID');
+              return;
+            }
+            if (!artemiaData.harvestStage) {
+              toast.error('Harvest Stage is required');
+              return;
+            }
+            if (!artemiaData.cellsHarvested) {
+              toast.error('Cells Harvested is required');
+              return;
+            }
+            if (!artemiaData.harvestWeight) {
+              toast.error('Harvest Weight is required');
+              return;
+            }
+          }
         }
 
         const record = {
@@ -650,8 +770,10 @@ const RecordActivity = () => {
   };
 
   const handleSave = async () => {
+    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
+
     // Basic validation
-    if (selectionScope === 'single' && !tankId) {
+    if (!isSpecialActivity && selectionScope === 'single' && !tankId) {
       toast.error('Please select a tank');
       return;
     }
@@ -676,7 +798,7 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Stocking') {
-      const required = ['broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
+      const required = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
       const missing = required.filter(f => {
         const val = stockingData[f];
         return val === undefined || val === null || val === '' || (typeof val === 'string' && val.trim() === '');
@@ -698,6 +820,14 @@ const RecordActivity = () => {
 
 
     if (activity === 'Animal Quality') {
+      if (!animalStage.trim()) {
+        toast.error('Stage is required');
+        return;
+      }
+      if (!animalDoc.trim()) {
+        toast.error('DOC is required');
+        return;
+      }
       if (!animalSize.trim()) {
         toast.error('Animal Size and Avg. Wt. is required');
         return;
@@ -725,6 +855,56 @@ const RecordActivity = () => {
       }
     }
 
+    if (activity === 'Algae') {
+      if (!algaeData.algaeSpecies) {
+        toast.error('Algae Species is required');
+        return;
+      }
+      if (!algaeData.containerSize) {
+        toast.error('Container Size is required');
+        return;
+      }
+      if (!algaeData.inoculumQuantity) {
+        toast.error('Inoculum Quantity is required');
+        return;
+      }
+      const missingCellCount = (algaeData.samples || []).some((s: any) => !s.cellCountPerMl);
+      if (missingCellCount) {
+        toast.error('Cell Count is required for all samples');
+        return;
+      }
+    }
+
+    if (activity === 'Artemia') {
+      if (artemiaData.phase === 'pre') {
+        if (!artemiaData.sampleId) {
+          toast.error('Sample ID is required');
+          return;
+        }
+        if (!artemiaData.cystWeight) {
+          toast.error('Cyst Weight is required');
+          return;
+        }
+      } else {
+        if (!artemiaData.linkedSampleId) {
+          toast.error('Please choose a Pre-Harvest ID');
+          return;
+        }
+        if (!artemiaData.harvestStage) {
+          toast.error('Harvest Stage is required');
+          return;
+        }
+        if (!artemiaData.cellsHarvested) {
+          toast.error('Cells Harvested is required');
+          return;
+        }
+        if (!artemiaData.harvestWeight) {
+          toast.error('Harvest Weight is required');
+          return;
+        }
+      }
+    }
+
     let targets = [];
     if (selectionScope === 'all') {
       const section = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
@@ -735,21 +915,29 @@ const RecordActivity = () => {
       targets = [tankId];
     }
 
-    if (targets.length === 0) {
-      toast.error('Please select at least one tank');
-      return;
+    if (!isSpecialActivity) {
+      if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
+        toast.error('Please select at least one tank');
+        return;
+      }
+    } else {
+      if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
+        targets = [null];
+      }
     }
 
     try {
       setLoading(true);
       
       if (editId) {
-        let farmId = selectedFarmId;
+        let farmId = activeFarmId;
         let sectionId = selectedSectionId;
-        const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
-        if (section) {
-          sectionId = section.id;
-          farmId = section.farm_id;
+        if (tankId) {
+          const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
+          if (section) {
+            sectionId = section.id;
+            farmId = section.farm_id;
+          }
         }
 
         await updateActivity(editId, {
@@ -792,9 +980,14 @@ const RecordActivity = () => {
 
         // 2. Loop through targets for bulk recording
         const promises = targets.map(async (tId) => {
-          const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
-          const sectionId = section?.id;
-          const farmId = section?.farm_id;
+          let sectionId = null;
+          let farmId = activeFarmId;
+
+          if (tId) {
+            const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
+            sectionId = section?.id;
+            farmId = section?.farm_id || farmId;
+          }
 
           const currentBuildData = buildData();
           
@@ -829,6 +1022,26 @@ const RecordActivity = () => {
             // Link to the record & store variance
             currentBuildData.applied_instruction_id = matchingInstruction.id;
             currentBuildData.planned_data = matchingInstruction.planned_data;
+          }
+
+          // If Stocking, dynamically append Section and Tank names to the generated stockingId
+          if (activity === 'Stocking' && currentBuildData.stockingId) {
+            let suffix = '';
+            if (sectionId) {
+              const sec = availableTanks.find(s => s.id === sectionId);
+              if (sec) suffix += `_${sec.name.replace(/\s+/g, '')}`;
+            }
+            if (tId && sectionId) {
+              const sec = availableTanks.find(s => s.id === sectionId);
+              const tnk = sec?.tanks.find((t: any) => t.id === tId);
+              if (tnk) suffix += `_${tnk.name.replace(/\s+/g, '')}`;
+            }
+            currentBuildData.stockingId = `${currentBuildData.stockingId}${suffix}`;
+            
+            // Also save a copy inside stockingData for consistency if needed by other logic
+            if (currentBuildData.stockingData) {
+               currentBuildData.stockingData.stockingId = currentBuildData.stockingId;
+            }
           }
 
           const logId = await addActivity({
@@ -1055,137 +1268,138 @@ const RecordActivity = () => {
               </div>
             </div>
           </div>
-        </div>        {/* Tank & Activity */}
-        <div className="glass-card rounded-2xl p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              {type ? 'Location & Scope' : 'Location & Activity'}
-            </h2>
-            
-            {!editId && (
-              <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
-                <TabsList className="bg-muted/50 h-8 p-0.5">
-                  <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
-                  <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All Tanks</TabsTrigger>
-                  <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
-                </TabsList>
-              </Tabs>
+        </div>        {((activity !== 'Algae' && activity !== 'Artemia') || !type) && (
+          <div className="glass-card rounded-2xl p-4 space-y-4">
+            {activity !== 'Algae' && activity !== 'Artemia' && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    {type ? 'Location & Scope' : 'Location & Activity'}
+                  </h2>
+                  
+                  {!editId && (
+                    <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
+                      <TabsList className="bg-muted/50 h-8 p-0.5">
+                        <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
+                        <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All Tanks</TabsTrigger>
+                        <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  )}
+                </div>
+                
+                <div className={`grid grid-cols-1 ${activeSectionId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
+                  {!activeSectionId && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Section *</Label>
+                      <Select 
+                        value={selectedSectionId} 
+                        onValueChange={(val) => {
+                          setSelectedSectionId(val);
+                          setTankId(''); // reset tank when section changes
+                          setSelectedTankIds([]);
+                        }}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Choose section" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTanks
+                            .filter(s => activeFarmId ? s.farm_id === activeFarmId : true)
+                            .map(section => (
+                              <SelectItem key={section.id} value={section.id}>
+                                {user?.role === 'owner' && !activeFarmId ? `${section.farm_name} - ${section.name}` : section.name}
+                              </SelectItem>
+                            ))
+                          }
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
+                    </Label>
+                    
+                    {selectionScope === 'single' ? (
+                      <Select 
+                        value={tankId} 
+                        onValueChange={(val) => {
+                          setTankId(val);
+                          setSelectedTankIds([val]);
+                        }} 
+                        disabled={!selectedSectionId && !activeSectionId}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Choose tank" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : selectionScope === 'all' ? (
+                      <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
+                        <ListChecks className="w-4 h-4" />
+                        Apply to all tanks in this section
+                      </div>
+                    ) : (
+                      <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
+                        {selectedTankIds.length} tank(s) selected
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Custom Selection List */}
+                {selectionScope === 'custom' && (selectedSectionId || activeSectionId) && (
+                  <div className="pt-2 border-t border-dashed animate-in fade-in slide-in-from-top-2">
+                    <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
+                    <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
+                      {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
+                        <div 
+                          key={t.id}
+                          onClick={() => {
+                            setSelectedTankIds(prev => 
+                              prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                            );
+                          }}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                            selectedTankIds.includes(t.id) 
+                              ? 'bg-primary/10 border-primary text-primary font-bold' 
+                              : 'bg-card border-border hover:border-primary/50'
+                          }`}
+                        >
+                          <Checkbox checked={selectedTankIds.includes(t.id)} className="pointer-events-none" />
+                          <span className="text-xs truncate">{t.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!type && (
+              <div className={`space-y-1.5 ${activity === 'Algae' || activity === 'Artemia' ? '' : 'pt-4 border-t border-dashed'}`}>
+                <Label className="text-xs">Activity Type *</Label>
+                <Select
+                  value={activity}
+                  onValueChange={v => setActivity(v as ActivityType)}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Choose activity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTIVITIES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Section *</Label>
-              {activeSectionId ? (
-                <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium">
-                  {availableTanks.find(s => s.id === activeSectionId)?.name || 'Loading...'}
-                </div>
-              ) : (
-                <Select 
-                  value={selectedSectionId} 
-                  onValueChange={(val) => {
-                    setSelectedSectionId(val);
-                    setTankId(''); // reset tank when section changes
-                    setSelectedTankIds([]);
-                  }}
-                >
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Choose section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTanks
-                      .filter(s => activeFarmId ? s.farm_id === activeFarmId : true)
-                      .map(section => (
-                        <SelectItem key={section.id} value={section.id}>
-                          {user?.role === 'owner' && !activeFarmId ? `${section.farm_name} - ${section.name}` : section.name}
-                        </SelectItem>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
-              </Label>
-              
-              {selectionScope === 'single' ? (
-                <Select 
-                  value={tankId} 
-                  onValueChange={(val) => {
-                    setTankId(val);
-                    setSelectedTankIds([val]);
-                  }} 
-                  disabled={!selectedSectionId && !activeSectionId}
-                >
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Choose tank" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : selectionScope === 'all' ? (
-                <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
-                  <ListChecks className="w-4 h-4" />
-                  Apply to all tanks in this section
-                </div>
-              ) : (
-                <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
-                  {selectedTankIds.length} tank(s) selected
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Custom Selection List */}
-          {selectionScope === 'custom' && (selectedSectionId || activeSectionId) && (
-            <div className="pt-2 border-t border-dashed animate-in fade-in slide-in-from-top-2">
-              <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
-              <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
-                {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
-                  <div 
-                    key={t.id}
-                    onClick={() => {
-                      setSelectedTankIds(prev => 
-                        prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
-                      );
-                    }}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
-                      selectedTankIds.includes(t.id) 
-                        ? 'bg-primary/10 border-primary text-primary font-bold' 
-                        : 'bg-card border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Checkbox checked={selectedTankIds.includes(t.id)} className="pointer-events-none" />
-                    <span className="text-xs truncate">{t.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!type && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Activity Type *</Label>
-              <Select
-                value={activity}
-                onValueChange={v => setActivity(v as ActivityType)}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Choose activity" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTIVITIES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Supervisor Instruction Banners - Only visible during recording, not planning */}
         {activeInstructions.length > 0 && isPlanningMode === false && (
@@ -1421,6 +1635,30 @@ const RecordActivity = () => {
         {activity === 'Animal Quality' && (
           <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Animal Quality</h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Stage *</Label>
+                <Input
+                  value={animalStage}
+                  onChange={e => setAnimalStage(e.target.value)}
+                  placeholder="Enter Stage"
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">DOC (Days of Culture) *</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={animalDoc}
+                  onChange={e => setAnimalDoc(e.target.value)}
+                  placeholder="Enter DOC"
+                  className="h-11"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs">Animal Size and Avg. Wt. *</Label>
               <Input
@@ -1547,6 +1785,7 @@ const RecordActivity = () => {
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
             isPlanningMode={isPlanningMode}
+            availablePreHarvestIds={availableArtemiaPreHarvestIds}
           />
         )}
 

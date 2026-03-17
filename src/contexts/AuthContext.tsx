@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string, email?: string) => {
+  const fetchProfile = async (userId: string, email?: string, skipSessionCheck = false) => {
     try {
       // 1. Get Profile
       const { data: profile, error: profileError } = await supabase
@@ -184,6 +184,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         access: fullAccess
       };
 
+      // --- SESSION ENFORCEMENT CHECK ---
+      const localSessionKey = localStorage.getItem(`session_key_${profile.id}`);
+      // If we have a key in DB but it doesn't match our local one, it means another login happened
+      if (!skipSessionCheck && profile.current_session_key && localSessionKey && profile.current_session_key !== localSessionKey) {
+        console.warn('Concurrent session detected. Logging out.');
+        await logout();
+        return { error: 'Multiple logins detected. This session has been invalidated.' };
+      }
+      // If no local key exists but we are logged in, we should save the current one from DB to "adopt" it
+      // This helps with initial page loads where session might persist but localStorage was cleared
+      if (profile.current_session_key && !localSessionKey) {
+        localStorage.setItem(`session_key_${profile.id}`, profile.current_session_key);
+      }
+
       setUser(userData);
 
       // Load last active farm from localStorage if exists, or keep null
@@ -248,9 +262,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (authData.user) {
-        const { data, error } = await fetchProfile(authData.user.id, authData.user.email);
+        // --- SESSION ENFORCEMENT: Generate New Key ---
+        const newSessionKey = crypto.randomUUID();
+        await supabase
+          .from('profiles')
+          .update({ current_session_key: newSessionKey })
+          .eq('auth_user_id', authData.user.id);
+
+        const { data, error } = await fetchProfile(authData.user.id, authData.user.email, true);
+        
         if (error) {
-          return { error: { message: `Profile Error: ${error}` } };
+          return { error: { message: error } };
+        }
+
+        // Save local key after successful profile fetch (data has profile.id)
+        if (data?.id) {
+          localStorage.setItem(`session_key_${data.id}`, newSessionKey);
         }
       }
 

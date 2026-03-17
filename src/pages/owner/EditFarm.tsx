@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -79,6 +79,7 @@ const EditFarm = () => {
 
     const [farmName, setFarmName] = useState('');
     const [sections, setSections] = useState<SectionConfig[]>([]);
+    const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
 
     useEffect(() => {
         if (farmId) {
@@ -207,6 +208,9 @@ const EditFarm = () => {
             });
             return newSections;
         });
+        // Expand the section when adding a tank
+        const sectionId = sections[sIdx].id || `new-sec-${sIdx}`;
+        setCollapsedSections(prev => prev.filter(id => id !== sectionId));
     };
 
     const removeTank = (sIdx: number, tIdx: number) => {
@@ -232,7 +236,15 @@ const EditFarm = () => {
             newSections[sIdx].tanks = [...currentTanks, ...newTanks];
             return newSections;
         });
+        const sectionId = sections[sIdx].id || `new-sec-${sIdx}`;
+        setCollapsedSections(prev => prev.filter(id => id !== sectionId));
         toast.success(`Duplicated tank ${count} times`);
+    };
+
+    const toggleSection = (sectionId: string) => {
+        setCollapsedSections(prev => 
+            prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
+        );
     };
 
     const handleSubmit = async () => {
@@ -362,31 +374,51 @@ const EditFarm = () => {
                 </Card>
 
                 <div className="space-y-8">
-                    {sections.map((section, sIdx) => (
-                        <div key={section.id || `new-sec-${sIdx}`} className="space-y-4">
-                            <div className="flex items-center justify-between">
+                    {sections.map((section, sIdx) => {
+                        const sectionId = section.id || `new-sec-${sIdx}`;
+                        const isCollapsed = collapsedSections.includes(sectionId);
+                        
+                        return (
+                        <div key={sectionId} className="space-y-4">
+                            <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md" onClick={() => toggleSection(sectionId)}>
                                 <div className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                                         <Layers className="w-4 h-4" />
                                     </div>
-                                    <Input
-                                        className="h-9 font-bold bg-transparent border-none text-lg p-0 focus-visible:ring-0 w-auto"
-                                        value={section.name}
-                                        onChange={(e) => {
-                                            const newSections = [...sections];
-                                            newSections[sIdx].name = e.target.value;
-                                            setSections(newSections);
-                                        }}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            className="h-9 font-bold bg-transparent border-none text-lg p-0 focus-visible:ring-0 w-auto"
+                                            value={section.name}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                const newSections = [...sections];
+                                                newSections[sIdx].name = e.target.value;
+                                                setSections(newSections);
+                                            }}
+                                        />
+                                        {isCollapsed && (
+                                            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                                {section.tanks.length} TANKS
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
-                                    <Trash2 className="w-4 h-4 mr-1" /> Remove Section
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2">
+                                            <Trash2 className="w-4 h-4 mr-1" /> Remove
+                                        </Button>
+                                    </div>
+                                    <div className="ml-1 text-muted-foreground">
+                                        {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="grid gap-4">
-                                {section.tanks.map((tank, tIdx) => (
-                                    <Card key={tank.id || `new-tank-${tIdx}`} className="rounded-2xl border-none shadow-md overflow-hidden bg-card/50">
+                            {!isCollapsed && (
+                                <div className="grid gap-4 animate-in slide-in-from-top-2 duration-300">
+                                    {section.tanks.map((tank, tIdx) => (
+                                        <Card key={tank.id || `new-tank-${tIdx}`} className="rounded-2xl border-none shadow-md overflow-hidden bg-card/50">
                                         <CardContent className="p-4 space-y-3">
                                             <div className="flex justify-between items-center mb-1">
                                                 <Input
@@ -498,8 +530,10 @@ const EditFarm = () => {
                                     <Plus className="w-4 h-4 mr-2" /> Add Tank to {section.name}
                                 </Button>
                             </div>
+                            )}
                         </div>
-                    ))}
+                    );
+                    })}
 
                     <Button onClick={addSection} className="w-full h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
                         <Plus className="w-5 h-5 mr-2" /> Add New Section

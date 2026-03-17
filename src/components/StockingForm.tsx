@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,10 +30,38 @@ const StockingForm = ({
 }: StockingFormProps) => {
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
+  const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
 
   const handleChange = (field: string, value: any) => {
     onDataChange((prev: any) => ({ ...prev, [field]: value }));
+    if (field === 'stockingId') {
+      setIsIdManuallyEdited(true);
+    }
   };
+
+  // Generate Stocking ID: BS#_HN#_YYMMDD
+  const generateStockingId = (bs: string, hn: string) => {
+    const d = new Date();
+    const yy = d.getFullYear().toString().slice(-2);
+    const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+    const dd = d.getDate().toString().padStart(2, '0');
+    const yymmdd = `${yy}${mm}${dd}`;
+
+    const bsPrefix = bs ? bs.replace(/\s+/g, '').toUpperCase() : 'BS';
+    const hnPrefix = hn ? hn.replace(/\s+/g, '').toUpperCase() : 'HN';
+
+    return `${bsPrefix}_${hnPrefix}_${yymmdd}`;
+  };
+
+  // Auto-update ID when dependencies change
+  useEffect(() => {
+    if (!isIdManuallyEdited) {
+      const newId = generateStockingId(data.broodstockSource || '', data.hatcheryName || '');
+      if (data.stockingId !== newId) {
+        onDataChange((prev: any) => ({ ...prev, stockingId: newId }));
+      }
+    }
+  }, [data.broodstockSource, data.hatcheryName, isIdManuallyEdited, onDataChange]);
 
   const setRating = (key: string, value: number) => {
     setAnimalRatings(prev => ({ ...prev, [key]: value }));
@@ -83,6 +111,29 @@ const StockingForm = ({
   return (
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Stocking Details</h2>
+
+      <div className="space-y-1.5 glass-card bg-primary/5 border-primary/20 p-3 rounded-xl mb-4">
+        <div className="flex justify-between items-center mb-1">
+          <Label className="text-xs font-bold text-primary">Stocking ID *</Label>
+          {isIdManuallyEdited && (
+            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full">
+              Manual Edit
+            </span>
+          )}
+          {!isIdManuallyEdited && data.stockingId && (
+            <span className="text-[9px] font-bold text-primary uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-full">
+              Auto-Generated
+            </span>
+          )}
+        </div>
+        <Input
+          value={data.stockingId || ''}
+          onChange={e => handleChange('stockingId', e.target.value)}
+          placeholder="e.g. BS_HN_260317"
+          className="h-11 font-mono font-bold text-base"
+        />
+        <p className="text-[10px] text-muted-foreground mt-1">Format: BS#_HN#_YYMMDD (Broodstock_Hatchery_Date)</p>
+      </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs">Source of Broodstock *</Label>
