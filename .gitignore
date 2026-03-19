@@ -32,4 +32,7 @@ dist-ssr
 .env.production.local
 
 *.timestamp-*.mjs
-.vercel
+# Testing
+playwright-report/
+test-results/
+lint.txt
