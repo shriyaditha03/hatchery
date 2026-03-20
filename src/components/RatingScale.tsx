@@ -10,9 +10,7 @@ interface RatingScaleProps {
 const RatingScale = ({ label, required, value, onChange }: RatingScaleProps) => {
   return (
     <div className="space-y-2">
-      <Label className="text-xs">
-        {label}{required && ' *'}
-      </Label>
+        {label}{required && <span className="text-destructive ml-1">*</span>}
       <div className="flex items-center gap-1">
         <span className="text-[10px] text-destructive font-medium w-8 shrink-0 leading-tight">Very Bad</span>
         <div className="flex flex-wrap gap-1 flex-1 justify-center">

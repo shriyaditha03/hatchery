@@ -60,42 +60,68 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
         };
     }, []);
 
-    // 2. Map Initialization
+    // 2. Map Initialization & Better Location Guessing
     useEffect(() => {
         if (!isMounted || !mapContainerRef.current || mapRef.current) return;
 
-        const timer = setTimeout(() => {
+        const guessLocationByIP = async () => {
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.latitude && data.longitude) {
+                        return { lat: data.latitude, lng: data.longitude, city: data.city };
+                    }
+                }
+            } catch (e) {
+                console.warn("IP Geolocation fallback failed:", e);
+            }
+            return null;
+        };
+
+        const timer = setTimeout(async () => {
             if (!mapContainerRef.current) return;
 
             try {
-                // Initialize map with a default view
+                // Determine initial center: passed prop -> IP guess -> hardcoded default
+                let startLat = safeLat;
+                let startLng = safeLng;
+
+                // If no initialLat was passed (defaults were used), try to guess by IP
+                if (initialLat === undefined || initialLat === 17.3850) {
+                   const ipLocation = await guessLocationByIP();
+                   if (ipLocation) {
+                       startLat = ipLocation.lat;
+                       startLng = ipLocation.lng;
+                       console.log(`Initial centering on IP location: ${ipLocation.city}`);
+                   }
+                }
+
                 const map = L.map(mapContainerRef.current, {
                     zoomControl: false
-                }).setView([safeLat, safeLng], 13);
+                }).setView([startLat, startLng], 13);
 
-                // Use Google Hybrid tiles for best visual recognition - FIXED URL
+                // Use Google Hybrid tiles
                 L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
                     maxZoom: 20,
                     subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
                     attribution: '© Google'
                 }).addTo(map);
 
-                markerRef.current = L.marker([safeLat, safeLng]).addTo(map);
+                markerRef.current = L.marker([startLat, startLng]).addTo(map);
                 mapRef.current = map;
-
-                // Move zoom control to topright to avoid overlapping with action buttons
                 L.control.zoom({ position: 'topright' }).addTo(map);
 
-                // Auto-locate IMMEDIATELY
+                // Auto-locate (High Accuracy Browser API)
                 handleCurrentLocation();
 
                 setTimeout(() => map.invalidateSize(), 200);
-                onLocationSelect(safeLat, safeLng, ''); // Initial call
-                fetchReverseGeocode(safeLat, safeLng);
+                onLocationSelect(startLat, startLng, '');
+                fetchReverseGeocode(startLat, startLng);
             } catch (err) {
                 console.error("Leaflet initialization error:", err);
             }
-        }, 300);
+        }, 100);
 
         return () => clearTimeout(timer);
     }, [isMounted]);

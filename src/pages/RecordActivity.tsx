@@ -919,9 +919,16 @@ const RecordActivity = () => {
         toast.error('Inoculum Quantity is required');
         return;
       }
-      const missingCellCount = (algaeData.samples || []).some((s: any) => !s.cellCountPerMl);
-      if (missingCellCount) {
-        toast.error('Cell Count is required for all samples');
+      const samples = algaeData.samples || [];
+      const isAnySampleMissingData = samples.some((s: any) => 
+        !s.cellCountPerMl || 
+        !s.cellSize || 
+        !s.cellShape || 
+        !s.cellColour
+      );
+      
+      if (isAnySampleMissingData) {
+        toast.error('Please fill in all sample assessment fields (Cell Count, Size, Shape, and Colour)');
         return;
       }
     }
@@ -1049,10 +1056,10 @@ const RecordActivity = () => {
           // Find if this specific tank matches an instruction
           // 1. Prioritize explicitly selected instruction data
           // 2. Fall back to auto-matching against any active instruction for this tank/section
-          const matchingInstruction = (selectedInstructionData && (selectedInstructionData.tank_id === tId || (!selectedInstructionData.tank_id && selectedInstructionData.section_id === sectionId))) 
+          const matchingInstruction = (selectedInstructionData && (selectedInstructionData.tank_id === tId || (!selectedInstructionData.tank_id && selectedInstructionData.section_id === sId))) 
             ? selectedInstructionData
             : activeInstructions.find(i => 
-                (i.tank_id === tId || (!i.tank_id && i.section_id === sectionId))
+                (i.tank_id === tId || (!i.tank_id && i.section_id === sId))
               );
 
           if (matchingInstruction) {
@@ -1081,12 +1088,12 @@ const RecordActivity = () => {
           // If Stocking, dynamically append Section and Tank names to the generated stockingId
           if (activity === 'Stocking' && currentBuildData.stockingId) {
             let suffix = '';
-            if (sectionId) {
-              const sec = availableTanks.find(s => s.id === sectionId);
+            if (sId) {
+              const sec = availableTanks.find(s => s.id === sId);
               if (sec) suffix += `_${sec.name.replace(/\s+/g, '')}`;
             }
-            if (tId && sectionId) {
-              const sec = availableTanks.find(s => s.id === sectionId);
+            if (tId && sId) {
+              const sec = availableTanks.find(s => s.id === sId);
               const tnk = sec?.tanks.find((t: any) => t.id === tId);
               if (tnk) suffix += `_${tnk.name.replace(/\s+/g, '')}`;
             }
@@ -1114,8 +1121,8 @@ const RecordActivity = () => {
                 .insert([{
                   activity_log_id: logId,
                   hatchery_id: user?.hatchery_id,
-                  farm_id: farmId,
-                  section_id: sectionId,
+                  farm_id: fId,
+                  section_id: sId,
                   tank_id: tId,
                   user_id: user?.id,
                   ratings: currentBuildData.animalRatings,
@@ -1137,8 +1144,8 @@ const RecordActivity = () => {
                 .insert([{
                   activity_log_id: logId,
                   hatchery_id: user?.hatchery_id,
-                  farm_id: farmId,
-                  section_id: sectionId,
+                  farm_id: fId,
+                  section_id: sId,
                   tank_id: tId,
                   user_id: user?.id,
                   data: currentBuildData.stockingWaterData,
@@ -1160,8 +1167,8 @@ const RecordActivity = () => {
                 .insert([{
                   activity_log_id: logId,
                   hatchery_id: user?.hatchery_id,
-                  farm_id: farmId,
-                  section_id: sectionId,
+                  farm_id: fId,
+                  section_id: sId,
                   tank_id: tId,
                   user_id: user?.id,
                   ratings: currentBuildData.animalRatings,
@@ -1183,8 +1190,8 @@ const RecordActivity = () => {
                 .insert([{
                   activity_log_id: logId,
                   hatchery_id: user?.hatchery_id,
-                  farm_id: farmId,
-                  section_id: sectionId,
+                  farm_id: fId,
+                  section_id: sId,
                   tank_id: tId,
                   user_id: user?.id,
                   data: currentBuildData.observationWaterData,

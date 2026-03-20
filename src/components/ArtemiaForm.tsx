@@ -105,7 +105,7 @@ const ArtemiaForm = ({
         <div className="space-y-5 animate-fade-in-up">
           <div className="space-y-1.5">
             <Label className="text-xs font-bold flex items-center gap-1">
-              1. Sample ID * <span className="text-destructive">*</span>
+              1. Sample ID <span className="text-destructive">*</span>
             </Label>
             <div className="flex items-center gap-2">
               <Input
@@ -119,7 +119,7 @@ const ArtemiaForm = ({
 
           <div className="space-y-1.5">
             <Label className="text-xs font-bold flex items-center gap-1">
-              2. Weight (gms) * <span className="text-destructive">*</span>
+              2. Weight (gms) <span className="text-destructive">*</span>
             </Label>
             <Input
               type="number"
@@ -150,7 +150,7 @@ const ArtemiaForm = ({
         <div className="space-y-5 animate-fade-in-up">
           <div className="space-y-1.5">
             <Label className="text-xs font-bold flex items-center gap-1">
-              1. Sample ID * <span className="text-destructive">*</span>
+              1. Sample ID <span className="text-destructive">*</span>
             </Label>
             <Select value={data.linkedSampleId || ''} onValueChange={v => handleChange('linkedSampleId', v)}>
               <SelectTrigger className="h-11 rounded-xl border-primary/20 bg-primary/5 font-black text-primary">
@@ -169,7 +169,7 @@ const ArtemiaForm = ({
 
           <div className="space-y-1.5">
             <Label className="text-xs font-bold flex items-center gap-1">
-              2. Stage of Artemia * <span className="text-destructive">*</span>
+              2. Stage of Artemia <span className="text-destructive">*</span>
             </Label>
             <Select value={data.harvestStage || ''} onValueChange={v => handleChange('harvestStage', v)}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select stage" /></SelectTrigger>
@@ -182,7 +182,7 @@ const ArtemiaForm = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold flex items-center gap-1">
-                3. Cells Harvested (in million) * <span className="text-destructive">*</span>
+                3. Cells Harvested (in million) <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
@@ -196,7 +196,7 @@ const ArtemiaForm = ({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold flex items-center gap-1">
-                4. Harvest in wt (gms) * <span className="text-destructive">*</span>
+                4. Harvest in wt (gms) <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"

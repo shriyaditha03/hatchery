@@ -134,7 +134,7 @@ const AlgaeForm = ({
         {/* 1. Container Size */}
         <div className="space-y-2">
           <Label className="text-xs font-bold flex items-center gap-1.5">
-            1. Container Size * <span className="text-destructive">*</span>
+            1. Container Size <span className="text-destructive">*</span>
           </Label>
           <div className="flex flex-wrap gap-2">
             {CONTAINER_SIZES.map(size => (
@@ -260,7 +260,7 @@ const AlgaeForm = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-xs font-bold flex items-center gap-1">
-            5. Inoculum Quantity * <span className="text-destructive">*</span>
+            5. Inoculum Quantity <span className="text-destructive">*</span>
           </Label>
           <div className="flex gap-2">
             <Input
@@ -347,7 +347,7 @@ const AlgaeForm = ({
                 {/* 7. Cell Count */}
                 <div className="space-y-2">
                   <Label className="text-xs font-bold text-muted-foreground flex justify-between">
-                    7. CELL COUNT (IN MILLION PER ML) * <span className="text-destructive">*</span>
+                    7. CELL COUNT (IN MILLION PER ML) <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     type="number"
@@ -362,10 +362,10 @@ const AlgaeForm = ({
 
                 {/* 8. Cell Quality */}
                 <div className="space-y-3">
-                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">8. Cell Quality</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">8. Cell Quality <span className="text-destructive">*</span></p>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[9px] font-bold text-muted-foreground uppercase">Size</Label>
+                      <Label className="text-[9px] font-bold text-muted-foreground uppercase flex items-center gap-1">Size <span className="text-destructive">*</span></Label>
                       <Select value={sample.cellSize} onValueChange={v => handleSampleChange(idx, 'cellSize', v)}>
                         <SelectTrigger className="h-9 text-[10px] rounded-lg border-border/50"><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent className="rounded-xl">
@@ -374,7 +374,7 @@ const AlgaeForm = ({
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[9px] font-bold text-muted-foreground uppercase">Shape</Label>
+                      <Label className="text-[9px] font-bold text-muted-foreground uppercase flex items-center gap-1">Shape <span className="text-destructive">*</span></Label>
                       <Select value={sample.cellShape} onValueChange={v => handleSampleChange(idx, 'cellShape', v)}>
                         <SelectTrigger className="h-9 text-[10px] rounded-lg border-border/50"><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent className="rounded-xl">
@@ -383,7 +383,7 @@ const AlgaeForm = ({
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[9px] font-bold text-muted-foreground uppercase">Colour</Label>
+                      <Label className="text-[9px] font-bold text-muted-foreground uppercase flex items-center gap-1">Colour <span className="text-destructive">*</span></Label>
                       <Select value={sample.cellColour} onValueChange={v => handleSampleChange(idx, 'cellColour', v)}>
                         <SelectTrigger className="h-9 text-[10px] rounded-lg border-border/50"><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent className="rounded-xl">
