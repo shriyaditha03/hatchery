@@ -52,6 +52,7 @@ interface AlgaeFormProps {
   comments: string;
   onCommentsChange: (val: string) => void;
   isPlanningMode?: boolean;
+  availableSourceIds?: string[];
 }
 
 const AlgaeForm = ({
@@ -60,6 +61,7 @@ const AlgaeForm = ({
   comments,
   onCommentsChange,
   isPlanningMode = false,
+  availableSourceIds = [],
 }: AlgaeFormProps) => {
   const algaeSpecies: string = data.algaeSpecies || '';
   const containerSize: string = data.containerSize || '';
@@ -155,28 +157,103 @@ const AlgaeForm = ({
 
       {/* 2 & 3. Samples Info */}
       <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-[200px]">
           <Label className="text-xs font-bold">2. No. of Samples</Label>
-          <Input
-            type="number"
-            min="1"
-            max="20"
-            value={samples.length}
-            onChange={(e) => handleSampleCountChange(e.target.value)}
-            className="h-11 rounded-xl bg-muted/30 font-bold border-border"
-          />
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0"
+              onClick={() => handleSampleCountChange((samples.length - 1).toString())}
+              disabled={samples.length <= 1}
+            >
+              -
+            </Button>
+            <Input
+              type="number"
+              min="1"
+              max="20"
+              value={samples.length}
+              onChange={(e) => handleSampleCountChange(e.target.value)}
+              className="h-11 rounded-xl bg-muted/30 font-bold border-border text-center text-lg"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0"
+              onClick={() => handleSampleCountChange((samples.length + 1).toString())}
+              disabled={samples.length >= 20}
+            >
+              +
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* 4. Inoculum Source */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">4. Inoculum / Source Sample Id</Label>
-        <Input
-          value={inoculumSourceId}
-          onChange={e => handleFieldChange('inoculumSourceId', e.target.value)}
-          placeholder="Enter Source ID"
-          className="h-11 rounded-xl"
-        />
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2 mb-1">
+             <button
+               type="button"
+               onClick={() => handleFieldChange('inoculumSourceId', 'Mother Culture')}
+               className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                 inoculumSourceId === 'Mother Culture'
+                   ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                   : 'bg-muted/50 border-border text-muted-foreground hover:border-primary/50'
+               }`}
+             >
+               🧪 Mother Culture
+             </button>
+             {availableSourceIds.slice(0, 5).map(id => (
+               <button
+                 key={id}
+                 type="button"
+                 onClick={() => handleFieldChange('inoculumSourceId', id)}
+                 className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                   inoculumSourceId === id
+                     ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                     : 'bg-muted/50 border-border text-muted-foreground hover:border-primary/50'
+                 }`}
+               >
+                 {id}
+               </button>
+             ))}
+          </div>
+          
+          <div className="relative">
+            <Select value={availableSourceIds.includes(inoculumSourceId) || inoculumSourceId === 'Mother Culture' ? inoculumSourceId : 'manual'} onValueChange={(val) => {
+              if (val !== 'manual') handleFieldChange('inoculumSourceId', val);
+            }}>
+              <SelectTrigger className="h-11 rounded-xl bg-background border-border">
+                <SelectValue placeholder="Select previous ID or type below" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                 <SelectItem value="manual" className="text-xs font-bold text-primary">Custom / Manual Entry</SelectItem>
+                 <SelectItem value="Mother Culture" className="text-xs">🧪 Mother Culture</SelectItem>
+                 {availableSourceIds.length > 0 ? (
+                    availableSourceIds.map(id => (
+                      <SelectItem key={id} value={id} className="text-xs">{id}</SelectItem>
+                    ))
+                 ) : (
+                    <div className="p-2 text-[10px] text-muted-foreground text-center italic">No previous entries found</div>
+                 )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!availableSourceIds.includes(inoculumSourceId) && inoculumSourceId !== 'Mother Culture' && (
+            <Input
+              value={inoculumSourceId}
+              onChange={e => handleFieldChange('inoculumSourceId', e.target.value)}
+              placeholder="Enter Custom Source ID"
+              className="h-11 rounded-xl animate-in fade-in slide-in-from-top-1"
+            />
+          )}
+        </div>
       </div>
 
       {/* 5. Inoculum Quantity & Unit */}

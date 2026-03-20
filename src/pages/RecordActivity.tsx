@@ -100,6 +100,8 @@ const RecordActivity = () => {
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
   const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
+  const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
 
   // Live Time Update Effect
   useEffect(() => {
@@ -563,7 +565,40 @@ const RecordActivity = () => {
     }
   }, [activity, activeFarmId, selectedFarmId]);
 
-  // Auto-populate Inoculum Source ID for Algae
+  // Fetch recent Algae Sample IDs for inoculum source
+  useEffect(() => {
+    if (activity === 'Algae') {
+      const fetchAlgaeSourceIds = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('activity_logs')
+            .select('data')
+            .eq('activity_type', 'Algae')
+            .eq('farm_id', activeFarmId || selectedFarmId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+          if (!error && data) {
+            const ids: string[] = [];
+            data.forEach((d: any) => {
+              if (d.data?.samples && Array.isArray(d.data.samples)) {
+                d.data.samples.forEach((s: any) => {
+                  if (s.sampleId) ids.push(s.sampleId);
+                });
+              }
+            });
+            // Unique IDs only, sorted
+            setAvailableAlgaeSourceIds([...new Set(ids)].sort());
+          }
+        } catch (err) {
+          console.error('Error fetching algae source ids:', err);
+        }
+      };
+      fetchAlgaeSourceIds();
+    }
+  }, [activity, activeFarmId, selectedFarmId]);
+
+  // Auto-populate Inoculum Source ID for Algae - ONLY if not already set
   useEffect(() => {
     if (activity === 'Algae' && !editId && !algaeData.inoculumSourceId) {
       const fetchLatestAlgae = async () => {
@@ -576,8 +611,12 @@ const RecordActivity = () => {
             .limit(1)
             .maybeSingle();
 
-          if (!error && data?.data?.inoculumSourceId) {
-            setAlgaeData(prev => ({ ...prev, inoculumSourceId: data.data.inoculumSourceId }));
+          if (!error && data?.data?.samples && Array.isArray(data.data.samples) && data.data.samples.length > 0) {
+            // Default to the first sample ID of the latest Algae log as a suggestion
+            const latestId = data.data.samples[0].sampleId;
+            if (latestId) {
+               setAlgaeData(prev => ({ ...prev, inoculumSourceId: latestId }));
+            }
           }
         } catch (err) {
           console.error('Error fetching latest algae record:', err);
@@ -770,12 +809,17 @@ const RecordActivity = () => {
   };
 
   const handleSave = async () => {
-    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
 
     // Basic validation
-    if (!isSpecialActivity && selectionScope === 'single' && !tankId) {
-      toast.error('Please select a tank');
-      return;
+    if (selectionScope === 'single' && !tankId) {
+      if (isSpecialActivity && !selectedSectionId && !activeSectionId) {
+        toast.error('Please select a section for this activity');
+        return;
+      }
+      if (!isSpecialActivity) {
+        toast.error('Please select a tank');
+        return;
+      }
     }
     if (!activity) {
       toast.error('Please select an activity');
@@ -783,8 +827,15 @@ const RecordActivity = () => {
     }
 
     if (!photoUrl && !isPlanningMode) {
-      toast.error('Activity photo is required');
-      return;
+      // Photo is NOT mandatory for Algae and Artemia Before Harvest (pre phase)
+      const isAlgae = activity === 'Algae';
+      const isArtemiaPre = activity === 'Artemia' && (artemiaData?.phase === 'pre' || !artemiaData?.phase);
+      const isPhotoOptional = isAlgae || isArtemiaPre;
+
+      if (!isPhotoOptional) {
+        toast.error('Activity photo is required');
+        return;
+      }
     }
 
     if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim())) {
@@ -980,13 +1031,16 @@ const RecordActivity = () => {
 
         // 2. Loop through targets for bulk recording
         const promises = targets.map(async (tId) => {
-          let sectionId = null;
-          let farmId = activeFarmId;
+          let sId = tId ? null : (selectedSectionId || activeSectionId);
+          let fId = activeFarmId;
 
           if (tId) {
             const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
-            sectionId = section?.id;
-            farmId = section?.farm_id || farmId;
+            sId = section?.id || sId;
+            fId = section?.farm_id || fId;
+          } else if (sId) {
+            const section = availableTanks.find(s => s.id === sId);
+            fId = section?.farm_id || fId;
           }
 
           const currentBuildData = buildData();
@@ -1046,8 +1100,8 @@ const RecordActivity = () => {
 
           const logId = await addActivity({
             tank_id: tId,
-            section_id: sectionId || undefined,
-            farm_id: farmId || undefined,
+            section_id: sId || undefined,
+            farm_id: fId || undefined,
             activity_type: activity as any,
             data: currentBuildData
           });
@@ -1268,9 +1322,9 @@ const RecordActivity = () => {
               </div>
             </div>
           </div>
-        </div>        {((activity !== 'Algae' && activity !== 'Artemia') || !type) && (
+        </div>        {(activity || !type) && (
           <div className="glass-card rounded-2xl p-4 space-y-4">
-            {activity !== 'Algae' && activity !== 'Artemia' && (
+            {true && (
               <>
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1319,7 +1373,9 @@ const RecordActivity = () => {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs">
-                      {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
+                      {selectionScope === 'single' 
+                        ? `Select Tank ${isSpecialActivity ? '(Optional)' : '*'}` 
+                        : `Selected Tanks ${isSpecialActivity ? '(Optional)' : '*'}`}
                     </Label>
                     
                     {selectionScope === 'single' ? (
@@ -1383,7 +1439,7 @@ const RecordActivity = () => {
             )}
 
             {!type && (
-              <div className={`space-y-1.5 ${activity === 'Algae' || activity === 'Artemia' ? '' : 'pt-4 border-t border-dashed'}`}>
+              <div className="space-y-1.5 pt-4 border-t border-dashed">
                 <Label className="text-xs">Activity Type *</Label>
                 <Select
                   value={activity}
@@ -1796,6 +1852,7 @@ const RecordActivity = () => {
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
+            availableSourceIds={availableAlgaeSourceIds}
           />
         )}
 
