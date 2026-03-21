@@ -21,7 +21,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Calendar, Info, Filter, BarChart2, Waves, Beaker, Layers, Camera, Eye } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, Info, Filter, BarChart2, Waves, Beaker, Layers, Camera, Eye, FlaskConical } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, toLocal, getTodayStr, getDateRangeUTC } from '@/lib/date-utils';
 import { subDays, startOfDay, endOfDay, format } from 'date-fns';
@@ -64,7 +64,9 @@ const OwnerActivityLogs = () => {
                 'water': 'Water Quality',
                 'animal': 'Animal Quality',
                 'stocking': 'Stocking',
-                'observation': 'Observation'
+                'observation': 'Observation',
+                'artemia': 'Artemia',
+                'algae': 'Algae'
             };
             const dbType = typeMap[type?.toLowerCase() || ''] || type;
 
@@ -154,6 +156,19 @@ const OwnerActivityLogs = () => {
                 value = parseFloat(logData.deadAnimals) || 0;
             } else if (typeLower === 'water') {
                 value = parseFloat(logData.waterData?.pH) || 0;
+            } else if (typeLower === 'algae') {
+                // Average cell count across all samples
+                const samples = logData.samples || [];
+                if (samples.length > 0) {
+                    const sum = samples.reduce((acc: number, s: any) => acc + (parseFloat(s.cellCountPerMl) || 0), 0);
+                    value = sum / samples.length;
+                }
+            } else if (typeLower === 'artemia') {
+                if (logData.phase === 'post') {
+                    value = parseFloat(logData.cellsHarvested) || 0;
+                } else {
+                    value = parseFloat(logData.cystWeight) || 0;
+                }
             }
 
             dataByDate[dateStr][locationKey] += value;
@@ -247,29 +262,34 @@ const OwnerActivityLogs = () => {
                     </div>
                 </div>
             );
-        } else if (typeLower === 'water') {
-            const waterData = data.waterData || {};
-            const params = Object.entries(waterData)
-                .filter(([_, value]) => value && value !== '')
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(', ');
-            return params || 'No parameters recorded';
-        } else if (typeLower === 'animal') {
-            const ratings = data.animalRatings || {};
-            const ratingStr = Object.entries(ratings)
-                .filter(([_, val]) => val)
-                .map(([key, val]) => `${key.replace(/([A-Z])/g, ' $1').trim()}: ${val}`)
-                .join(', ');
-
+        } else if (typeLower === 'algae') {
+            const samples = data.samples || [];
             return (
                 <div className="space-y-0.5">
-                    <div>Size/Wt: {data.animalSize || 'N/A'}</div>
-                    {ratingStr && <div className="text-[9px] text-muted-foreground line-clamp-2">{ratingStr}</div>}
-                    {data.hasDiseaseIdentified === 'Yes' && (
-                        <div className="text-[9px] text-red-500 font-bold">Symptoms: {data.diseaseSymptoms}</div>
-                    )}
+                    <div>{data.algaeSpecies || 'N/A'} (Age: {data.age || '0'}D)</div>
+                    <div className="text-[9px] text-muted-foreground">
+                        {samples.length} Samples, Avg Count: {(samples.reduce((acc: number, s: any) => acc + (parseFloat(s.cellCountPerMl) || 0), 0) / (samples.length || 1)).toFixed(2)}M/ml
+                    </div>
                 </div>
             );
+        } else if (typeLower === 'artemia') {
+            if (data.phase === 'post') {
+                return (
+                    <div className="space-y-0.5">
+                        <div>Post-Harvest: {data.cellsHarvested || '0'}M cells</div>
+                        <div className="text-[9px] text-muted-foreground">
+                            Wt: {data.harvestWeight || '0'}g, Stage: {data.harvestStage || 'N/A'}
+                        </div>
+                    </div>
+                );
+            } else {
+                return (
+                    <div className="space-y-0.5">
+                        <div>Pre-Harvest: {data.cystWeight || '0'}g</div>
+                        <div className="text-[9px] text-muted-foreground">Sample ID: {data.sampleId || 'N/A'}</div>
+                    </div>
+                );
+            }
         }
 
         return '-';
@@ -282,6 +302,8 @@ const OwnerActivityLogs = () => {
         if (typeLower === 'stocking') return { total: 'Total Stocked', unit: 'qty', icon: <Layers className="w-4 h-4" /> };
         if (typeLower === 'water') return { total: 'Avg pH', unit: '', icon: <Waves className="w-4 h-4" /> };
         if (typeLower === 'observation') return { total: 'Total Dead', unit: 'qty', icon: <Info className="w-4 h-4" /> };
+        if (typeLower === 'algae') return { total: 'Avg Cell Count', unit: 'M/ml', icon: <FlaskConical className="w-4 h-4" /> };
+        if (typeLower === 'artemia') return { total: 'Total Harvested', unit: 'M', icon: <FlaskConical className="w-4 h-4" /> };
         return { total: 'Total', unit: '', icon: <BarChart2 className="w-4 h-4" /> };
     };
 
@@ -418,7 +440,7 @@ const OwnerActivityLogs = () => {
                 )}
 
                 {/* Visualizations Section */}
-                {!loading && logs.length > 0 && ['feed', 'water', 'observation', 'treatment', 'stocking'].includes(type?.toLowerCase() || '') && (
+                {!loading && logs.length > 0 && ['feed', 'water', 'observation', 'treatment', 'stocking', 'algae', 'artemia'].includes(type?.toLowerCase() || '') && (
                     <Card className="rounded-2xl border shadow-sm overflow-hidden border-t-4 border-t-primary">
                         <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
                             <div>
@@ -427,7 +449,10 @@ const OwnerActivityLogs = () => {
                                     Trend Analysis
                                 </CardTitle>
                                 <CardDescription className="text-[10px]">
-                                    {fromDate === toDate ? "Daily distribution across tanks" : `Consolidated trends from ${formatDate(fromDate, 'dd MMM')} to ${formatDate(toDate, 'dd MMM')}`}
+                                    {(() => {
+                                        const typeLower = type?.toLowerCase();
+                                        return fromDate === toDate ? "Daily distribution across tanks" : `Consolidated trends ${typeLower === 'algae' ? '(Avg Cell Count)' : (typeLower === 'artemia' ? '(Cells Harvested)' : '')} from ${formatDate(fromDate, 'dd MMM')} to ${formatDate(toDate, 'dd MMM')}`;
+                                    })()}
                                 </CardDescription>
                             </div>
                             <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${fromDate === toDate ? 'bg-blue-50 text-blue-700 border-blue-100' : parseFloat(summary?.trend || '0') >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>

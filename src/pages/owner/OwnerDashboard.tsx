@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
-    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags
+    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
+    FlaskConical, Leaf
 } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 
@@ -50,6 +51,8 @@ const OwnerDashboard = () => {
         { name: 'Animal Quality', icon: Search, route: '/owner/reports/animal', color: 'bg-rose-100 text-rose-600' },
         { name: 'Stocking', icon: Layers, route: '/owner/reports/stocking', color: 'bg-emerald-100 text-emerald-600' },
         { name: 'Observation', icon: Eye, route: '/owner/reports/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Artemia', icon: FlaskConical, route: '/owner/reports/artemia', color: 'bg-teal-100 text-teal-600' },
+        { name: 'Algae', icon: Leaf, route: '/owner/reports/algae', color: 'bg-green-100 text-green-700' },
     ];
 
     const handleLogout = async () => {
