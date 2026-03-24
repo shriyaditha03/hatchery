@@ -196,6 +196,22 @@ const ManageFarms = () => {
 
         try {
             setActionLoading(true);
+
+            // 0. Check if name already exists in this hatchery
+            const { data: existingFarm, error: checkError } = await supabase
+                .from('farms')
+                .select('id')
+                .eq('hatchery_id', user!.hatchery_id)
+                .eq('name', newName.trim())
+                .neq('id', editingFarm.id)
+                .maybeSingle();
+
+            if (checkError) throw checkError;
+            if (existingFarm) {
+                toast.error("A farm with this name already exists in your hatchery");
+                return;
+            }
+
             const { error } = await supabase
                 .from('farms')
                 .update({ name: newName.trim() })
@@ -219,7 +235,11 @@ const ManageFarms = () => {
         try {
             setActionLoading(true);
 
-            // 1. Delete associated Activity Logs (Manually handle cascade delete)
+            // 1. Delete quality records (non-cascading FK references to farm_id)
+            await supabase.from('stocking_animal_quality').delete().eq('farm_id', deletingFarm.id);
+            await supabase.from('stocking_water_quality').delete().eq('farm_id', deletingFarm.id);
+
+            // 2. Delete associated Activity Logs
             const { error: logsError } = await supabase
                 .from('activity_logs')
                 .delete()
@@ -227,7 +247,7 @@ const ManageFarms = () => {
 
             if (logsError) throw logsError;
 
-            // 2. Delete the Farm (Sections and Tanks will cascade automatically via DB constraints)
+            // 3. Delete the Farm (Sections and Tanks cascade via DB constraints)
             const { error } = await supabase
                 .from('farms')
                 .delete()

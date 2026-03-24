@@ -132,6 +132,21 @@ const ArtemiaForm = ({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold flex items-center gap-1">
+              3. Number of Samples <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              value={data.numberOfSamples || ''}
+              onChange={e => handleChange('numberOfSamples', e.target.value)}
+              placeholder="e.g. 3"
+              className="h-11 rounded-xl"
+            />
+          </div>
+
           <div className="space-y-2 pt-2">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes</Label>
             <Textarea
@@ -243,7 +258,7 @@ const ArtemiaForm = ({
               })()}
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Activity Photo</Label>
+                <Label className="text-xs font-bold">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
               </div>
             </div>

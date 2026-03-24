@@ -365,7 +365,7 @@ const StockingForm = ({
 
       {isPlanningMode === false && (
         <div className="space-y-1.5 pt-2 border-t border-dashed">
-          <Label className="text-xs">Activity Photo *</Label>
+          <Label className="text-xs">Activity Photo (Optional)</Label>
           <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
         </div>
       )}

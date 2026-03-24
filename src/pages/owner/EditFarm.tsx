@@ -257,6 +257,31 @@ const EditFarm = () => {
         try {
             setSaving(true);
 
+            // 0. Check for duplicate farm name
+            const { data: existingFarm, error: checkError } = await supabase
+                .from('farms')
+                .select('id')
+                .eq('hatchery_id', user.hatchery_id)
+                .eq('name', farmName.trim())
+                .neq('id', farmId)
+                .maybeSingle();
+            
+            if (checkError) throw checkError;
+            if (existingFarm) {
+                toast.error("A farm with this name already exists in your hatchery");
+                setSaving(false);
+                return;
+            }
+
+            // 0.1 Check for duplicate section names
+            const sectionNames = sections.map(s => s.name.trim().toLowerCase());
+            const duplicateSection = sectionNames.find((name, index) => sectionNames.indexOf(name) !== index);
+            if (duplicateSection) {
+                toast.error(`Duplicate section name: "${sections[sectionNames.indexOf(duplicateSection)].name}"`);
+                setSaving(false);
+                return;
+            }
+
             // 1. Update Farm Name
             const { error: farmError } = await supabase
                 .from('farms')
@@ -276,12 +301,18 @@ const EditFarm = () => {
             const tanksToDelete = dbTanks?.filter(t => !activeTankIds.includes(t.id)).map(t => t.id) || [];
 
             if (tanksToDelete.length > 0) {
-                // Delete associated logs first
+                // Delete quality records first (non-cascading FK references to tank_id)
+                await supabase.from('stocking_animal_quality').delete().in('tank_id', tanksToDelete);
+                await supabase.from('stocking_water_quality').delete().in('tank_id', tanksToDelete);
+                // Delete associated logs
                 await supabase.from('activity_logs').delete().in('tank_id', tanksToDelete);
                 await supabase.from('tanks').delete().in('id', tanksToDelete);
             }
             if (sectionsToDelete.length > 0) {
-                // Delete associated logs first
+                // Delete quality records first (non-cascading FK references to section_id)
+                await supabase.from('stocking_animal_quality').delete().in('section_id', sectionsToDelete);
+                await supabase.from('stocking_water_quality').delete().in('section_id', sectionsToDelete);
+                // Delete associated logs
                 await supabase.from('activity_logs').delete().in('section_id', sectionsToDelete);
                 await supabase.from('sections').delete().in('id', sectionsToDelete);
             }
@@ -308,20 +339,23 @@ const EditFarm = () => {
                 }
 
                 // Upsert Tanks for this section
-                const tanksToUpsert = section.tanks.map(tank => ({
-                    id: tank.id, // If it has an ID, Supabase will update
-                    farm_id: farmId,
-                    section_id: currentSectionId,
-                    name: tank.name,
-                    type: tank.type,
-                    shape: tank.shape,
-                    length: tank.shape === 'RECTANGLE' ? tank.length : null,
-                    width: tank.shape === 'RECTANGLE' ? tank.width : null,
-                    height: tank.height,
-                    radius: tank.shape === 'CIRCLE' ? tank.radius : null,
-                    volume_litres: tank.volume,
-                    area_sqm: tank.area
-                }));
+                const tanksToUpsert = section.tanks.map(tank => {
+                    const t: any = {
+                        farm_id: farmId,
+                        section_id: currentSectionId,
+                        name: tank.name,
+                        type: tank.type,
+                        shape: tank.shape,
+                        length: tank.shape === 'RECTANGLE' ? tank.length : null,
+                        width: tank.shape === 'RECTANGLE' ? tank.width : null,
+                        height: tank.height,
+                        radius: tank.shape === 'CIRCLE' ? tank.radius : null,
+                        volume_litres: tank.volume,
+                        area_sqm: tank.area
+                    };
+                    if (tank.id) t.id = tank.id;
+                    return t;
+                });
 
                 const { error: tankErr } = await supabase.from('tanks').upsert(tanksToUpsert);
                 if (tankErr) throw tankErr;

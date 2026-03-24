@@ -15,6 +15,7 @@ import { User, LogOut, FileText, ClipboardList, Utensils, Beaker, Eye, Search, L
 import logo from '@/assets/aqua-nexus-logo.png';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getTodayStr } from '@/lib/date-utils';
 
 const UserDashboard = () => {
     const { user, logout, activeFarmId, setActiveFarmId, activeSectionId, setActiveSectionId } = useAuth();
@@ -69,7 +70,7 @@ const UserDashboard = () => {
     const fetchInstructions = async () => {
         try {
             setLoading(true);
-            const today = new Date().toISOString().split('T')[0];
+            const today = getTodayStr();
             
             // Fetch all instructions for this section + farm level instructions
             const { data, error } = await supabase
@@ -81,6 +82,7 @@ const UserDashboard = () => {
                     tanks (name)
                 `)
                 .or(`section_id.eq.${activeSectionId},and(farm_id.eq.${activeFarmId},section_id.is.null,tank_id.is.null)`)
+                .or(`assigned_to.is.null,assigned_to.eq.${user.id}`)
                 .eq('scheduled_date', today)
                 .eq('is_completed', false)
                 .order('scheduled_time', { ascending: true });
@@ -97,10 +99,10 @@ const UserDashboard = () => {
 
     const fetchSupervisorInstructions = async () => {
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getTodayStr();
             const { data, error } = await supabase
                 .from('activity_charts')
-                .select(`*, tanks(name), sections(name)`)
+                .select(`*, tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
                 .eq('created_by', user?.id)
                 .eq('scheduled_date', today)
                 .order('scheduled_time', { ascending: true });
@@ -357,7 +359,9 @@ const UserDashboard = () => {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             {instr.is_completed ? (
-                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">✓ Done by worker</span>
+                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                                    ✓ Done by {instr.worker?.full_name || 'worker'}
+                                                </span>
                                             ) : (
                                                 <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">⏳ Pending</span>
                                             )}

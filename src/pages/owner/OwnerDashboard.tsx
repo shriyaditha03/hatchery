@@ -15,7 +15,7 @@ import {
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
     Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
-    FlaskConical, Leaf
+    FlaskConical, Leaf, MapPin
 } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 
@@ -28,7 +28,7 @@ const OwnerDashboard = () => {
         if (user?.hatchery_id) {
             supabase
                 .from('farms')
-                .select('id, name')
+                .select('id, name, address')
                 .eq('hatchery_id', user.hatchery_id)
                 .order('created_at', { ascending: true })
                 .then(({ data }) => {
@@ -60,7 +60,9 @@ const OwnerDashboard = () => {
         navigate('/login');
     };
 
-    const activeFarmName = farms.find(f => f.id === activeFarmId)?.name || 'Select Farm';
+    const activeFarm = farms.find(f => f.id === activeFarmId);
+    const activeFarmName = activeFarm?.name || 'Select Farm';
+    const activeFarmAddress = activeFarm?.address;
 
     return (
         <div className="min-h-screen bg-background pb-10">
@@ -145,6 +147,12 @@ const OwnerDashboard = () => {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {activeFarmAddress && (
+                        <p className="text-white/60 text-[10px] mt-1 flex items-center gap-1 ml-1 animate-in fade-in slide-in-from-top-1 duration-500">
+                            <MapPin className="w-3 h-3" /> {activeFarmAddress}
+                        </p>
+                    )}
                 </div>
             </div>
 

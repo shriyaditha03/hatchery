@@ -277,6 +277,30 @@ const CreateFarm = () => {
         try {
             setLoading(true);
 
+            // 0. Check for duplicate farm name
+            const { data: existingFarm, error: checkError } = await supabase
+                .from('farms')
+                .select('id')
+                .eq('hatchery_id', user.hatchery_id)
+                .eq('name', farmName.trim())
+                .maybeSingle();
+            
+            if (checkError) throw checkError;
+            if (existingFarm) {
+                toast.error("A farm with this name already exists in your hatchery");
+                setLoading(false);
+                return;
+            }
+
+            // 0.1 Check for duplicate section names
+            const sectionNames = sections.map(s => s.name.trim().toLowerCase());
+            const duplicateSection = sectionNames.find((name, index) => sectionNames.indexOf(name) !== index);
+            if (duplicateSection) {
+                toast.error(`Duplicate section name: "${sections[sectionNames.indexOf(duplicateSection)].name}"`);
+                setLoading(false);
+                return;
+            }
+
             // 1. Create Farm
             const { data: farm, error: farmError } = await supabase
                 .from('farms')

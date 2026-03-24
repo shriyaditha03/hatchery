@@ -353,7 +353,9 @@ const OwnerConsolidatedReports = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getActivityTypeColor(log.activity_type)}`}>
-                                                    {log.activity_type}
+                                                    {log.activity_type === 'Artemia' 
+                                                        ? `Artemia (${log.data?.phase === 'post' ? 'After Harvest' : 'Before Harvest'})` 
+                                                        : log.activity_type}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">

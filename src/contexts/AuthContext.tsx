@@ -51,7 +51,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
-        fetchProfile(session.user.id, session.user.email);
+        // Skip session check on restore — this is not a new login, just restoring a persisted session
+        fetchProfile(session.user.id, session.user.email, true);
       } else {
         setLoading(false);
       }
@@ -63,7 +64,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
-        fetchProfile(session.user.id, session.user.email);
+        // Skip session key check for SIGNED_IN events — the login flow handles it with skipSessionCheck=true.
+        // Without this, a race condition occurs: onAuthStateChange fires before loginWithUsername
+        // saves the new session key, causing a false "concurrent session" detection.
+        const skipCheck = _event === 'SIGNED_IN';
+        fetchProfile(session.user.id, session.user.email, skipCheck);
       } else {
         setUser(null);
         setActiveFarmId(null);
@@ -187,13 +192,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // --- SESSION ENFORCEMENT CHECK ---
       const localSessionKey = localStorage.getItem(`session_key_${profile.id}`);
       // If we have a key in DB but it doesn't match our local one, it means another login happened
+      // However, with persistSession:true, page reloads can clear localStorage while the session remains.
+      // So we adopt the DB key if we don't have one locally, instead of force-logging out.
       if (!skipSessionCheck && profile.current_session_key && localSessionKey && profile.current_session_key !== localSessionKey) {
+        // Only treat as conflict if BOTH exist and differ
         console.warn('Concurrent session detected. Logging out.');
         await logout();
         return { error: 'Multiple logins detected. This session has been invalidated.' };
       }
-      // If no local key exists but we are logged in, we should save the current one from DB to "adopt" it
-      // This helps with initial page loads where session might persist but localStorage was cleared
+      // Adopt the DB session key if we don't have one locally (page reload, HMR, localStorage cleared)
       if (profile.current_session_key && !localSessionKey) {
         localStorage.setItem(`session_key_${profile.id}`, profile.current_session_key);
       }

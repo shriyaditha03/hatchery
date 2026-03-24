@@ -101,6 +101,8 @@ const RecordActivity = () => {
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
   const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
   const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
   const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
 
   // Live Time Update Effect
@@ -221,6 +223,55 @@ const RecordActivity = () => {
     }
   }, [user]);
 
+  // Load available workers for assignment (only in planning mode, scoped to selected farm)
+  useEffect(() => {
+    const currentFarmId = selectedFarmId || activeFarmId;
+    if (isPlanningMode && user?.hatchery_id && currentFarmId) {
+      // Query workers who have access to this specific farm via farm_access
+      supabase.from('farm_access')
+        .select('user_id, profiles!inner(id, full_name, username, role)')
+        .eq('farm_id', currentFarmId)
+        .then(({ data, error }) => {
+          console.log('DEBUG farm_access query:', { currentFarmId, data, error, currentUserId: user?.id });
+          if (!error && data) {
+            // Deduplicate by user_id, include workers & supervisors, exclude current user
+            const seen = new Set<string>();
+            const workers: {id: string, name: string}[] = [];
+            data.forEach((row: any) => {
+              const p = row.profiles;
+              console.log('DEBUG row:', { user_id: row.user_id, profile: p, excluded: p?.id === user?.id, roleMatch: p?.role === 'worker' || p?.role === 'supervisor' });
+              if (p && !seen.has(p.id) && p.id !== user?.id && (p.role === 'worker' || p.role === 'supervisor')) {
+                seen.add(p.id);
+                workers.push({ id: p.id, name: p.full_name || p.username });
+              }
+            });
+            console.log('DEBUG filtered workers:', workers);
+            setAvailableWorkers(workers);
+          } else {
+            console.error('DEBUG worker fetch error:', error);
+            setAvailableWorkers([]);
+          }
+        });
+    } else if (isPlanningMode && user?.hatchery_id && !currentFarmId) {
+      // Fallback: no farm selected yet — show all workers in the hatchery
+      supabase.from('profiles')
+        .select('id, full_name, username, role')
+        .eq('hatchery_id', user.hatchery_id)
+        .in('role', ['worker', 'supervisor'])
+        .neq('id', user.id)
+        .then(({ data, error }) => {
+          console.log('DEBUG fallback profiles query:', { data, error });
+          if (!error && data) {
+            setAvailableWorkers(data.map(p => ({ id: p.id, name: p.full_name || p.username })));
+          } else {
+            setAvailableWorkers([]);
+          }
+        });
+    } else {
+      setAvailableWorkers([]);
+    }
+  }, [isPlanningMode, user, selectedFarmId, activeFarmId]);
+
   // Handle instruction link from dashboard
   useEffect(() => {
     if (instructionIdParam && availableTanks.length > 0) {
@@ -256,6 +307,7 @@ const RecordActivity = () => {
 
         setSelectedInstructionId(data.id);
         setSelectedInstructionData(data); // Store the data directly
+        setAssignedTo(data.assigned_to || null);
         applyInstruction(data);
         toast.info(`Applied instruction for ${data.activity_type}`);
       }
@@ -273,6 +325,7 @@ const RecordActivity = () => {
         if (data.section_id) setSelectedSectionId(data.section_id);
         if (data.tank_id) { setSelectionScope('single'); setTankId(data.tank_id); }
         else if (data.section_id) { setSelectionScope('all'); }
+        setAssignedTo(data.assigned_to || null);
         const pd = data.planned_data || {};
         const actType = data.activity_type as ActivityType;
         setActivity(actType);
@@ -310,6 +363,7 @@ const RecordActivity = () => {
         .from('activity_charts')
         .select('*')
         .or(`section_id.eq.${sectionId},and(farm_id.eq.${currentSection.farm_id},section_id.is.null,tank_id.is.null),tank_id.in.(${currentSection.tanks.map((t: any) => `"${t.id}"`).join(',')})`)
+        .or(`assigned_to.is.null,assigned_to.eq.${user?.id}`) // Filter by assigned worker or open instructions
         .eq('activity_type', activity)
         .eq('scheduled_date', date)
         .eq('is_completed', false)
@@ -531,7 +585,7 @@ const RecordActivity = () => {
 
   // Artemia & Algae data
   const [artemiaData, setArtemiaData] = useState<any>({ phase: 'pre' });
-  const [algaeData, setAlgaeData] = useState<any>({});
+  const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
 
   const [comments, setComments] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
@@ -701,8 +755,11 @@ const RecordActivity = () => {
             toast.error('Container Size is required');
             return;
           }
-          if (!algaeData.inoculumQuantity) {
-            toast.error('Inoculum Quantity is required');
+          const algSamples = algaeData.samples || [];
+          const activeAlgSamples = algSamples.filter((s: any) => s.status !== 'discard');
+          const missingQty = activeAlgSamples.some((s: any) => !s.inoculumQuantity);
+          if (missingQty) {
+            toast.error('Inoculum Quantity is required for all active samples');
             return;
           }
         }
@@ -715,6 +772,10 @@ const RecordActivity = () => {
             }
             if (!artemiaData.cystWeight) {
               toast.error('Cyst Weight is required');
+              return;
+            }
+            if (!artemiaData.numberOfSamples) {
+              toast.error('Number of Samples is required');
               return;
             }
           } else {
@@ -756,7 +817,8 @@ const RecordActivity = () => {
             algaeData: activity === 'Algae' ? algaeData : undefined
           },
           created_by: user?.id || null,
-          is_completed: false
+          is_completed: false,
+          assigned_to: assignedTo || null
         };
         
         console.log('DEBUG - Saving Instruction Record:', record);
@@ -774,7 +836,7 @@ const RecordActivity = () => {
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
           .from('activity_charts')
-          .update({ planned_data: plannedData, scheduled_time: time, scheduled_date: date })
+          .update({ planned_data: plannedData, scheduled_time: time, scheduled_date: date, assigned_to: assignedTo || null })
           .eq('id', editInstructionId);
         if (error) throw error;
         toast.success('Instruction updated!');
@@ -826,17 +888,6 @@ const RecordActivity = () => {
       return;
     }
 
-    if (!photoUrl && !isPlanningMode) {
-      // Photo is NOT mandatory for Algae and Artemia Before Harvest (pre phase)
-      const isAlgae = activity === 'Algae';
-      const isArtemiaPre = activity === 'Artemia' && (artemiaData?.phase === 'pre' || !artemiaData?.phase);
-      const isPhotoOptional = isAlgae || isArtemiaPre;
-
-      if (!isPhotoOptional) {
-        toast.error('Activity photo is required');
-        return;
-      }
-    }
 
     if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim())) {
       toast.error('Feed Type and Quantity are required');
@@ -907,29 +958,38 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Algae') {
-      if (!algaeData.algaeSpecies) {
-        toast.error('Algae Species is required');
-        return;
-      }
-      if (!algaeData.containerSize) {
-        toast.error('Container Size is required');
-        return;
-      }
-      if (!algaeData.inoculumQuantity) {
-        toast.error('Inoculum Quantity is required');
-        return;
-      }
-      const samples = algaeData.samples || [];
-      const isAnySampleMissingData = samples.some((s: any) => 
-        !s.cellCountPerMl || 
-        !s.cellSize || 
-        !s.cellShape || 
-        !s.cellColour
-      );
-      
-      if (isAnySampleMissingData) {
-        toast.error('Please fill in all sample assessment fields (Cell Count, Size, Shape, and Colour)');
-        return;
+      if (algaeData.phase === 'discard') {
+        if (!algaeData.discardSampleId) {
+          toast.error('Please select a sample to discard');
+          return;
+        }
+        if (!algaeData.discardReason?.trim()) {
+          toast.error('Reason for discarding is required');
+          return;
+        }
+      } else {
+        if (!algaeData.algaeSpecies) {
+          toast.error('Algae Species is required');
+          return;
+        }
+        if (!algaeData.containerSize) {
+          toast.error('Container Size is required');
+          return;
+        }
+        const samples = algaeData.samples || [];
+        const activeSamples = samples.filter((s: any) => s.status !== 'discard');
+        const missingQty = activeSamples.some((s: any) => !s.inoculumQuantity);
+        if (missingQty) {
+          toast.error('Inoculum Quantity is required for all active samples');
+          return;
+        }
+        const isAnySampleMissingData = activeSamples.some((s: any) =>
+          !s.cellCountPerMl || !s.cellSize || !s.cellShape || !s.cellColour
+        );
+        if (isAnySampleMissingData) {
+          toast.error('Please fill in all sample assessment fields (Cell Count, Size, Shape, and Colour)');
+          return;
+        }
       }
     }
 
@@ -941,6 +1001,10 @@ const RecordActivity = () => {
         }
         if (!artemiaData.cystWeight) {
           toast.error('Cyst Weight is required');
+          return;
+        }
+        if (!artemiaData.numberOfSamples) {
+          toast.error('Number of Samples is required');
           return;
         }
       } else {
@@ -1328,8 +1392,29 @@ const RecordActivity = () => {
                 />
               </div>
             </div>
+            {isPlanningMode && (
+              <div className="space-y-1.5 sm:col-span-2 border-t border-dashed pt-4 mt-2">
+                <Label className="text-xs">Assign To (Optional)</Label>
+                <Select value={assignedTo || 'anyone'} onValueChange={(val) => setAssignedTo(val === 'anyone' ? null : val)}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Anyone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="anyone">Anyone (Open Instruction)</SelectItem>
+                    {availableWorkers.length > 0 ? (
+                      availableWorkers.map(w => (
+                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="_no_workers" disabled>No workers on this farm</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground ml-1">Leave as "Anyone" if any worker can complete this task.</p>
+              </div>
+            )}
           </div>
-        </div>        {(activity || !type) && (
+        </div>        {(activity || !type) && !isSpecialActivity && (
           <div className="glass-card rounded-2xl p-4 space-y-4">
             {true && (
               <>
@@ -1352,7 +1437,7 @@ const RecordActivity = () => {
                 <div className={`grid grid-cols-1 ${activeSectionId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
                   {!activeSectionId && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Section *</Label>
+                      <Label className="text-xs">Section {isSpecialActivity ? '(Optional)' : '*'}</Label>
                       <Select 
                         value={selectedSectionId} 
                         onValueChange={(val) => {
@@ -1378,42 +1463,42 @@ const RecordActivity = () => {
                     </div>
                   )}
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">
-                      {selectionScope === 'single' 
-                        ? `Select Tank ${isSpecialActivity ? '(Optional)' : '*'}` 
-                        : `Selected Tanks ${isSpecialActivity ? '(Optional)' : '*'}`}
-                    </Label>
-                    
-                    {selectionScope === 'single' ? (
-                      <Select 
-                        value={tankId} 
-                        onValueChange={(val) => {
-                          setTankId(val);
-                          setSelectedTankIds([val]);
-                        }} 
-                        disabled={!selectedSectionId && !activeSectionId}
-                      >
-                        <SelectTrigger className="h-11">
-                          <SelectValue placeholder="Choose tank" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : selectionScope === 'all' ? (
-                      <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
-                        <ListChecks className="w-4 h-4" />
-                        Apply to all tanks in this section
-                      </div>
-                    ) : (
-                      <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
-                        {selectedTankIds.length} tank(s) selected
-                      </div>
-                    )}
-                  </div>
+                  {!isSpecialActivity && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
+                      </Label>
+
+                      {selectionScope === 'single' ? (
+                        <Select
+                          value={tankId}
+                          onValueChange={(val) => {
+                            setTankId(val);
+                            setSelectedTankIds([val]);
+                          }}
+                          disabled={!selectedSectionId && !activeSectionId}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder="Choose tank" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : selectionScope === 'all' ? (
+                        <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
+                          <ListChecks className="w-4 h-4" />
+                          Apply to all tanks in this section
+                        </div>
+                      ) : (
+                        <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
+                          {selectedTankIds.length} tank(s) selected
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Custom Selection List */}
@@ -1545,7 +1630,7 @@ const RecordActivity = () => {
             </div>
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Activity Photo *</Label>
+                <Label className="text-xs">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
               </div>
             )}
@@ -1597,7 +1682,7 @@ const RecordActivity = () => {
             </div>
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Activity Photo *</Label>
+                <Label className="text-xs">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
               </div>
             )}
@@ -1684,7 +1769,7 @@ const RecordActivity = () => {
             })()}
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Activity Photo *</Label>
+                <Label className="text-xs">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
               </div>
             )}
@@ -1798,7 +1883,7 @@ const RecordActivity = () => {
             </div>
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Activity Photo *</Label>
+                <Label className="text-xs">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
               </div>
             )}

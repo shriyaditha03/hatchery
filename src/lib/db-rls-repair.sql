@@ -35,13 +35,17 @@ FOR SELECT USING (
 );
 
 -- 4. UNIFIED FARM ACCESS POLICY
--- Allows: 1. Owner of farm, 2. Self (user seeing their own permissions)
+-- Allows: 1. Owner or Supervisor of farm, 2. Self (user seeing their own permissions)
 CREATE POLICY "Unified View Access" ON public.farm_access
 FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.farms f 
     WHERE f.id = farm_access.farm_id 
-    AND public.is_hatchery_owner(f.hatchery_id)
+    AND (
+      public.is_hatchery_owner(f.hatchery_id)
+      OR
+      (public.is_supervisor() AND f.hatchery_id = public.get_my_hatchery_id())
+    )
   )
   OR
   user_id IN (SELECT id FROM public.profiles WHERE auth_user_id = auth.uid())
