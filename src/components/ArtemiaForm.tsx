@@ -67,7 +67,14 @@ const ArtemiaForm = ({
   // Initial ID generation for pre phase
   useEffect(() => {
     if (phase === 'pre' && !data.sampleId) {
-      onDataChange({ ...data, sampleId: generateArtemiaSampleId(), phase: 'pre' });
+      const initialId = generateArtemiaSampleId();
+      onDataChange({ 
+        ...data, 
+        sampleId: initialId, 
+        phase: 'pre',
+        numberOfSamples: data.numberOfSamples || '1',
+        samples: data.samples || [{ sampleId: initialId, quantity: data.commonQuantity || '' }]
+      });
     }
   }, [phase, data.sampleId]);
 
@@ -153,6 +160,7 @@ const ArtemiaForm = ({
                   max="20"
                   value={data.numberOfSamples || '1'}
                   onChange={e => handleSampleCountChange(e.target.value)}
+                  placeholder="e.g. 3"
                   className="h-11 rounded-xl bg-muted/10 font-black border-border text-center text-lg focus:bg-background"
                 />
                 <Button
