@@ -23,6 +23,9 @@ const UserDashboard = () => {
     const [instructions, setInstructions] = useState<any[]>([]);
     const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [supervisorMode, setSupervisorMode] = useState<'instruction' | 'activity'>(
+        user?.role === 'supervisor' ? 'instruction' : 'activity'
+    );
 
     if (!user) return null;
 
@@ -69,9 +72,7 @@ const UserDashboard = () => {
         try {
             setLoading(true);
             const today = getTodayStr();
-            const threeDaysAgo = new Date();
-            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-            const dateLimit = threeDaysAgo.toISOString().split('T')[0];
+            // Removed 3-day limit to ensure incomplete tasks persist until handled
             
             // Get all section IDs the user has access to
             const sectionIds = sections.map(s => s.id);
@@ -92,7 +93,6 @@ const UserDashboard = () => {
                     tanks (name)
                 `)
                 .eq('is_completed', false)
-                .gte('scheduled_date', dateLimit)
                 .lte('scheduled_date', today);
 
             // Construct the access filter
@@ -108,7 +108,9 @@ const UserDashboard = () => {
             }
 
             // Also check if assigned specifically to this user or unassigned
-            query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`);
+            if (user.role === 'worker') {
+                query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`);
+            }
 
             const { data, error } = await query.order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true });
 
@@ -129,8 +131,9 @@ const UserDashboard = () => {
                 .from('activity_charts')
                 .select(`*, tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
                 .eq('created_by', user?.id)
-                .eq('scheduled_date', today)
+                .or(`is_completed.eq.false,scheduled_date.eq.${today}`)
                 .order('is_completed', { ascending: true })
+                .order('scheduled_date', { ascending: true })
                 .order('scheduled_time', { ascending: true });
             if (!error) setSupervisorInstructions(data || []);
         } catch (err) {
@@ -248,8 +251,30 @@ const UserDashboard = () => {
                 )}
             </div>
 
+            {/* Mode Toggle for Supervisors */}
+            {user.role === 'supervisor' && (
+                <div className="px-4 -mt-2 mb-4 animate-fade-in relative z-10">
+                    <div className="max-w-[340px] mx-auto flex bg-white/20 p-1 rounded-2xl gap-1 shadow-inner border border-white/20 backdrop-blur-md shadow-lg">
+                        <button
+                            onClick={() => setSupervisorMode('instruction')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'instruction' ? 'bg-white dark:bg-background shadow-md text-primary scale-[1.02]' : 'text-muted-foreground hover:text-foreground hover:bg-white/10'}`}
+                        >
+                            <ClipboardList className={`w-3.5 h-3.5 ${supervisorMode === 'instruction' ? 'animate-bounce-subtle' : ''}`} />
+                            Instruction Mode
+                        </button>
+                        <button
+                            onClick={() => setSupervisorMode('activity')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'activity' ? 'bg-white dark:bg-background shadow-md text-primary scale-[1.02]' : 'text-muted-foreground hover:text-foreground hover:bg-white/10'}`}
+                        >
+                            <Pencil className={`w-3.5 h-3.5 ${supervisorMode === 'activity' ? 'animate-pulse' : ''}`} />
+                            Activity Mode
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Main Grid */}
-            <div className="px-4 -mt-6">
+            <div className={`px-4 ${user.role === 'supervisor' ? '-mt-2' : '-mt-6'}`}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
 
                     {/* 6 Activity Icons */}
@@ -258,7 +283,7 @@ const UserDashboard = () => {
                             key={act.name}
                             variant="outline"
                             className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                            onClick={() => navigate(act.route)}
+                            onClick={() => navigate(`${act.route}?mode=${supervisorMode}`)}
                         >
                             <div className={`p-1.5 rounded-lg ${act.color}`}>
                                 <act.icon className="w-5 h-5" />
@@ -286,11 +311,13 @@ const UserDashboard = () => {
                 </div>
             </div>
 
-            {/* Today's Tasks/Instructions - Only for workers */}
-            {user.role !== 'supervisor' && (
+            {/* Today's Tasks/Instructions - For workers OR supervisors in activity mode */}
+            {(user.role === 'worker' || (user.role === 'supervisor' && supervisorMode === 'activity')) && (
             <div className="px-4 mt-8 pb-10">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">Pending Instructions</h3>
+                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">
+                        {user.role === 'supervisor' ? 'Record Pending Activities' : 'Pending Instructions'}
+                    </h3>
                     {instructions.length > 0 && (
                         <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
                             {instructions.length} Pending
@@ -309,7 +336,7 @@ const UserDashboard = () => {
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <CheckCircle2 className="w-6 h-6 text-muted-foreground opacity-50" />
                         </div>
-                        <p className="text-sm font-semibold text-muted-foreground">No pending tasks for today</p>
+                        <p className="text-sm font-semibold text-muted-foreground">No pending tasks</p>
                         <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1">Enjoy your day!</p>
                     </div>
                 ) : (
@@ -345,7 +372,7 @@ const UserDashboard = () => {
                                             size="sm" 
                                             variant="secondary"
                                             className="rounded-xl h-14 w-14 flex-shrink-0 flex flex-col gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
-                                            onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase()}?instruction=${instr.id}`)}
+                                            onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase()}?instruction=${instr.id}&mode=activity`)}
                                         >
                                             <ClipboardList className="w-5 h-5" />
                                             <span className="text-[8px] font-black uppercase tracking-tighter">Record</span>
@@ -360,12 +387,12 @@ const UserDashboard = () => {
             )}
 
             {/* Supervisor: My Instructions for Today */}
-            {user.role === 'supervisor' && (
+            {user.role === 'supervisor' && supervisorMode === 'instruction' && (
             <div className="px-4 mt-8 pb-10">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">My Instructions for Today</h3>
-                        <p className="text-[9px] text-muted-foreground/50 mt-0.5">Resets automatically at midnight</p>
+                        <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">My Instructions</h3>
+                        <p className="text-[9px] text-muted-foreground/50 mt-0.5">Completed tasks reset at midnight</p>
                     </div>
                 </div>
 

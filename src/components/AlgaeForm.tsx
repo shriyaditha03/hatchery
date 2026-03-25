@@ -19,7 +19,7 @@ interface AlgaeSample {
   inoculumSourceId: string;
   inoculumQuantity: string;
   inoculumUnit: string;
-  age: string;
+  age: string; // Internal key remains 'age' for DB compatibility, but labeled as 'DOC'
   cellCountPerMl: string;
   cellSize: string;
   cellShape: string;
@@ -42,7 +42,7 @@ function newSample(index: number): AlgaeSample {
     inoculumSourceId: '',
     inoculumQuantity: '',
     inoculumUnit: 'ml',
-    age: '',
+    age: '0',
     cellCountPerMl: '',
     cellSize: '',
     cellShape: '',
@@ -261,10 +261,10 @@ const AlgaeForm = ({
                   <Label className="text-[10px] uppercase text-muted-foreground font-bold">Inoculum Quantity</Label>
                   <Input value={selectedVerifyDetails?.inoculumQuantity ? `${selectedVerifyDetails.inoculumQuantity} ${selectedVerifyDetails.inoculumUnit || ''}` : 'N/A'} disabled className="h-8 text-xs bg-background/50" />
                 </div>
-                <div className="space-y-1 col-span-2 lg:col-span-1">
-                  <Label className="text-[10px] uppercase text-muted-foreground font-bold">Age</Label>
-                  <Input value={getAgeDays(selectedVerifyDetails?.createdAt, selectedVerifyDetails?.date)} disabled className="h-8 text-xs bg-background/50 font-bold text-primary" />
-                </div>
+                  <div className="space-y-1 col-span-2 lg:col-span-1">
+                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">DOC (Days of Culture)</Label>
+                    <Input value={getAgeDays(selectedVerifyDetails?.createdAt, selectedVerifyDetails?.date)} disabled className="h-8 text-xs bg-background/50 font-bold text-primary" />
+                  </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -580,25 +580,17 @@ const AlgaeForm = ({
                         </div>
                       </div>
 
-                      {/* 5. Age */}
+                      {/* 5. DOC */}
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold">5. AGE (Day 0 – Day 5)</Label>
-                        <div className="flex gap-2">
-                          {[0, 1, 2, 3, 4, 5].map(d => (
-                            <button
-                              key={d}
-                              type="button"
-                              onClick={() => handleSampleChange(idx, 'age', d.toString())}
-                              className={`flex-1 h-10 rounded-xl text-xs font-bold border transition-all ${
-                                sample.age === d.toString()
-                                  ? 'bg-primary text-primary-foreground border-primary'
-                                  : 'bg-background border-border text-muted-foreground hover:bg-muted/50'
-                              }`}
-                            >
-                              D-{d}
-                            </button>
-                          ))}
+                        <Label className="text-xs font-bold">5. DOC (Days of Culture)</Label>
+                        <div className="flex items-center">
+                           <Input 
+                             value={sample.age === '0' ? 'Day 0 (Start)' : `Day ${sample.age}`} 
+                             disabled 
+                             className="h-11 rounded-xl bg-muted/20 font-bold border-none text-primary" 
+                           />
                         </div>
+                        <p className="text-[10px] text-muted-foreground italic pl-1">Automatically set to Day 0 for new culture</p>
                       </div>
 
                       {/* 6. Cell Count */}

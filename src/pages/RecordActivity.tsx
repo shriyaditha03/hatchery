@@ -21,6 +21,15 @@ import { toast } from 'sonner';
 import { formatDate, getNowLocal, getTodayStr } from '@/lib/date-utils';
 import { useActivities } from '@/hooks/useActivities';
 
+const TIME_SLOTS = [
+  "0am - 4am",
+  "4am - 8am",
+  "8am - 12pm",
+  "12pm - 4pm",
+  "4pm - 8pm",
+  "8pm - 12am"
+];
+
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
 const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae'] as const;
 type ActivityType = typeof ACTIVITIES[number];
@@ -78,6 +87,7 @@ const RecordActivity = () => {
   const editId = searchParams.get('edit');
   const instructionIdParam = searchParams.get('instruction');
   const editInstructionId = searchParams.get('editInstruction');
+  const modeParam = searchParams.get('mode');
   const { addActivity, updateActivity } = useActivities();
 
   const [loading, setLoading] = useState(false);
@@ -96,13 +106,20 @@ const RecordActivity = () => {
   const [activeInstructions, setActiveInstructions] = useState<any[]>([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState<string | null>(null);
   const [selectedInstructionData, setSelectedInstructionData] = useState<any | null>(null);
-  const [isPlanningMode, setIsPlanningMode] = useState(user?.role === 'supervisor');
+  const [isPlanningMode, setIsPlanningMode] = useState(() => {
+    if (editInstructionId) return true;
+    if (instructionIdParam) return false;
+    if (modeParam === 'instruction') return true;
+    if (modeParam === 'activity') return false;
+    return user?.role === 'supervisor';
+  });
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
   const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);
   const [availableAlgaeSourceDetails, setAvailableAlgaeSourceDetails] = useState<any[]>([]);
   const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState('');
+  const [timeSlot, setTimeSlot] = useState<string>('');
   const [isRedirectedFromObservation, setIsRedirectedFromObservation] = useState(false);
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
@@ -318,7 +335,9 @@ const RecordActivity = () => {
         setSelectedInstructionId(data.id);
         setSelectedInstructionData(data); // Store the data directly
         setAssignedTo(data.assigned_to || null);
+        setActivity(data.activity_type as ActivityType);
         applyInstruction(data);
+        setIsPlanningMode(false);
         toast.info(`Applied instruction for ${data.activity_type}`);
       }
     } catch (err) {
@@ -347,6 +366,11 @@ const RecordActivity = () => {
         setActivity(actType);
         if (actType === 'Feed') { setFeedType(pd.item || ''); setFeedQty(pd.amount || ''); setFeedUnit(pd.unit || 'gms'); }
         if (actType === 'Treatment') { setTreatmentType(pd.item || ''); setTreatmentDosage(pd.amount || ''); setTreatmentUnit(pd.unit || 'ml'); }
+        if (actType === 'Algae' && pd.algaeData) setAlgaeData(pd.algaeData);
+        if (actType === 'Artemia' && pd.artemiaData) setArtemiaData(pd.artemiaData);
+        if (actType === 'Stocking' && pd.stockingData) setStockingData(pd.stockingData);
+        if (actType === 'Observation' && pd.observationData) setObservationData(pd.observationData);
+        
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
         toast.info('Editing instruction Ã¢â‚¬â€ make changes and save.');
@@ -359,12 +383,12 @@ const RecordActivity = () => {
   // Fetch active instructions when section/tank/activity/date changes
   useEffect(() => {
     const sectionId = selectedSectionId || activeSectionId;
-    if (sectionId && activity && date && !editId) {
+    if (sectionId && activity && date && !editId && availableTanks.length > 0) {
       checkForInstructions();
-    } else {
+    } else if (!editId && (!sectionId || !activity)) {
       setActiveInstructions([]);
     }
-  }, [tankId, selectedSectionId, activeSectionId, activity, date]);
+  }, [tankId, selectedSectionId, activeSectionId, activity, date, availableTanks]);
 
   const checkForInstructions = async () => {
     try {
@@ -375,15 +399,20 @@ const RecordActivity = () => {
       if (!currentSection) return;
 
       // Fetch all instructions for this section or the whole farm
-      const { data, error } = await supabase
+      let query = supabase
         .from('activity_charts')
         .select('*')
         .or(`section_id.eq.${sectionId},and(farm_id.eq.${currentSection.farm_id},section_id.is.null,tank_id.is.null),tank_id.in.(${currentSection.tanks.map((t: any) => `"${t.id}"`).join(',')})`)
-        .or(`assigned_to.is.null,assigned_to.eq.${user?.id}`) // Filter by assigned worker or open instructions
         .eq('activity_type', activity)
         .eq('scheduled_date', date)
-        .eq('is_completed', false)
-        .order('scheduled_time', { ascending: true });
+        .eq('is_completed', false);
+
+      // If worker, only show unassigned or tasks assigned specifically to them
+      if (user?.role === 'worker') {
+        query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`);
+      }
+
+      const { data, error } = await query.order('scheduled_time', { ascending: true });
 
       if (!error && data) {
         // Filter instructions based on selection scope
@@ -405,28 +434,37 @@ const RecordActivity = () => {
 
   const applyInstruction = (instruction: any) => {
     if (!instruction) return;
-    const { planned_data, tank_id: instrTankId } = instruction;
+    const { planned_data, tank_id: instrTankId, activity_type: instrActivity } = instruction;
     
     // If the instruction is for a specific tank and we're in single mode, ensure it matches or set it
     if (selectionScope === 'single' && instrTankId && tankId !== instrTankId) {
       setTankId(instrTankId);
     }
 
-    if (activity === 'Feed') {
+    const currentAct = instrActivity || activity;
+
+    if (currentAct === 'Feed') {
       setFeedType(planned_data.item);
       setFeedQty(planned_data.amount);
       setFeedUnit(planned_data.unit);
-    } else if (activity === 'Treatment') {
+      if (planned_data.timeSlot) setTimeSlot(planned_data.timeSlot);
+    } else if (currentAct === 'Treatment') {
       setTreatmentType(planned_data.item);
       setTreatmentDosage(planned_data.amount);
       setTreatmentUnit(planned_data.unit);
-    }
-    
-    if (planned_data.instructions) {
-      setComments(prev => prev ? `${prev}\nNote: ${planned_data.instructions}` : `Note: ${planned_data.instructions}`);
+      if (planned_data.timeSlot) setTimeSlot(planned_data.timeSlot);
+    } else if (currentAct === 'Algae' && planned_data.algaeData) {
+      setAlgaeData(planned_data.algaeData);
+    } else if (currentAct === 'Artemia' && planned_data.artemiaData) {
+      setArtemiaData(planned_data.artemiaData);
+    } else if (currentAct === 'Stocking' && planned_data.stockingData) {
+      setStockingData(planned_data.stockingData);
+    } else if (currentAct === 'Observation' && planned_data.observationData) {
+      setObservationData(planned_data.observationData);
     }
     
     setSelectedInstructionId(instruction.id);
+    setSelectedInstructionData(instruction);
     toast.success('Instruction applied!');
   };
 
@@ -451,6 +489,7 @@ const RecordActivity = () => {
         setDate(data.data.date || formatDate(data.created_at, 'yyyy-MM-dd'));
         setTime(data.data.time || formatDate(data.created_at, 'hh:mm'));
         setAmpm(data.data.ampm || (formatDate(data.created_at, 'a') as 'AM' | 'PM'));
+        if (data.data.timeSlot) setTimeSlot(data.data.timeSlot);
         setTankId(data.tank_id);
         setSelectedSectionId(data.section_id || '');
         setSelectedFarmId(data.farm_id || '');
@@ -561,7 +600,9 @@ const RecordActivity = () => {
         'feed': 'Feed',
         'treatment': 'Treatment',
         'water': 'Water Quality',
+        'water quality': 'Water Quality',
         'animal': 'Animal Quality',
+        'animal quality': 'Animal Quality',
         'stocking': 'Stocking',
         'observation': 'Observation',
         'artemia': 'Artemia',
@@ -617,23 +658,34 @@ const RecordActivity = () => {
             .eq('activity_type', 'Artemia')
             .eq('farm_id', activeFarmId || selectedFarmId)
             .order('created_at', { ascending: false })
-            .limit(50);
+            .limit(100);
 
           if (!error && data) {
-            const ids: string[] = [];
+            const preIds: string[] = [];
+            const harvestedIds: string[] = [];
+            
             data.forEach((d: any) => {
-              if (d.data?.phase === 'pre') {
+              const phase = d.data?.phase;
+              if (phase === 'pre') {
                 if (d.data.samples && Array.isArray(d.data.samples)) {
                   d.data.samples.forEach((s: any) => {
-                    if (s.sampleId) ids.push(s.sampleId);
+                    if (s.sampleId) preIds.push(s.sampleId);
                   });
                 } else if (d.data.sampleId) {
-                  ids.push(d.data.sampleId);
+                  preIds.push(d.data.sampleId);
+                }
+              } else if (phase === 'post') {
+                if (d.data.linkedSampleIds && Array.isArray(d.data.linkedSampleIds)) {
+                  harvestedIds.push(...d.data.linkedSampleIds);
+                } else if (d.data.linkedSampleId) {
+                  harvestedIds.push(d.data.linkedSampleId);
                 }
               }
             });
-            // Unique IDs only
-            setAvailableArtemiaPreHarvestIds([...new Set(ids)]);
+
+            // Only show IDs that haven't been harvested yet
+            const availableIds = preIds.filter(id => !harvestedIds.includes(id));
+            setAvailableArtemiaPreHarvestIds([...new Set(availableIds)]);
           }
         } catch (err) {
           console.error('Error fetching artemia ids:', err);
@@ -725,10 +777,10 @@ const RecordActivity = () => {
   }, [activity, editId]);
 
   const buildData = (): Record<string, any> => {
-    const baseData = { date, time, ampm, comments, photo_url: photoUrl };
+    const baseData = { date, time, ampm, timeSlot, comments, photo_url: photoUrl };
     switch (activity) {
-      case 'Feed': return { ...baseData, feedType, feedQty, feedUnit };
-      case 'Treatment': return { ...baseData, treatmentType, treatmentDosage, treatmentUnit };
+      case 'Feed': return { ...baseData, feedType, feedQty, feedUnit, timeSlot };
+      case 'Treatment': return { ...baseData, treatmentType, treatmentDosage, treatmentUnit, timeSlot };
       case 'Water Quality': return { ...baseData, waterData };
       case 'Animal Quality': return { ...baseData, animalSize, animalStage, animalDoc, animalRatings, hasDiseaseIdentified, diseaseSymptoms, additionalObservations };
       case 'Stocking': return { ...baseData, ...stockingData, photo_url: photoUrl };
@@ -849,6 +901,11 @@ const RecordActivity = () => {
           }
         }
 
+        if ((activity === 'Feed' || activity === 'Treatment') && !timeSlot) {
+          toast.error('Time Slot is required for Feed/Treatment');
+          return;
+        }
+
         const record = {
           hatchery_id: user?.hatchery_id || null,
           farm_id: farmId,
@@ -861,6 +918,7 @@ const RecordActivity = () => {
             item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : 'Instruction'),
             amount: activity === 'Feed' ? feedQty : (activity === 'Treatment' ? treatmentDosage : ''),
             unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
+            timeSlot: (activity === 'Feed' || activity === 'Treatment') ? timeSlot : undefined,
             instructions: comments,
             stockingData: activity === 'Stocking' ? stockingData : undefined,
             observationData: activity === 'Observation' ? observationData : undefined,
@@ -882,7 +940,12 @@ const RecordActivity = () => {
           item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : 'Instruction'),
           amount: activity === 'Feed' ? feedQty : (activity === 'Treatment' ? treatmentDosage : ''),
           unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
-          instructions: comments
+          timeSlot: (activity === 'Feed' || activity === 'Treatment') ? timeSlot : undefined,
+          instructions: comments,
+          stockingData: activity === 'Stocking' ? stockingData : undefined,
+          observationData: activity === 'Observation' ? observationData : undefined,
+          artemiaData: activity === 'Artemia' ? artemiaData : undefined,
+          algaeData: activity === 'Algae' ? algaeData : undefined
         };
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
@@ -940,13 +1003,13 @@ const RecordActivity = () => {
     }
 
 
-    if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim())) {
-      toast.error('Feed Type and Quantity are required');
+    if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim() || !timeSlot)) {
+      toast.error('Feed Type, Quantity, and Time Slot are required');
       return;
     }
 
-    if (activity === 'Treatment' && (!treatmentType.trim() || !treatmentDosage.trim())) {
-      toast.error('Treatment Type and Dosage are required');
+    if (activity === 'Treatment' && (!treatmentType.trim() || !treatmentDosage.trim() || !timeSlot)) {
+      toast.error('Treatment Type, Dosage, and Time Slot are required');
       return;
     }
 
@@ -1411,33 +1474,27 @@ const RecordActivity = () => {
             {editId ? 'Edit Activity' : isPlanningMode ? 'Plan Activity' : 'Record Activity'}
           </h1>
         </div>
-
+ 
         {selectedInstructionId && (
           <div className="mx-12 mt-3 bg-white/20 border border-white/30 rounded-lg px-3 py-1.5 flex items-center gap-2 animate-pulse">
             <ClipboardList className="w-3.5 h-3.5 text-white" />
             <span className="text-[10px] font-bold text-white uppercase tracking-wider">Instruction Linked & Pending Auto-Complete</span>
           </div>
         )}
-
-        {user?.role === 'supervisor' && !editId && (
-          <div className="flex bg-white/10 p-1 rounded-xl mt-4 max-w-[280px]">
-            <button
-              onClick={() => setIsPlanningMode(true)}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${isPlanningMode ? 'bg-white text-primary shadow-sm' : 'text-white/60 hover:text-white'}`}
-            >
-              Setup Instruction
-            </button>
-            <button
-              onClick={() => setIsPlanningMode(false)}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${!isPlanningMode ? 'bg-white text-primary shadow-sm' : 'text-white/60 hover:text-white'}`}
-            >
-              Record Activity
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto">
+        {/* Supervisor Instruction Note - Read Only Display for Workers */}
+        {selectedInstructionData?.planned_data?.instructions && !isPlanningMode && (
+          <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up space-y-2 bg-primary/5">
+            <div className="flex items-center gap-2 text-primary">
+              <ClipboardList className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Supervisor's Note</span>
+            </div>
+            <p className="text-sm font-medium italic text-foreground">"{selectedInstructionData.planned_data.instructions}"</p>
+          </div>
+        )}
+
         {/* Supervisor: Assign To - First field during planning */}
         {isPlanningMode && (
           <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up">
@@ -1503,6 +1560,23 @@ const RecordActivity = () => {
               </div>
             </div>
           </div>
+          {(activity === 'Feed' || activity === 'Treatment') && (
+            <div className="space-y-1.5 pt-3 border-t border-dashed animate-in fade-in slide-in-from-top-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                Time Slot <span className="text-destructive">*</span>
+              </Label>
+              <Select value={timeSlot} onValueChange={setTimeSlot}>
+                <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50 bg-background/50">
+                  <SelectValue placeholder="Select 4hr window" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_SLOTS.map(slot => (
+                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {(activity || !type) && !isSpecialActivity && (

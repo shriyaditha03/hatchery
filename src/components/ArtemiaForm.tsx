@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import RatingScale from '@/components/RatingScale';
 import ImageUpload from '@/components/ImageUpload';
 import { formatDate, getNowLocal } from '@/lib/date-utils';
@@ -48,14 +49,13 @@ const ArtemiaForm = ({
   isPlanningMode = false,
   availablePreHarvestIds = [],
 }: ArtemiaFormProps) => {
-  const [phase, setPhase] = useState<'pre' | 'post'>(data.phase || 'pre');
+  const phase = data.phase || 'pre';
 
   const handleChange = (field: string, value: any) => {
     onDataChange({ ...data, [field]: value, phase });
   };
 
   const handlePhaseChange = (p: 'pre' | 'post') => {
-    setPhase(p);
     // When switching to pre, auto-gen ID if missing
     const newData = { ...data, phase: p };
     if (p === 'pre' && !data.sampleId) {
@@ -67,13 +67,41 @@ const ArtemiaForm = ({
   // Initial ID generation for pre phase
   useEffect(() => {
     if (phase === 'pre' && !data.sampleId) {
-      handleChange('sampleId', generateArtemiaSampleId());
+      onDataChange({ ...data, sampleId: generateArtemiaSampleId(), phase: 'pre' });
     }
-  }, [phase]);
+  }, [phase, data.sampleId]);
 
   const ratings = data.ratings || {};
   const setRating = (key: string, val: number) => {
     onDataChange({ ...data, phase, ratings: { ...ratings, [key]: val } });
+  };
+
+  const handleSampleCountChange = (valStr: string) => {
+    const num = parseInt(valStr) || 1;
+    const safeCount = Math.max(1, Math.min(20, num));
+    const currentSamples = data.samples || [];
+    let newSamples = [...currentSamples];
+    const datePart = formatDate(getNowLocal(), 'yyMMdd');
+
+    if (safeCount > newSamples.length) {
+      for (let i = newSamples.length; i < safeCount; i++) {
+        newSamples.push({
+          sampleId: `S${i + 1}_${datePart}`,
+          quantity: data.commonQuantity || ''
+        });
+      }
+    } else {
+      newSamples = newSamples.slice(0, safeCount);
+    }
+
+    onDataChange({ 
+      ...data, 
+      phase,
+      numberOfSamples: safeCount.toString(),
+      samples: newSamples,
+      sampleId: newSamples[0]?.sampleId || '',
+      cystWeight: newSamples[0]?.quantity || ''
+    });
   };
 
   return (
@@ -89,98 +117,81 @@ const ArtemiaForm = ({
           onClick={() => handlePhaseChange('pre')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${phase === 'pre' ? 'bg-white dark:bg-background shadow text-primary' : 'text-muted-foreground hover:text-foreground'}`}
         >
-          🪣 Before Harvest
+          🪣 Artemia Stockings
         </button>
         <button
           type="button"
           onClick={() => handlePhaseChange('post')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${phase === 'post' ? 'bg-white dark:bg-background shadow text-primary' : 'text-muted-foreground hover:text-foreground'}`}
         >
-          🦐 After Harvest
+          🦐 Artemia Harvest
         </button>
       </div>
 
       {/* ── Before Harvest ── */}
       {phase === 'pre' && (
         <div className="space-y-5 animate-fade-in-up">
-          <div className={`grid grid-cols-1 ${isPlanningMode ? 'sm:grid-cols-2' : ''} gap-4`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold flex items-center gap-1">
                 1. Number of Samples <span className="text-destructive">*</span>
               </Label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={data.numberOfSamples || ''}
-                onChange={e => {
-                  const num = parseInt(e.target.value) || 0;
-                  const currentSamples = data.samples || [];
-                  let newSamples = [...currentSamples];
-                  const datePart = formatDate(getNowLocal(), 'yyMMdd');
-
-                  if (num > newSamples.length) {
-                    for (let i = newSamples.length; i < num; i++) {
-                      newSamples.push({
-                        sampleId: `S${i + 1}_${datePart}`,
-                        quantity: data.commonQuantity || ''
-                      });
-                    }
-                  } else {
-                    newSamples = newSamples.slice(0, num);
-                  }
-
-                  onDataChange({ 
-                    ...data, 
-                    numberOfSamples: e.target.value,
-                    samples: newSamples,
-                    sampleId: newSamples[0]?.sampleId || '',
-                    cystWeight: newSamples[0]?.quantity || ''
-                  });
-                }}
-                placeholder="e.g. 3"
-                className="h-11 rounded-xl border-primary/20 focus:border-primary"
-              />
-            </div>
-
-            {isPlanningMode && (
-              <div className="space-y-1.5 animate-in slide-in-from-right-2">
-                <Label className="text-xs font-bold text-primary flex items-center gap-1">
-                  2. Common Quantity (gms)
-                </Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0 shadow-sm"
+                  onClick={() => handleSampleCountChange((parseInt(data.numberOfSamples) - 1).toString())}
+                  disabled={parseInt(data.numberOfSamples) <= 1}
+                >
+                  -
+                </Button>
                 <Input
                   type="number"
-                  min="0"
-                  step="any"
-                  value={data.commonQuantity || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    const newSamples = (data.samples || []).map((s: any) => ({ ...s, quantity: val }));
-                    onDataChange({ 
-                      ...data, 
-                      commonQuantity: val, 
-                      samples: newSamples,
-                      cystWeight: val // Sync for backward compatibility
-                    });
-                  }}
-                  placeholder="Applies to all samples"
-                  className="h-11 rounded-xl bg-primary/5 border-primary/30 border-2 font-bold focus:bg-background"
+                  min="1"
+                  max="20"
+                  value={data.numberOfSamples || '1'}
+                  onChange={e => handleSampleCountChange(e.target.value)}
+                  className="h-11 rounded-xl bg-muted/10 font-black border-border text-center text-lg focus:bg-background"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0 shadow-sm"
+                  onClick={() => handleSampleCountChange((parseInt(data.numberOfSamples || '1') + 1).toString())}
+                  disabled={parseInt(data.numberOfSamples) >= 20}
+                >
+                  +
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
 
-          {!isPlanningMode && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Base Sample ID Reference</Label>
+            <div className="space-y-1.5 animate-in slide-in-from-right-2">
+              <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                2. Common Quantity (gms)
+              </Label>
               <Input
-                value={data.sampleId || ''}
-                onChange={e => handleChange('sampleId', e.target.value.toUpperCase())}
-                placeholder="S1_YYMMDD"
-                className="h-11 rounded-xl"
+                type="number"
+                min="0"
+                step="any"
+                value={data.commonQuantity || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  const newSamples = (data.samples || []).map((s: any) => ({ ...s, quantity: val }));
+                  onDataChange({ 
+                    ...data, 
+                    commonQuantity: val, 
+                    samples: newSamples,
+                    cystWeight: val // Sync for backward compatibility
+                  });
+                }}
+                placeholder="Applies to all samples"
+                className="h-11 rounded-xl bg-primary/5 border-primary/30 border-2 font-bold focus:bg-background"
               />
             </div>
-          )}
+          </div>
 
           {/* Dynamic Sample Fields */}
           <div className="space-y-3">
@@ -297,7 +308,7 @@ const ArtemiaForm = ({
                 </div>
               )}
             </div>
-            <p className="text-[9px] text-muted-foreground italic pl-1 mt-1">Choose one or more IDs created in Before Harvest</p>
+            <p className="text-[9px] text-muted-foreground italic pl-1 mt-1">Choose one or more IDs created in Artemia Stockings</p>
           </div>
 
           {!isPlanningMode && (
@@ -314,7 +325,7 @@ const ArtemiaForm = ({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold flex items-center gap-1">
                     3. Cells Harvested (in million) <span className="text-destructive">*</span>
@@ -340,6 +351,20 @@ const ArtemiaForm = ({
                     value={data.harvestWeight || ''}
                     onChange={e => handleChange('harvestWeight', e.target.value)}
                     placeholder="0.00"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold flex items-center gap-1">
+                    5. Hours of Culture (Optional)
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={data.hoursOfCulture || ''}
+                    onChange={e => handleChange('hoursOfCulture', e.target.value)}
+                    placeholder="e.g. 24"
                     className="h-11 rounded-xl"
                   />
                 </div>
@@ -389,7 +414,7 @@ const ArtemiaForm = ({
 
           <div className="space-y-2 pt-2 border-t border-dashed">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              5. {isPlanningMode ? 'Instructions' : 'Notes'}
+              6. {isPlanningMode ? 'Instructions' : 'Notes'}
             </Label>
             <Textarea
               value={comments}
