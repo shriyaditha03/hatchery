@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database, User } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RatingScale from '@/components/RatingScale';
@@ -72,7 +72,7 @@ export const WATER_QUALITY_RANGES: Record<string, string> = {
 
 const RecordActivity = () => {
   const navigate = useNavigate();
-  const { user, activeFarmId, activeSectionId } = useAuth();
+  const { user, activeFarmId, activeSectionId, setActiveFarmId, setActiveSectionId } = useAuth();
   const [searchParams] = useSearchParams();
   const { type } = useParams();
   const editId = searchParams.get('edit');
@@ -99,8 +99,12 @@ const RecordActivity = () => {
   const [isPlanningMode, setIsPlanningMode] = useState(user?.role === 'supervisor');
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
-  const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
   const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);
+  const [availableAlgaeSourceDetails, setAvailableAlgaeSourceDetails] = useState<any[]>([]);
+  const [availableArtemiaPreHarvestIds, setAvailableArtemiaPreHarvestIds] = useState<string[]>([]);
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [isRedirectedFromObservation, setIsRedirectedFromObservation] = useState(false);
+
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
   const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
@@ -296,8 +300,14 @@ const RecordActivity = () => {
 
       if (!error && data) {
         // Set basic context
-        if (data.farm_id) setSelectedFarmId(data.farm_id);
-        if (data.section_id) setSelectedSectionId(data.section_id);
+        if (data.farm_id) {
+          setSelectedFarmId(data.farm_id);
+          setActiveFarmId(data.farm_id);
+        }
+        if (data.section_id) {
+          setSelectedSectionId(data.section_id);
+          setActiveSectionId(data.section_id);
+        }
         if (data.tank_id) {
           setSelectionScope('single');
           setTankId(data.tank_id);
@@ -321,8 +331,14 @@ const RecordActivity = () => {
       const { data, error } = await supabase.from('activity_charts').select('*').eq('id', id).single();
       if (!error && data) {
         setIsPlanningMode(true);
-        if (data.farm_id) setSelectedFarmId(data.farm_id);
-        if (data.section_id) setSelectedSectionId(data.section_id);
+        if (data.farm_id) {
+          setSelectedFarmId(data.farm_id);
+          setActiveFarmId(data.farm_id);
+        }
+        if (data.section_id) {
+          setSelectedSectionId(data.section_id);
+          setActiveSectionId(data.section_id);
+        }
         if (data.tank_id) { setSelectionScope('single'); setTankId(data.tank_id); }
         else if (data.section_id) { setSelectionScope('all'); }
         setAssignedTo(data.assigned_to || null);
@@ -588,8 +604,7 @@ const RecordActivity = () => {
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
 
   const [comments, setComments] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
-  const [isRedirectedFromObservation, setIsRedirectedFromObservation] = useState(false);
+
 
   // Fetch recent Artemia Pre-Harvest IDs for linking
   useEffect(() => {
@@ -605,9 +620,18 @@ const RecordActivity = () => {
             .limit(50);
 
           if (!error && data) {
-            const ids = data
-              .filter((d: any) => d.data?.phase === 'pre' && d.data?.sampleId)
-              .map((d: any) => d.data.sampleId);
+            const ids: string[] = [];
+            data.forEach((d: any) => {
+              if (d.data?.phase === 'pre') {
+                if (d.data.samples && Array.isArray(d.data.samples)) {
+                  d.data.samples.forEach((s: any) => {
+                    if (s.sampleId) ids.push(s.sampleId);
+                  });
+                } else if (d.data.sampleId) {
+                  ids.push(d.data.sampleId);
+                }
+              }
+            });
             // Unique IDs only
             setAvailableArtemiaPreHarvestIds([...new Set(ids)]);
           }
@@ -626,7 +650,7 @@ const RecordActivity = () => {
         try {
           const { data, error } = await supabase
             .from('activity_logs')
-            .select('data')
+            .select('data, created_at')
             .eq('activity_type', 'Algae')
             .eq('farm_id', activeFarmId || selectedFarmId)
             .order('created_at', { ascending: false })
@@ -634,15 +658,35 @@ const RecordActivity = () => {
 
           if (!error && data) {
             const ids: string[] = [];
+            const details: any[] = [];
+            
             data.forEach((d: any) => {
+              const species = d.data?.algaeSpecies || '';
               if (d.data?.samples && Array.isArray(d.data.samples)) {
                 d.data.samples.forEach((s: any) => {
-                  if (s.sampleId) ids.push(s.sampleId);
+                  if (s.sampleId && !ids.includes(s.sampleId)) {
+                    ids.push(s.sampleId);
+                    details.push({ 
+                      id: s.sampleId, 
+                      species,
+                      inoculumSourceId: s.inoculumSourceId,
+                      inoculumQuantity: s.inoculumQuantity,
+                      inoculumUnit: s.inoculumUnit,
+                      createdAt: d.created_at,
+                      date: d.data?.date
+                    });
+                  }
                 });
               }
             });
-            // Unique IDs only, sorted
+            // Sorted IDs
             setAvailableAlgaeSourceIds([...new Set(ids)].sort());
+            
+            // Unique Details
+            const uniqueDetails = details.filter((item, index, self) => 
+               index === self.findIndex((t) => t.id === item.id)
+            );
+            setAvailableAlgaeSourceDetails(uniqueDetails);
           }
         } catch (err) {
           console.error('Error fetching algae source ids:', err);
@@ -747,54 +791,61 @@ const RecordActivity = () => {
         }
 
         if (activity === 'Algae') {
-          if (!algaeData.algaeSpecies) {
-            toast.error('Algae Species is required');
-            return;
-          }
-          if (!algaeData.containerSize) {
-            toast.error('Container Size is required');
-            return;
-          }
-          const algSamples = algaeData.samples || [];
-          const activeAlgSamples = algSamples.filter((s: any) => s.status !== 'discard');
-          const missingQty = activeAlgSamples.some((s: any) => !s.inoculumQuantity);
-          if (missingQty) {
-            toast.error('Inoculum Quantity is required for all active samples');
-            return;
+          const phase = algaeData.phase || 'new';
+          if (phase === 'new') {
+            if (!algaeData.algaeSpecies) {
+              toast.error('Algae Species is required');
+              return;
+            }
+            if (!algaeData.containerSize) {
+              toast.error('Container Size is required');
+              return;
+            }
+            // Skip inoculumQuantity/age/assessment validation for planning
+          } else if (phase === 'discard') {
+            if (!algaeData.discardSampleId) {
+              toast.error('Please select a sample to discard');
+              return;
+            }
+            // Logic for discardReason will be handled by worker
+          } else if (phase === 'verify') {
+            if (!algaeData.verifySampleId) {
+              toast.error('Please select a sample to verify');
+              return;
+            }
+            // Logic for cell count/quality will be handled by worker
           }
         }
 
         if (activity === 'Artemia') {
           if (artemiaData.phase === 'pre') {
-            if (!artemiaData.sampleId) {
-              toast.error('Sample ID is required');
-              return;
-            }
-            if (!artemiaData.cystWeight) {
-              toast.error('Cyst Weight is required');
-              return;
-            }
             if (!artemiaData.numberOfSamples) {
               toast.error('Number of Samples is required');
               return;
             }
+            const samples = artemiaData.samples || [];
+            if (samples.length === 0) {
+              toast.error('At least one sample is required');
+              return;
+            }
+            for (let i = 0; i < samples.length; i++) {
+              if (!samples[i].sampleId) {
+                toast.error(`Sample ID for Sample ${i + 1} is required`);
+                return;
+              }
+              if (!samples[i].quantity) {
+                toast.error(`Quantity for Sample ${i + 1} is required`);
+                return;
+              }
+            }
           } else {
-            if (!artemiaData.linkedSampleId) {
-              toast.error('Please choose a Pre-Harvest ID');
+            const selectedIds = artemiaData.linkedSampleIds || [];
+            if (selectedIds.length === 0) {
+              toast.error('Please choose at least one Pre-Harvest ID');
               return;
             }
-            if (!artemiaData.harvestStage) {
-              toast.error('Harvest Stage is required');
-              return;
-            }
-            if (!artemiaData.cellsHarvested) {
-              toast.error('Cells Harvested is required');
-              return;
-            }
-            if (!artemiaData.harvestWeight) {
-              toast.error('Harvest Weight is required');
-              return;
-            }
+            // Technical metrics (harvestStage, cellsHarvested, harvestWeight) are hidden during planning mode
+            // and will be filled by the worker later.
           }
         }
 
@@ -823,7 +874,7 @@ const RecordActivity = () => {
         
         console.log('DEBUG - Saving Instruction Record:', record);
         return record;
-      });
+      }).filter(Boolean);
 
       if (editInstructionId) {
         // UPDATE existing instruction
@@ -965,6 +1016,19 @@ const RecordActivity = () => {
         }
         if (!algaeData.discardReason?.trim()) {
           toast.error('Reason for discarding is required');
+          return;
+        }
+      } else if (algaeData.phase === 'verify') {
+        if (!algaeData.verifySampleId) {
+          toast.error('Please select a sample to verify');
+          return;
+        }
+        if (!algaeData.verifyCellCount) {
+          toast.error('Cell count is required');
+          return;
+        }
+        if (!algaeData.verifyCellQuality) {
+          toast.error('Cell quality is required');
           return;
         }
       } else {
@@ -1169,6 +1233,25 @@ const RecordActivity = () => {
             }
           }
 
+          // Special bulk save for Artemia After Harvest multiple samples
+          if (activity === 'Artemia' && currentBuildData.phase === 'post') {
+            const sampleIds = currentBuildData.linkedSampleIds || [];
+            if (sampleIds.length > 0) {
+              const artemiaPromises = sampleIds.map(async (sid: string) => {
+                 const logData = { ...currentBuildData, linkedSampleId: sid, linkedSampleIds: [sid] };
+                 return addActivity({
+                    tank_id: tId,
+                    section_id: sId || undefined,
+                    farm_id: fId || undefined,
+                    activity_type: activity as any,
+                    data: logData
+                 });
+              });
+              const logIds = await Promise.all(artemiaPromises);
+              return logIds[0]; // just return the first one for the flow
+            }
+          }
+
           const logId = await addActivity({
             tank_id: tId,
             section_id: sId || undefined,
@@ -1355,14 +1438,41 @@ const RecordActivity = () => {
       </div>
 
       <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto">
+        {/* Supervisor: Assign To - First field during planning */}
+        {isPlanningMode && (
+          <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2">
+              <User className="lucide-icon w-3 h-3" />
+              1. Assign To (Optional)
+            </Label>
+            <Select value={assignedTo || 'anyone'} onValueChange={(val) => setAssignedTo(val === 'anyone' ? null : val)}>
+              <SelectTrigger className="h-11 bg-background border-muted-foreground/30">
+                <SelectValue placeholder="Anyone" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anyone">Anyone (Open Instruction)</SelectItem>
+                {availableWorkers.length > 0 ? (
+                  availableWorkers.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="_no_workers" disabled>No workers on this farm</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground ml-1 mt-1.5 font-medium italic text-[9px]">Leave as "Anyone" if any worker can complete this task.</p>
+          </div>
+        )}
+
         {/* Date / Time */}
-        <div className="glass-card rounded-2xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Date</Label>
+              <Label className="text-xs text-muted-foreground">Date</Label>
               <Input
                 type="date"
                 value={date}
@@ -1370,11 +1480,11 @@ const RecordActivity = () => {
                   setDate(e.target.value);
                   setIsLiveTime(false);
                 }}
-                className="h-11"
+                className="h-11 border-muted-foreground/20 focus:border-primary/50"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Time</Label>
+              <Label className="text-xs text-muted-foreground">Time</Label>
               <div className="flex gap-2">
                 <Input
                   type="time"
@@ -1388,34 +1498,18 @@ const RecordActivity = () => {
                       setAmpm(h >= 12 ? 'PM' : 'AM');
                     }
                   }}
-                  className="h-11 w-full"
+                  className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
                 />
               </div>
             </div>
-            {isPlanningMode && (
-              <div className="space-y-1.5 sm:col-span-2 border-t border-dashed pt-4 mt-2">
-                <Label className="text-xs">Assign To (Optional)</Label>
-                <Select value={assignedTo || 'anyone'} onValueChange={(val) => setAssignedTo(val === 'anyone' ? null : val)}>
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Anyone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="anyone">Anyone (Open Instruction)</SelectItem>
-                    {availableWorkers.length > 0 ? (
-                      availableWorkers.map(w => (
-                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="_no_workers" disabled>No workers on this farm</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground ml-1">Leave as "Anyone" if any worker can complete this task.</p>
-              </div>
-            )}
           </div>
-        </div>        {(activity || !type) && !isSpecialActivity && (
+        </div>
+
+        {(activity || !type) && !isSpecialActivity && (
+
+
           <div className="glass-card rounded-2xl p-4 space-y-4">
+
             {true && (
               <>
                 <div className="flex items-center justify-between">
@@ -1696,77 +1790,81 @@ const RecordActivity = () => {
         {activity === 'Water Quality' && (
           <div className="glass-card rounded-2xl p-4 space-y-4 animate-fade-in-up">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Water Quality Parameters</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-              {waterFields.map(field => {
-                const rangeLabel = WATER_QUALITY_RANGES[field];
+            {!isPlanningMode ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                  {waterFields.map(field => {
+                    const rangeLabel = WATER_QUALITY_RANGES[field];
 
-                return (
-                  <div key={field} className="space-y-1">
-                    <Label className="text-[10px] font-medium flex justify-between uppercase">
-                      {field} *
-                      {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
-                    </Label>
-                    <Input
-                      type={field === 'Other' ? 'text' : 'number'}
-                      min="0"
-                      step="any"
-                      value={waterData[field] || ''}
-                      onChange={e => setWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                      placeholder=""
-                      className="h-10 text-sm"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Overall Quality Score - always visible */}
-            {(() => {
-              const total = waterFields.length;
-              const values = waterFields.map(field => {
-                const valStr = String(waterData[field] || '').trim();
-                if (valStr === '') return null;
-                const val = parseFloat(valStr);
-                if (isNaN(val)) return 10; // Non-numeric or "Other" counts as 10 if filled
-
-                const range = WATER_QUALITY_RANGES[field] || '';
-                let isOk = true;
-                
-                // Specific parsing for hatchery ranges
-                if (field === 'Vibrio Count') {
-                  isOk = val < 1000;
-                } else if (field === 'Yellow Green Bacteria') {
-                  isOk = val < 100;
-                } else if (range === '[Nil]') {
-                  isOk = val === 0;
-                } else if (range.includes(' - ')) {
-                  const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
-                  if (matches) {
-                    isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]);
-                  }
-                } else if (range.includes('>')) {
-                  const matches = range.match(/>\s*(\d+\.?\d*)/);
-                  if (matches) isOk = val > parseFloat(matches[1]);
-                } else if (range.includes('<')) {
-                  const matches = range.match(/<\s*(\d+\.?\d*)/);
-                  if (matches) isOk = val < parseFloat(matches[1]);
-                }
-                return isOk ? 10 : 0;
-              });
-
-              const filled = values.filter(v => v !== null);
-              const score = filled.length > 0 ? filled.reduce((a, b) => (a || 0) + (b || 0), 0) / filled.length : 0;
-
-              return (
-                <div className="rounded-xl border bg-muted/30 p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
-                    <span className="text-lg font-black text-foreground">{score.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{filled.length} of {total} parameters recorded</p>
+                    return (
+                      <div key={field} className="space-y-1">
+                        <Label className="text-[10px] font-medium flex justify-between uppercase">
+                          {field} *
+                          {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
+                        </Label>
+                        <Input
+                          type={field === 'Other' ? 'text' : 'number'}
+                          min="0"
+                          step="any"
+                          value={waterData[field] || ''}
+                          onChange={e => setWaterData(prev => ({ ...prev, [field]: e.target.value }))}
+                          placeholder=""
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })()}
+
+                {/* Overall Quality Score - always visible during recording */}
+                {(() => {
+                  const total = waterFields.length;
+                  const values = waterFields.map(field => {
+                    const valStr = String(waterData[field] || '').trim();
+                    if (valStr === '') return null;
+                    const val = parseFloat(valStr);
+                    if (isNaN(val)) return 10; // Non-numeric or "Other" counts as 10 if filled
+
+                    const range = WATER_QUALITY_RANGES[field] || '';
+                    let isOk = true;
+                    
+                    // Specific parsing for hatchery ranges
+                    if (field === 'Vibrio Count') {
+                      isOk = val < 1000;
+                    } else if (field === 'Yellow Green Bacteria') {
+                      isOk = val < 100;
+                    } else if (range === '[Nil]') {
+                      isOk = val === 0;
+                    } else if (range.includes(' - ')) {
+                      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
+                      if (matches) {
+                        isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]);
+                      }
+                    } else if (range.includes('>')) {
+                      const matches = range.match(/>\s*(\d+\.?\d*)/);
+                      if (matches) isOk = val > parseFloat(matches[1]);
+                    } else if (range.includes('<')) {
+                      const matches = range.match(/<\s*(\d+\.?\d*)/);
+                      if (matches) isOk = val < parseFloat(matches[1]);
+                    }
+                    return isOk ? 10 : 0;
+                  });
+
+                  const filled = values.filter(v => v !== null);
+                  const score = filled.length > 0 ? filled.reduce((a, b) => (a || 0) + (b || 0), 0) / filled.length : 0;
+
+                  return (
+                    <div className="rounded-xl border bg-muted/30 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
+                        <span className="text-lg font-black text-foreground">{score.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{filled.length} of {total} parameters recorded</p>
+                    </div>
+                  );
+                })()}
+              </>
+            ) : null}
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
                 <Label className="text-xs">Activity Photo (Optional)</Label>
@@ -1784,103 +1882,107 @@ const RecordActivity = () => {
           <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Animal Quality</h2>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Stage *</Label>
-                <Input
-                  value={animalStage}
-                  onChange={e => setAnimalStage(e.target.value)}
-                  placeholder="Enter Stage"
-                  className="h-11"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">DOC (Days of Culture) *</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={animalDoc}
-                  onChange={e => setAnimalDoc(e.target.value)}
-                  placeholder="Enter DOC"
-                  className="h-11"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Animal Size and Avg. Wt. *</Label>
-              <Input
-                value={animalSize}
-                onChange={e => {
-                  const val = e.target.value;
-                  // Allow numbers and '/' only
-                  if (val === '' || /^[0-9/.]*$/.test(val)) {
-                    setAnimalSize(val);
-                  }
-                }}
-                placeholder="Enter size / avg weight (e.g. 10/12)"
-                className="h-11"
-              />
-              <p className="text-[10px] text-muted-foreground">Only numbers, '.', and '/' allowed</p>
-            </div>
-            <div className="space-y-4">
-              {ANIMAL_RATING_FIELDS.map(f => (
-                <RatingScale
-                  key={f.key}
-                  label={f.label}
-                  required={f.required}
-                  value={animalRatings[f.key] || 0}
-                  onChange={val => setAnimalRatings(prev => ({ ...prev, [f.key]: val }))}
-                />
-              ))}
-            </div>
-
-            {/* Average Score - always visible */}
-            {(() => {
-              const values = ANIMAL_RATING_FIELDS.map(f => animalRatings[f.key] || 0);
-              const filled = values.filter(v => v > 0);
-              const avg = filled.length > 0 ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
-              return (
-                <div className="mt-2 rounded-xl border bg-muted/30 p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
-                    <span className="text-lg font-black text-foreground">{avg.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
+            {!isPlanningMode ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Stage *</Label>
+                    <Input
+                      value={animalStage}
+                      onChange={e => setAnimalStage(e.target.value)}
+                      placeholder="Enter Stage"
+                      className="h-11"
+                    />
                   </div>
-                  <p className="text-[10px] text-muted-foreground">{filled.length} of {ANIMAL_RATING_FIELDS.length} parameters rated</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">DOC (Days of Culture) *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={animalDoc}
+                      onChange={e => setAnimalDoc(e.target.value)}
+                      placeholder="Enter DOC"
+                      className="h-11"
+                    />
+                  </div>
                 </div>
-              );
-            })()}
 
-            <div className="space-y-1.5 pt-2 border-t border-dashed">
-              <Label className="text-xs">Any identification of disease? *</Label>
-              <Select value={hasDiseaseIdentified} onValueChange={v => setHasDiseaseIdentified(v as any)}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select Yes/No" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Yes">Yes</SelectItem>
-                  <SelectItem value="No">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Animal Size and Avg. Wt. *</Label>
+                  <Input
+                    value={animalSize}
+                    onChange={e => {
+                      const val = e.target.value;
+                      // Allow numbers and '/' only
+                      if (val === '' || /^[0-9/.]*$/.test(val)) {
+                        setAnimalSize(val);
+                      }
+                    }}
+                    placeholder="Enter size / avg weight (e.g. 10/12)"
+                    className="h-11"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Only numbers, '.', and '/' allowed</p>
+                </div>
+                <div className="space-y-4">
+                  {ANIMAL_RATING_FIELDS.map(f => (
+                    <RatingScale
+                      key={f.key}
+                      label={f.label}
+                      required={f.required}
+                      value={animalRatings[f.key] || 0}
+                      onChange={val => setAnimalRatings(prev => ({ ...prev, [f.key]: val }))}
+                    />
+                  ))}
+                </div>
 
-            {hasDiseaseIdentified === 'Yes' && (
-              <div className="space-y-1.5 animate-fade-in">
-                <Label className="text-xs">Symptoms *</Label>
-                <Textarea
-                  value={diseaseSymptoms}
-                  onChange={e => setDiseaseSymptoms(e.target.value)}
-                  placeholder="Describe the symptoms..."
-                  rows={3}
-                  required
-                />
-              </div>
-            )}
+                {/* Average Score - always visible during recording */}
+                {(() => {
+                  const values = ANIMAL_RATING_FIELDS.map(f => animalRatings[f.key] || 0);
+                  const filled = values.filter(v => v > 0);
+                  const avg = filled.length > 0 ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
+                  return (
+                    <div className="mt-2 rounded-xl border bg-muted/30 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
+                        <span className="text-lg font-black text-foreground">{avg.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{filled.length} of {ANIMAL_RATING_FIELDS.length} parameters rated</p>
+                    </div>
+                  );
+                })()}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Additional Observations</Label>
-              <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11" />
-            </div>
+                <div className="space-y-1.5 pt-2 border-t border-dashed">
+                  <Label className="text-xs">Any identification of disease? *</Label>
+                  <Select value={hasDiseaseIdentified} onValueChange={v => setHasDiseaseIdentified(v as any)}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select Yes/No" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {hasDiseaseIdentified === 'Yes' && (
+                  <div className="space-y-1.5 animate-fade-in">
+                    <Label className="text-xs">Symptoms *</Label>
+                    <Textarea
+                      value={diseaseSymptoms}
+                      onChange={e => setDiseaseSymptoms(e.target.value)}
+                      placeholder="Describe the symptoms..."
+                      rows={3}
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Additional Observations</Label>
+                  <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11" />
+                </div>
+              </>
+            ) : null}
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
                 <Label className="text-xs">Activity Photo (Optional)</Label>
@@ -1944,7 +2046,7 @@ const RecordActivity = () => {
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
-            availableSourceIds={availableAlgaeSourceIds}
+            availableSourceDetails={availableAlgaeSourceDetails}
           />
         )}
 

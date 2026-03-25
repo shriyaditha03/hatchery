@@ -330,6 +330,7 @@ const OwnerConsolidatedReports = () => {
                                     <TableRow className="bg-muted/50">
                                         <TableHead className="font-bold">Date & Time</TableHead>
                                         <TableHead className="font-bold">Activity Type</TableHead>
+                                        <TableHead className="font-bold">Worker</TableHead>
                                         <TableHead className="font-bold">Section</TableHead>
                                         <TableHead className="font-bold">Tank</TableHead>
                                         <TableHead className="font-bold text-center">Variance</TableHead>
@@ -356,6 +357,11 @@ const OwnerConsolidatedReports = () => {
                                                     {log.activity_type === 'Artemia' 
                                                         ? `Artemia (${log.data?.phase === 'post' ? 'After Harvest' : 'Before Harvest'})` 
                                                         : log.activity_type}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">
+                                                <span className="text-xs font-semibold text-foreground">
+                                                    {log.profiles?.full_name || log.profiles?.username || '—'}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">

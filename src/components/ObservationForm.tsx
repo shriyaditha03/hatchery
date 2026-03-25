@@ -92,64 +92,68 @@ const ObservationForm = ({
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Observation Details</h2>
 
-      {/* 1. Read-only Stocking Stats */}
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-xl border border-dashed relative group">
-          <div className="space-y-0.5 col-span-2">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Batch ID (Stocking ID)</p>
-            <p className="text-sm font-black text-foreground">{data.stockingId || '—'}</p>
+      {/* 1. Read-only Stocking Stats - Only visible during recording */}
+      {!isPlanningMode && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-xl border border-dashed relative group">
+            <div className="space-y-0.5 col-span-2">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Batch ID (Stocking ID)</p>
+              <p className="text-sm font-black text-foreground">{data.stockingId || '—'}</p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Broodstock Type</p>
+              <p className="text-sm font-black text-foreground capitalize truncate" title={data.broodstockSource}>{data.broodstockSource || '—'}</p>
+            </div>
+            <div className="space-y-0.5 mb-2">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Hatchery / Section Name</p>
+              <p className="text-sm font-black text-foreground capitalize truncate" title={data.hatcheryName}>{data.hatcheryName || '—'}</p>
+            </div>
+            <div className="space-y-0.5 border-t border-dashed border-muted-foreground/20 pt-2">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Tank Stocking No.</p>
+              <p className="text-sm font-black text-foreground">{data.tankStockingNumber || '—'}</p>
+            </div>
+            <div className="space-y-0.5 text-right border-t border-dashed border-muted-foreground/20 pt-2">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Nauplii Stocked (M)</p>
+              <p className="text-sm font-black text-foreground">{data.naupliiStockedMillion || '—'}</p>
+            </div>
           </div>
-          <div className="space-y-0.5">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Broodstock Type</p>
-            <p className="text-sm font-black text-foreground capitalize truncate" title={data.broodstockSource}>{data.broodstockSource || '—'}</p>
-          </div>
-          <div className="space-y-0.5 mb-2">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Hatchery / Section Name</p>
-            <p className="text-sm font-black text-foreground capitalize truncate" title={data.hatcheryName}>{data.hatcheryName || '—'}</p>
-          </div>
-          <div className="space-y-0.5 border-t border-dashed border-muted-foreground/20 pt-2">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Tank Stocking No.</p>
-            <p className="text-sm font-black text-foreground">{data.tankStockingNumber || '—'}</p>
-          </div>
-          <div className="space-y-0.5 text-right border-t border-dashed border-muted-foreground/20 pt-2">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Nauplii Stocked (M)</p>
-            <p className="text-sm font-black text-foreground">{data.naupliiStockedMillion || '—'}</p>
-          </div>
+
+          {(onGoToStocking && !data.tankStockingNumber) && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full py-6 rounded-xl border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary text-primary transition-all flex flex-col gap-0.5 h-auto text-center cursor-pointer"
+              onClick={onGoToStocking}
+            >
+              <span className="text-xs font-bold uppercase tracking-tight flex items-center justify-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                No Stocking Record Found
+              </span>
+              <span className="text-[10px] text-muted-foreground font-medium">Tap here to Record Stocking for this tank</span>
+            </Button>
+          )}
         </div>
+      )}
 
-        {(onGoToStocking && !data.tankStockingNumber) && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="w-full py-6 rounded-xl border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary text-primary transition-all flex flex-col gap-0.5 h-auto text-center cursor-pointer"
-            onClick={onGoToStocking}
-          >
-            <span className="text-xs font-bold uppercase tracking-tight flex items-center justify-center gap-1.5">
-              <Plus className="w-3.5 h-3.5" />
-              No Stocking Record Found
-            </span>
-            <span className="text-[10px] text-muted-foreground font-medium">Tap here to Record Stocking for this tank</span>
-          </Button>
-        )}
-      </div>
-
-      {/* 2. Present Population */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Present Population in the Tank *</Label>
-        <Input
-          type="number"
-          min="0"
-          value={data.presentPopulation || ''}
-          onChange={e => {
-            const val = e.target.value;
-            if (val === '' || parseInt(val) >= 0) {
-              handleChange('presentPopulation', val);
-            }
-          }}
-          placeholder="0"
-          className="h-11"
-        />
-      </div>
+      {/* 2. Present Population - Only visible during recording */}
+      {!isPlanningMode && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Present Population in the Tank *</Label>
+          <Input
+            type="number"
+            min="0"
+            value={data.presentPopulation || ''}
+            onChange={e => {
+              const val = e.target.value;
+              if (val === '' || parseInt(val) >= 0) {
+                handleChange('presentPopulation', val);
+              }
+            }}
+            placeholder="0"
+            className="h-11"
+          />
+        </div>
+      )}
 
       {/* 3. Animal Quality Modal - Only visible during recording */}
       {isPlanningMode === false && (

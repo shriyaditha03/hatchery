@@ -98,6 +98,7 @@ const UserDailyReport = () => {
                                     <TableRow className="bg-muted/50">
                                         <TableHead className="font-bold whitespace-nowrap">Time</TableHead>
                                         <TableHead className="font-bold whitespace-nowrap">Activity</TableHead>
+                                        <TableHead className="font-bold whitespace-nowrap">Worker</TableHead>
                                         <TableHead className="font-bold whitespace-nowrap">Location</TableHead>
                                         <TableHead className="font-bold text-center">Details</TableHead>
                                         <TableHead className="font-bold text-center">Edit</TableHead>
@@ -116,6 +117,11 @@ const UserDailyReport = () => {
                                                     {act.activity_type === 'Artemia' 
                                                         ? `Artemia (${act.data?.phase === 'post' ? 'After Harvest' : 'Before Harvest'})` 
                                                         : act.activity_type}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">
+                                                <span className="text-xs font-semibold text-foreground">
+                                                    {act.profiles?.full_name || act.profiles?.username || '—'}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="max-w-[150px]">

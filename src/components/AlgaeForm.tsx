@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, getNowLocal } from '@/lib/date-utils';
 
-const CONTAINER_SIZES = ['100ml', '250ml', '2ltr', '20ltr', '100ltr', '1ton', '12-15ton'];
+const CONTAINER_SIZES = ['Mother Culture', '100ml', '250ml', '2ltr', '20ltr', '100ltr', '1ton', '12-15ton'];
 const CELL_SIZE_OPTIONS = ['Small', 'Medium', 'Large'];
 const CELL_SHAPE_OPTIONS = ['Normal', 'Irregular', 'Fragmented'];
 const CELL_COLOUR_OPTIONS = ['Green', 'Yellow-Green', 'Brown', 'Off-colour'];
@@ -58,7 +58,7 @@ interface AlgaeFormProps {
   comments: string;
   onCommentsChange: (val: string) => void;
   isPlanningMode?: boolean;
-  availableSourceIds?: string[];
+  availableSourceDetails?: any[];
 }
 
 const AlgaeForm = ({
@@ -67,29 +67,67 @@ const AlgaeForm = ({
   comments,
   onCommentsChange,
   isPlanningMode = false,
-  availableSourceIds = [],
+  availableSourceDetails = [],
 }: AlgaeFormProps) => {
   const phase = data.phase || 'new';
 
-  const handlePhaseChange = (p: 'new' | 'discard') => {
+  const handlePhaseChange = (p: 'new' | 'verify' | 'discard') => {
     onDataChange({ ...data, phase: p });
   };
 
-  const handleFieldChange = (field: string, value: any) => {
-    onDataChange({ ...data, [field]: value });
+  const getAgeDays = (createdAtStr?: string, dateStr?: string) => {
+    const targetDate = createdAtStr || dateStr;
+    if (!targetDate) return 'Unknown';
+    const ageDays = Math.max(0, Math.floor((new Date().getTime() - new Date(targetDate).getTime()) / (1000 * 60 * 60 * 24)));
+    return `${ageDays} day${ageDays !== 1 ? 's' : ''}`;
   };
 
   // ── NEW CULTURE state ──
   const algaeSpecies: string = data.algaeSpecies || '';
   const containerSize: string = data.containerSize || '';
   const samples: AlgaeSample[] = data.samples || [newSample(0)];
+  const isMotherCulture = containerSize === 'Mother Culture';
+
+  // Helper function to figure out the right Sample ID format based on Container Size and Species
+  const formatSampleId = (index: number, isMC: boolean, species: string) => {
+    const sNum = isMC ? `MC${index + 1}` : `S${index + 1}`;
+    const datePart = formatDate(getNowLocal(), 'yyMMdd');
+    if (isMC && species) {
+      return `${sNum}_${species.replace(/\s+/g, '')}_${datePart}`;
+    }
+    return `${sNum}_${datePart}`;
+  };
+
+  const handleFieldChange = (field: string, value: any) => {
+    let newData = { ...data, [field]: value };
+    
+    // Auto-update sample IDs if Container Size or Species changes
+    if (field === 'containerSize' || field === 'algaeSpecies') {
+       const isMC = field === 'containerSize' ? value === 'Mother Culture' : isMotherCulture;
+       const spec = field === 'algaeSpecies' ? value : algaeSpecies;
+       
+       const updatedSamples = (newData.samples || samples).map((s: AlgaeSample, i: number) => {
+           if (!s.isManualId) {
+               return { ...s, sampleId: formatSampleId(i, isMC, spec) };
+           }
+           return s;
+       });
+       newData.samples = updatedSamples;
+    }
+    
+    onDataChange(newData);
+  };
 
   const handleSampleCountChange = (countStr: string) => {
     const count = parseInt(countStr) || 1;
     const safeCount = Math.max(1, Math.min(20, count));
     let newSamples = [...samples];
     if (safeCount > samples.length) {
-      for (let i = samples.length; i < safeCount; i++) newSamples.push(newSample(i));
+      for (let i = samples.length; i < safeCount; i++) {
+        const s = newSample(i);
+        s.sampleId = formatSampleId(i, isMotherCulture, algaeSpecies);
+        newSamples.push(s);
+      }
     } else {
       newSamples = newSamples.slice(0, safeCount);
     }
@@ -105,7 +143,25 @@ const AlgaeForm = ({
       }
       return s;
     });
-    onDataChange({ ...data, samples: updated });
+    
+    let newData = { ...data, samples: updated };
+    
+    // Auto-populate Species if this is the first sample's inoculum source (and not MC)
+    if (field === 'inoculumSourceId' && idx === 0 && !isMotherCulture) {
+       const sourceObj = availableSourceDetails.find(d => d.id === value);
+       if (sourceObj && sourceObj.species) {
+          newData.algaeSpecies = sourceObj.species;
+          // Trigger sample ID updates for any non-manual IDs
+          newData.samples = newData.samples.map((s: AlgaeSample, i: number) => {
+             if (!s.isManualId) {
+                 return { ...s, sampleId: formatSampleId(i, isMotherCulture, sourceObj.species) };
+             }
+             return s;
+          });
+       }
+    }
+    
+    onDataChange(newData);
   };
 
   const removeSample = (idx: number) => {
@@ -116,6 +172,16 @@ const AlgaeForm = ({
   // ── DISCARD PREVIOUS state ──
   const discardSampleId: string = data.discardSampleId || '';
   const discardReason: string = data.discardReason || '';
+  
+  // ── VERIFY SAMPLE state ──
+  const verifySampleId: string = data.verifySampleId || '';
+  const verifyCellCount: string = data.verifyCellCount || '';
+  const verifyCellQuality: string = data.verifyCellQuality || '';
+  const verifyContamination: string = data.verifyContamination || 'None';
+  
+  const selectedVerifyDetails = availableSourceDetails.find(d => d.id === verifySampleId);
+  
+  const availableSourceIds = availableSourceDetails.map(d => d.id);
 
   return (
     <div className="glass-card rounded-2xl p-4 space-y-6 animate-fade-in-up">
@@ -138,6 +204,17 @@ const AlgaeForm = ({
         </button>
         <button
           type="button"
+          onClick={() => handlePhaseChange('verify')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            phase === 'verify'
+              ? 'bg-blue-500/10 shadow text-blue-600 dark:bg-blue-500/20 dark:text-blue-400'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          🔍 Verify Sample
+        </button>
+        <button
+          type="button"
           onClick={() => handlePhaseChange('discard')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
             phase === 'discard'
@@ -149,15 +226,95 @@ const AlgaeForm = ({
         </button>
       </div>
 
+      {/* ── VERIFY SAMPLE ── */}
+      {phase === 'verify' && (
+        <div className="space-y-5 animate-fade-in-up">
+          <div className="space-y-1.5 text-blue-600 dark:text-blue-400">
+            <Label className="text-xs font-bold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              1. Select Sample to Verify <span className="text-destructive">*</span>
+            </Label>
+            <Select value={verifySampleId} onValueChange={v => handleFieldChange('verifySampleId', v)}>
+              <SelectTrigger className="h-11 rounded-xl font-bold bg-blue-500/5 border-blue-500/20">
+                <SelectValue placeholder="Choose past sample ID" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {availableSourceIds.length > 0 ? (
+                  availableSourceIds.map(id => (
+                    <SelectItem key={id} value={id}>{id}</SelectItem>
+                  ))
+                ) : (
+                  <div className="p-2 text-xs text-muted-foreground text-center">No Algae sample IDs found</div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!isPlanningMode && (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-xl border border-dashed">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase text-muted-foreground font-bold">Inoculum Source</Label>
+                  <Input value={selectedVerifyDetails?.inoculumSourceId || 'N/A'} disabled className="h-8 text-xs bg-background/50" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase text-muted-foreground font-bold">Inoculum Quantity</Label>
+                  <Input value={selectedVerifyDetails?.inoculumQuantity ? `${selectedVerifyDetails.inoculumQuantity} ${selectedVerifyDetails.inoculumUnit || ''}` : 'N/A'} disabled className="h-8 text-xs bg-background/50" />
+                </div>
+                <div className="space-y-1 col-span-2 lg:col-span-1">
+                  <Label className="text-[10px] uppercase text-muted-foreground font-bold">Age</Label>
+                  <Input value={getAgeDays(selectedVerifyDetails?.createdAt, selectedVerifyDetails?.date)} disabled className="h-8 text-xs bg-background/50 font-bold text-primary" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold flex gap-1">Cell Count (per ml) <span className="text-destructive">*</span></Label>
+                  <Input type="number" min="0" value={verifyCellCount} onChange={e => handleFieldChange('verifyCellCount', e.target.value)} placeholder="e.g. 1000000" className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold flex gap-1">Cell Quality <span className="text-destructive">*</span></Label>
+                  <Input value={verifyCellQuality} onChange={e => handleFieldChange('verifyCellQuality', e.target.value)} placeholder="e.g. Good, Intact, etc." className="h-11 rounded-xl" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Contamination</Label>
+                <Select value={verifyContamination} onValueChange={v => handleFieldChange('verifyContamination', v)}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CONTAMINATION_OPTIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-2 pt-2 border-t border-dashed">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {isPlanningMode ? 'Instructions' : 'Verification Notes'}
+            </Label>
+            <Textarea
+              value={comments}
+              onChange={e => onCommentsChange(e.target.value)}
+              placeholder={isPlanningMode ? "Add instructions for sample verification..." : "Any additional observations about this sample..."}
+              rows={2}
+              className="rounded-xl resize-none"
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── DISCARD PREVIOUS ── */}
       {phase === 'discard' && (
         <div className="space-y-5 animate-fade-in-up">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold flex items-center gap-1">
+          <div className="space-y-1.5 text-destructive">
+            <Label className="text-xs font-bold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
               1. Select Sample to Discard <span className="text-destructive">*</span>
             </Label>
             <Select value={discardSampleId} onValueChange={v => handleFieldChange('discardSampleId', v)}>
-              <SelectTrigger className="h-11 rounded-xl border-destructive/20 bg-destructive/5 font-black text-destructive">
+              <SelectTrigger className="h-11 rounded-xl border-destructive/20 bg-destructive/5 font-black">
                 <SelectValue placeholder="Choose from previous Algae Sample IDs" />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
@@ -170,30 +327,29 @@ const AlgaeForm = ({
                 )}
               </SelectContent>
             </Select>
-            <p className="text-[9px] text-muted-foreground italic pl-1">
-              Choose a previously submitted Algae sample ID to mark it as discarded
-            </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold flex items-center gap-1">
-              2. Reason for Discarding <span className="text-destructive">*</span>
-            </Label>
-            <Textarea
-              value={discardReason}
-              onChange={e => handleFieldChange('discardReason', e.target.value)}
-              placeholder="e.g. Contamination detected, poor growth, colour change..."
-              rows={3}
-              className="rounded-xl resize-none border-destructive/20 bg-destructive/5"
-            />
-          </div>
+          {!isPlanningMode && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold flex items-center gap-1">
+                2. Reason for Discarding <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                value={discardReason}
+                onChange={e => handleFieldChange('discardReason', e.target.value)}
+                placeholder="e.g. Contamination detected, poor growth, colour change..."
+                rows={3}
+                className="rounded-xl resize-none border-destructive/20 bg-destructive/5"
+              />
+            </div>
+          )}
 
           <div className="space-y-2 pt-2 border-t border-dashed">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes</Label>
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Instructions</Label>
             <Textarea
               value={comments}
               onChange={e => onCommentsChange(e.target.value)}
-              placeholder="Any additional observations..."
+              placeholder={isPlanningMode ? "Add instructions for discarding these samples..." : "Any additional observations..."}
               rows={2}
               className="rounded-xl resize-none"
             />
@@ -204,20 +360,7 @@ const AlgaeForm = ({
       {/* ── NEW CULTURE ── */}
       {phase === 'new' && (
         <div className="space-y-6 animate-fade-in-up">
-          <div className="space-y-4">
-            {/* Algae Species */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold flex items-center gap-1.5">
-                Algae Species <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={algaeSpecies}
-                onChange={(e) => handleFieldChange('algaeSpecies', e.target.value)}
-                placeholder="e.g. Chaetoceros"
-                className="h-11 rounded-xl"
-              />
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* 1. Container Size */}
             <div className="space-y-2">
               <Label className="text-xs font-bold flex items-center gap-1.5">
@@ -240,17 +383,35 @@ const AlgaeForm = ({
                 ))}
               </div>
             </div>
+
+            {/* Algae Species */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold flex items-center gap-1.5">
+                Algae Species <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={algaeSpecies}
+                onChange={(e) => handleFieldChange('algaeSpecies', e.target.value)}
+                placeholder={isMotherCulture ? "e.g. Chaetoceros" : "Auto-populated from source sample"}
+                className={`h-11 rounded-xl ${!isMotherCulture && !isPlanningMode ? 'bg-muted/50 text-muted-foreground' : ''}`}
+                disabled={!isMotherCulture && !isPlanningMode}
+              />
+              {!isMotherCulture && !isPlanningMode && <p className="text-[10px] text-muted-foreground italic pl-1 mt-0.5">Determined by Sample 1's Inoculum Source</p>}
+            </div>
           </div>
 
           {/* 2. Samples Count */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">2. No. of Samples</Label>
+            <Label className="text-xs font-bold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              2. No. of Samples
+            </Label>
             <div className="flex items-center gap-3">
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0"
+                className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0 shadow-sm"
                 onClick={() => handleSampleCountChange((samples.length - 1).toString())}
                 disabled={samples.length <= 1}
               >
@@ -262,13 +423,13 @@ const AlgaeForm = ({
                 max="20"
                 value={samples.length}
                 onChange={(e) => handleSampleCountChange(e.target.value)}
-                className="h-11 rounded-xl bg-muted/30 font-bold border-border text-center text-lg"
+                className="h-11 rounded-xl bg-muted/10 font-black border-border text-center text-lg focus:bg-background"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0"
+                className="h-11 w-11 rounded-xl border-border hover:border-primary/50 shrink-0 shadow-sm"
                 onClick={() => handleSampleCountChange((samples.length + 1).toString())}
                 disabled={samples.length >= 20}
               >
@@ -276,6 +437,7 @@ const AlgaeForm = ({
               </Button>
             </div>
           </div>
+
 
           {/* Sample Cards */}
           {!isPlanningMode && (

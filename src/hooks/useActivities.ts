@@ -18,7 +18,7 @@ export interface ActivityRecord {
   };
   sections?: { name: string };
   farms?: { name: string };
-  profiles?: { username: string };
+  profiles?: { username: string; full_name: string };
   // UI helpers for legacy compat
   date?: string;
   time?: string;
@@ -41,7 +41,7 @@ export function useActivities() {
         .from('activity_logs')
         .select(`
           *,
-          profiles(username),
+          profiles(username, full_name),
           tanks(
             name,
             sections(name)
@@ -98,7 +98,7 @@ export function useActivities() {
       .eq('id', id)
       .select(`
         *,
-        profiles(username),
+        profiles(username, full_name),
         tanks(
           name,
           sections(name)

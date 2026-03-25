@@ -51,29 +51,39 @@ const UserDashboard = () => {
     }, [activeSectionId, sections]);
 
     useEffect(() => {
-        if (activeSectionId) {
-            fetchInstructions();
-        }
+        fetchInstructions();
         if (user?.role === 'supervisor') {
             fetchSupervisorInstructions();
         }
 
         // Refetch when window gains focus (e.g. after returning from recording an activity)
         const handleFocus = () => {
-            if (activeSectionId) fetchInstructions();
+            fetchInstructions();
             if (user?.role === 'supervisor') fetchSupervisorInstructions();
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, [activeSectionId]);
+    }, [user?.id, sections.length]);
 
     const fetchInstructions = async () => {
         try {
             setLoading(true);
             const today = getTodayStr();
+            const threeDaysAgo = new Date();
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+            const dateLimit = threeDaysAgo.toISOString().split('T')[0];
             
-            // Fetch all instructions for this section + farm level instructions
-            const { data, error } = await supabase
+            // Get all section IDs the user has access to
+            const sectionIds = sections.map(s => s.id);
+            const farmIds = Array.from(new Set(sections.map(s => s.farm_id)));
+
+            if (sectionIds.length === 0 && farmIds.length === 0) {
+                setInstructions([]);
+                return;
+            }
+
+            // Fetch all instructions for all assigned sections + farm level instructions
+            let query = supabase
                 .from('activity_charts')
                 .select(`
                     *,
@@ -81,17 +91,32 @@ const UserDashboard = () => {
                     sections (name),
                     tanks (name)
                 `)
-                .or(`section_id.eq.${activeSectionId},and(farm_id.eq.${activeFarmId},section_id.is.null,tank_id.is.null)`)
-                .or(`assigned_to.is.null,assigned_to.eq.${user.id}`)
-                .eq('scheduled_date', today)
                 .eq('is_completed', false)
-                .order('scheduled_time', { ascending: true });
+                .gte('scheduled_date', dateLimit)
+                .lte('scheduled_date', today);
+
+            // Construct the access filter
+            const sectionFilter = sectionIds.length > 0 ? `section_id.in.(${sectionIds.join(',')})` : '';
+            const farmFilter = farmIds.length > 0 ? `and(farm_id.in.(${farmIds.join(',')}),section_id.is.null,tank_id.is.null)` : '';
+            
+            let orFilter = '';
+            if (sectionFilter && farmFilter) orFilter = `${sectionFilter},${farmFilter}`;
+            else orFilter = sectionFilter || farmFilter;
+
+            if (orFilter) {
+                query = query.or(orFilter);
+            }
+
+            // Also check if assigned specifically to this user or unassigned
+            query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`);
+
+            const { data, error } = await query.order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true });
 
             if (error) throw error;
             setInstructions(data || []);
         } catch (error) {
             console.error('Error fetching instructions:', error);
-            toast.error('Failed to load today\'s tasks');
+            toast.error('Failed to load pending tasks');
         } finally {
             setLoading(false);
         }
@@ -105,6 +130,7 @@ const UserDashboard = () => {
                 .select(`*, tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
                 .eq('created_by', user?.id)
                 .eq('scheduled_date', today)
+                .order('is_completed', { ascending: true })
                 .order('scheduled_time', { ascending: true });
             if (!error) setSupervisorInstructions(data || []);
         } catch (err) {
@@ -264,7 +290,7 @@ const UserDashboard = () => {
             {user.role !== 'supervisor' && (
             <div className="px-4 mt-8 pb-10">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">Today's Instructions</h3>
+                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">Pending Instructions</h3>
                     {instructions.length > 0 && (
                         <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
                             {instructions.length} Pending
@@ -299,16 +325,16 @@ const UserDashboard = () => {
                                                     {instr.activity_type === 'Feed' ? <Utensils className="w-3 h-3" /> : <Beaker className="w-3 h-3" />}
                                                 </div>
                                                 <span className="text-xs font-bold truncate">
-                                                    {instr.activity_type} - {instr.tanks?.name || instr.sections?.name || 'Section Wide'}
+                                                    {instr.activity_type} - {instr.farms?.name} / {instr.sections?.name}{instr.tanks?.name ? ` / ${instr.tanks.name}` : ''}
                                                 </span>
                                             </div>
                                             <p className="text-[11px] text-muted-foreground line-clamp-2 italic mb-2">
                                                 "{instr.instruction_text || 'No specific notes'}"
                                             </p>
                                             <div className="flex items-center gap-3">
-                                                <div className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-lg">
+                                                <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg ${instr.scheduled_date !== getTodayStr() ? 'text-destructive bg-destructive/5 border border-destructive/10' : 'text-primary bg-primary/5'}`}>
                                                     <Clock className="w-3 h-3" />
-                                                    {instr.scheduled_time?.slice(0, 5)}
+                                                    {instr.scheduled_date !== getTodayStr() ? `${instr.scheduled_date} ${instr.scheduled_time?.slice(0, 5)}` : instr.scheduled_time?.slice(0, 5)}
                                                 </div>
                                                 <div className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 italic">
                                                     {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
