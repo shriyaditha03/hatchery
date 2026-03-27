@@ -11,7 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, FileText, ClipboardList, Utensils, Beaker, Eye, Search, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Trash2, Plus } from 'lucide-react';
+import { User, LogOut, FileText, ClipboardList, Utensils, Beaker, Eye, Search, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Trash2, Plus, Scissors, MoveRight } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -162,9 +162,24 @@ const UserDashboard = () => {
         { name: 'Animal Quality', icon: Search, route: '/user/activity/animal', color: 'bg-rose-100 text-rose-600' },
         { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
         { name: 'Observation', icon: Eye, route: '/user/activity/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
+        { name: 'Tank Shifting', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
         { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
         { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
     ];
+
+    const ACTIVITY_ICONS: Record<string, any> = {
+        'Feed': Utensils,
+        'Treatment': Beaker,
+        'Water Quality': Waves,
+        'Animal Quality': Search,
+        'Stocking': Layers,
+        'Observation': Eye,
+        'Artemia': Beaker,
+        'Algae': Waves,
+        'Harvest': Scissors,
+        'Tank Shifting': MoveRight
+    };
 
     const handleLogout = async () => {
         await logout();
@@ -349,7 +364,10 @@ const UserDashboard = () => {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <div className="p-1 rounded bg-muted">
-                                                    {instr.activity_type === 'Feed' ? <Utensils className="w-3 h-3" /> : <Beaker className="w-3 h-3" />}
+                                                    {(() => {
+                                                        const Icon = ACTIVITY_ICONS[instr.activity_type] || ClipboardList;
+                                                        return <Icon className="w-3 h-3" />;
+                                                    })()}
                                                 </div>
                                                 <span className="text-xs font-bold truncate">
                                                     {instr.activity_type} - {instr.farms?.name} / {instr.sections?.name}{instr.tanks?.name ? ` / ${instr.tanks.name}` : ''}

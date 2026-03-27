@@ -15,6 +15,8 @@ import StockingForm from '@/components/StockingForm';
 import ObservationForm from '@/components/ObservationForm';
 import ArtemiaForm from '@/components/ArtemiaForm';
 import AlgaeForm from '@/components/AlgaeForm';
+import HarvestForm from '@/components/HarvestForm';
+import TankShiftingForm from '@/components/TankShiftingForm';
 import ImageUpload from '@/components/ImageUpload';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { toast } from 'sonner';
@@ -31,7 +33,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -370,6 +372,8 @@ const RecordActivity = () => {
         if (actType === 'Artemia' && pd.artemiaData) setArtemiaData(pd.artemiaData);
         if (actType === 'Stocking' && pd.stockingData) setStockingData(pd.stockingData);
         if (actType === 'Observation' && pd.observationData) setObservationData(pd.observationData);
+        if (actType === 'Harvest' && pd.harvestData) setHarvestData(pd.harvestData);
+        if (actType === 'Tank Shifting' && pd.tankShiftingData) setTankShiftingData(pd.tankShiftingData);
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
@@ -461,6 +465,10 @@ const RecordActivity = () => {
       setStockingData(planned_data.stockingData);
     } else if (currentAct === 'Observation' && planned_data.observationData) {
       setObservationData(planned_data.observationData);
+    } else if (currentAct === 'Harvest' && planned_data.harvestData) {
+      setHarvestData(planned_data.harvestData);
+    } else if (currentAct === 'Tank Shifting' && planned_data.tankShiftingData) {
+      setTankShiftingData(planned_data.tankShiftingData);
     }
     
     setSelectedInstructionId(instruction.id);
@@ -522,6 +530,10 @@ const RecordActivity = () => {
           setStockingData(data.data);
         } else if (actType === 'Observation') {
           setObservationData(data.data);
+        } else if (actType === 'Harvest') {
+          setHarvestData(data.data);
+        } else if (actType === 'Tank Shifting') {
+          setTankShiftingData(data.data);
         }
       }
     } catch (err) {
@@ -593,6 +605,58 @@ const RecordActivity = () => {
     }
   };
 
+  const fetchLatestPopulation = async (tid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('data, activity_type')
+        .eq('tank_id', tid)
+        .in('activity_type', ['Stocking', 'Observation', 'Harvest', 'Tank Shifting'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data && data.data) {
+        let population = 0;
+        if (data.activity_type === 'Stocking') {
+          population = parseFloat(data.data.tankStockingNumber || '0');
+        } else if (data.activity_type === 'Observation') {
+          population = parseFloat(data.data.presentPopulation || '0');
+        } else if (data.activity_type === 'Harvest') {
+          population = parseFloat(data.data.populationAfterHarvest || '0');
+        } else if (data.activity_type === 'Tank Shifting') {
+           // For tank shifting, we need to know if the current tank was source or destination
+           // But since activity_logs is per tank, it's easier: 
+           // If it's a 'Tank Shifting' record for THIS tank, it MUST have the final population for this tank.
+           if (data.data.sourceTankId === tid) {
+               population = parseFloat(data.data.remainingInSource || '0');
+           } else {
+               // If it's a destination, we need to find the population for this specific tank
+               const dest = (data.data.destinations || []).find((d: any) => d.tankId === tid);
+               population = parseFloat(dest?.populationToShift || '0') + parseFloat(dest?.currentPopulation || '0');
+           }
+        }
+        return population;
+      }
+    } catch (err) {
+      console.error('Error fetching latest population:', err);
+    }
+    return 0;
+  };
+
+  // Auto-fetch Population for Harvest & Tank Shifting
+  useEffect(() => {
+    if ((activity === 'Harvest' || activity === 'Tank Shifting') && tankId && !editId) {
+      fetchLatestPopulation(tankId).then(pop => {
+        if (activity === 'Harvest') {
+          setHarvestData(prev => ({ ...prev, populationBeforeHarvest: pop.toString() }));
+        } else {
+          setTankShiftingData(prev => ({ ...prev, sourcePopulation: pop.toString() }));
+        }
+      });
+    }
+  }, [activity, tankId, editId]);
+
   // Auto-select activity from URL (if not editing)
   useEffect(() => {
     if (type && !editId) {
@@ -607,6 +671,9 @@ const RecordActivity = () => {
         'observation': 'Observation',
         'artemia': 'Artemia',
         'algae': 'Algae',
+        'harvest': 'Harvest',
+        'tank shifting': 'Tank Shifting',
+        'shifting': 'Tank Shifting',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
@@ -643,6 +710,8 @@ const RecordActivity = () => {
   // Artemia & Algae data
   const [artemiaData, setArtemiaData] = useState<any>({ phase: 'pre' });
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
+  const [harvestData, setHarvestData] = useState<any>({});
+  const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
 
   const [comments, setComments] = useState('');
 
@@ -787,6 +856,8 @@ const RecordActivity = () => {
       case 'Observation': return { ...baseData, ...observationData, photo_url: photoUrl };
       case 'Artemia': return { ...baseData, ...artemiaData, photo_url: photoUrl };
       case 'Algae': return { ...baseData, ...algaeData };
+      case 'Harvest': return { ...baseData, ...harvestData };
+      case 'Tank Shifting': return { ...baseData, ...tankShiftingData };
       default: return baseData;
     }
   };
@@ -869,6 +940,15 @@ const RecordActivity = () => {
           }
         }
 
+        if (activity === 'Harvest' && !harvestData.populationBeforeHarvest) {
+          toast.error('Population before harvest is required');
+          return;
+        }
+        if (activity === 'Tank Shifting' && !tankShiftingData.sourcePopulation) {
+          toast.error('Source population is required');
+          return;
+        }
+
         if (activity === 'Artemia') {
           if (artemiaData.phase === 'pre') {
             if (!artemiaData.numberOfSamples) {
@@ -923,7 +1003,9 @@ const RecordActivity = () => {
             stockingData: activity === 'Stocking' ? stockingData : undefined,
             observationData: activity === 'Observation' ? observationData : undefined,
             artemiaData: activity === 'Artemia' ? artemiaData : undefined,
-            algaeData: activity === 'Algae' ? algaeData : undefined
+            algaeData: activity === 'Algae' ? algaeData : undefined,
+            harvestData: activity === 'Harvest' ? harvestData : undefined,
+            tankShiftingData: activity === 'Tank Shifting' ? tankShiftingData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
@@ -1120,6 +1202,25 @@ const RecordActivity = () => {
       }
     }
 
+    if (activity === 'Harvest') {
+      if (!harvestData.harvestedPopulation) {
+        toast.error('Harvested population is required');
+        return;
+      }
+    }
+
+    if (activity === 'Tank Shifting') {
+      const invalid = (tankShiftingData.destinations || []).some((d: any) => !d.tankId || !d.populationToShift);
+      if (invalid) {
+        toast.error('All destination tanks and populations must be specified');
+        return;
+      }
+      if (!tankShiftingData.sourcePopulation) {
+        toast.error('Source population is required');
+        return;
+      }
+    }
+
     if (activity === 'Artemia') {
       if (artemiaData.phase === 'pre') {
         if (!artemiaData.sampleId) {
@@ -1313,6 +1414,41 @@ const RecordActivity = () => {
               const logIds = await Promise.all(artemiaPromises);
               return logIds[0]; // just return the first one for the flow
             }
+          }
+
+          // Special bulk save for Tank Shifting (record for destinations too)
+          if (activity === 'Tank Shifting') {
+            const dests = currentBuildData.destinations || [];
+            const destPromises = dests.map(async (dest: any) => {
+              if (!dest.tankId) return null;
+              
+              // Find destination's farm/section if different
+              const destSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === dest.tankId));
+              
+              const destLogData = {
+                ...currentBuildData,
+                isDestination: true,
+                isSource: false,
+                sourceTankId: tId,
+                previousPopulation: dest.currentPopulation,
+                addedPopulation: dest.populationToShift,
+                newPopulation: (parseFloat(dest.currentPopulation || '0') + parseFloat(dest.populationToShift || '0')).toString()
+              };
+
+              return addActivity({
+                tank_id: dest.tankId,
+                section_id: destSection?.id,
+                farm_id: destSection?.farm_id || fId,
+                activity_type: activity as any,
+                data: destLogData
+              });
+            });
+            await Promise.all(destPromises);
+
+            // Add role to source log data
+            currentBuildData.isSource = true;
+            currentBuildData.isDestination = false;
+            currentBuildData.sourceTankId = tId;
           }
 
           const logId = await addActivity({
@@ -2121,6 +2257,27 @@ const RecordActivity = () => {
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
             availableSourceDetails={availableAlgaeSourceDetails}
+          />
+        )}
+
+        {activity === 'Harvest' && (
+          <HarvestForm
+            data={harvestData}
+            onDataChange={setHarvestData}
+            comments={comments}
+            onCommentsChange={setComments}
+            isPlanningMode={isPlanningMode}
+          />
+        )}
+
+        {activity === 'Tank Shifting' && (
+          <TankShiftingForm
+            data={tankShiftingData}
+            onDataChange={setTankShiftingData}
+            availableTanks={availableTanks}
+            comments={comments}
+            onCommentsChange={setComments}
+            isPlanningMode={isPlanningMode}
           />
         )}
 

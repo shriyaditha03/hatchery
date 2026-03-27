@@ -15,7 +15,7 @@ import {
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
     Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
-    FlaskConical, Leaf, MapPin
+    FlaskConical, Leaf, MapPin, Scissors, MoveRight
 } from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 
@@ -51,6 +51,8 @@ const OwnerDashboard = () => {
         { name: 'Animal Quality', icon: Search, route: '/owner/reports/animal', color: 'bg-rose-100 text-rose-600' },
         { name: 'Stocking', icon: Layers, route: '/owner/reports/stocking', color: 'bg-emerald-100 text-emerald-600' },
         { name: 'Observation', icon: Eye, route: '/owner/reports/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Harvest', icon: Scissors, route: '/owner/reports/harvest', color: 'bg-amber-100 text-amber-600' },
+        { name: 'Tank Shifting', icon: MoveRight, route: '/owner/reports/shifting', color: 'bg-indigo-100 text-indigo-600' },
         { name: 'Artemia', icon: FlaskConical, route: '/owner/reports/artemia', color: 'bg-teal-100 text-teal-600' },
         { name: 'Algae', icon: Leaf, route: '/owner/reports/algae', color: 'bg-green-100 text-green-700' },
     ];

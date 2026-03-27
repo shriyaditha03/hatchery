@@ -25,6 +25,6 @@ BEGIN
     -- Add the updated constraint
     ALTER TABLE public.activity_charts 
     ADD CONSTRAINT activity_charts_activity_type_check 
-    CHECK (activity_type IN ('Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae'));
+    CHECK (activity_type IN ('Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting'));
 
 END $$;
