@@ -113,7 +113,7 @@ const HarvestForm = ({
         </div>
       ) : (
         <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
-          <Label className="text-xs">3. Harvested Population *</Label>
+          <Label className="text-xs">3. To Harvest *</Label>
           <Input
             type="number"
             value={data.harvestedPopulation || ''}

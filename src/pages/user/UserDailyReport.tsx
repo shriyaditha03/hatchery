@@ -114,8 +114,8 @@ const UserDailyReport = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getActivityTypeColor(act.activity_type)}`}>
-                                                    {act.activity_type === 'Artemia' 
-                                                        ? `Artemia (${act.data?.phase === 'post' ? 'After Harvest' : 'Before Harvest'})` 
+                                                    {act.activity_type === 'Artemia'
+                                                        ? `Artemia (${act.data?.phase === 'post' ? 'After Harvest' : 'Before Harvest'})`
                                                         : act.activity_type}
                                                 </span>
                                             </TableCell>

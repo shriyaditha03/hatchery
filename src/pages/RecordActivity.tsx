@@ -94,6 +94,7 @@ const RecordActivity = () => {
 
   const [loading, setLoading] = useState(false);
   const [availableTanks, setAvailableTanks] = useState<any[]>([]);
+  const [stockedTankIds, setStockedTankIds] = useState<string[]>([]);
   const [dbFeedTypes, setDbFeedTypes] = useState<string[]>(FEED_TYPES);
   const [dbTreatmentTypes, setDbTreatmentTypes] = useState<string[]>(TREATMENT_TYPES);
   const [selectedFarmId, setSelectedFarmId] = useState<string>('');
@@ -214,7 +215,18 @@ const RecordActivity = () => {
         });
       });
 
-      setAvailableTanks(Array.from(sectionsMap.values()));
+      const finalTanks = Array.from(sectionsMap.values());
+      setAvailableTanks(finalTanks);
+
+      // Fetch which of these tanks have an active population
+      const allTankIds = finalTanks.flatMap((s: any) => s.tanks.map((t: any) => t.id));
+      if (allTankIds.length > 0) {
+        const { data: popData, error: popError } = await supabase.rpc('get_active_tank_populations', { p_tank_ids: allTankIds });
+        if (!popError && popData) {
+           const stockedIds = popData.filter((d: any) => parseFloat(d.current_population) > 0).map((d: any) => d.tank_id);
+           setStockedTankIds(stockedIds);
+        }
+      }
     } catch (err) {
       console.error('Error fetching tanks:', err);
       toast.error('Failed to load tanks');
@@ -1258,9 +1270,13 @@ const RecordActivity = () => {
     let targets = [];
     if (selectionScope === 'all') {
       const section = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-      if (section) targets = section.tanks.map((t: any) => t.id);
+      if (section) {
+        targets = section.tanks
+          .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+          .map((t: any) => t.id);
+      }
     } else if (selectionScope === 'custom') {
-      targets = selectedTankIds;
+      targets = selectedTankIds.filter(id => activity === 'Stocking' || editId || stockedTankIds.includes(id));
     } else {
       targets = [tankId];
     }
@@ -1786,7 +1802,9 @@ const RecordActivity = () => {
                             <SelectValue placeholder="Choose tank" />
                           </SelectTrigger>
                           <SelectContent>
-                            {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
+                            {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
+                              .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+                              .map((t: any) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -1810,7 +1828,9 @@ const RecordActivity = () => {
                   <div className="pt-2 border-t border-dashed animate-in fade-in slide-in-from-top-2">
                     <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
                     <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
-                      {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || []).map((t: any) => (
+                      {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
+                        .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+                        .map((t: any) => (
                         <div 
                           key={t.id}
                           onClick={() => {
