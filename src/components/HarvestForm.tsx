@@ -52,7 +52,7 @@ const HarvestForm = ({
 
   return (
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Harvest Details</h2>
+      <h2 className="text-sm font-bold text-primary uppercase tracking-wider">Harvest Details</h2>
 
       {/* 1. Population Before Harvest */}
       <div className="space-y-1.5">
@@ -113,7 +113,7 @@ const HarvestForm = ({
         </div>
       ) : (
         <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
-          <Label className="text-xs">3. To Harvest *</Label>
+          <Label className="text-xs">3. {isPlanningMode ? 'To Harvest' : 'Harvested population'} *</Label>
           <Input
             type="number"
             value={data.harvestedPopulation || ''}

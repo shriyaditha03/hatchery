@@ -45,6 +45,30 @@ const UserDashboard = () => {
             .map(id => allSections.find(s => s.id === id)!);
     }, [user.access]);
 
+    const groupedInstructions = useMemo(() => {
+        const groups: Record<string, Record<string, any[]>> = {};
+        instructions.forEach(instr => {
+            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
+            const activityName = instr.activity_type;
+            if (!groups[sectionName]) groups[sectionName] = {};
+            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
+            groups[sectionName][activityName].push(instr);
+        });
+        return groups;
+    }, [instructions]);
+
+    const groupedSupervisorInstructions = useMemo(() => {
+        const groups: Record<string, Record<string, any[]>> = {};
+        supervisorInstructions.forEach(instr => {
+            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
+            const activityName = instr.activity_type;
+            if (!groups[sectionName]) groups[sectionName] = {};
+            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
+            groups[sectionName][activityName].push(instr);
+        });
+        return groups;
+    }, [supervisorInstructions]);
+
     useEffect(() => {
         if (!activeSectionId && sections.length > 0) {
             const first = sections[0];
@@ -355,48 +379,67 @@ const UserDashboard = () => {
                         <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1">Enjoy your day!</p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {instructions.map((instr) => (
-                            <div key={instr.id} className="relative group">
-                                <div className="absolute -left-1 top-4 bottom-4 w-1 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
-                                <div className="bg-card border shadow-sm rounded-2xl p-4 transition-all hover:shadow-md">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1 min-w-0">
+                    <div className="space-y-6">
+                        {Object.entries(groupedInstructions).map(([sectionName, activities]) => (
+                            <div key={sectionName} className="space-y-4">
+                                <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest border-b pb-1 border-border/50 flex items-center gap-2">
+                                    <Layers className="w-3.5 h-3.5" />
+                                    {sectionName}
+                                </h4>
+                                {Object.entries(activities).map(([activityName, instrs]) => {
+                                    const Icon = ACTIVITY_ICONS[activityName] || ClipboardList;
+                                    return (
+                                        <div key={activityName} className="space-y-3 pl-1 sm:pl-3">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <div className="p-1 rounded bg-muted">
-                                                    {(() => {
-                                                        const Icon = ACTIVITY_ICONS[instr.activity_type] || ClipboardList;
-                                                        return <Icon className="w-3 h-3" />;
-                                                    })()}
+                                                    <Icon className="w-3 h-3 text-muted-foreground" />
                                                 </div>
-                                                <span className="text-xs font-bold truncate">
-                                                    {instr.activity_type} - {instr.farms?.name} / {instr.sections?.name}{instr.tanks?.name ? ` / ${instr.tanks.name}` : ''}
-                                                </span>
+                                                <h5 className="text-[10px] font-bold text-foreground/80 uppercase tracking-wider">{activityName}</h5>
                                             </div>
-                                            <p className="text-[11px] text-muted-foreground line-clamp-2 italic mb-2">
-                                                "{instr.instruction_text || 'No specific notes'}"
-                                            </p>
-                                            <div className="flex items-center gap-3">
-                                                <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg ${instr.scheduled_date !== getTodayStr() ? 'text-destructive bg-destructive/5 border border-destructive/10' : 'text-primary bg-primary/5'}`}>
-                                                    <Clock className="w-3 h-3" />
-                                                    {instr.scheduled_date !== getTodayStr() ? `${instr.scheduled_date} ${instr.scheduled_time?.slice(0, 5)}` : instr.scheduled_time?.slice(0, 5)}
-                                                </div>
-                                                <div className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 italic">
-                                                    {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
-                                                </div>
+                                            <div className="space-y-3">
+                                                {instrs.map((instr) => (
+                                                    <div key={instr.id} className="relative group pl-2">
+                                                        <div className="absolute left-0 top-4 bottom-4 w-1 bg-primary/40 rounded-full group-hover:bg-primary transition-colors" />
+                                                        <div className="bg-card border shadow-sm rounded-2xl p-4 transition-all hover:shadow-md ml-[4px]">
+                                                            <div className="flex items-start justify-between gap-4">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <span className="text-xs font-bold truncate">
+                                                                            {instr.tanks?.name ? `Tank ${instr.tanks.name}` : 'Section Wide'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-[11px] text-muted-foreground line-clamp-2 italic mb-2">
+                                                                        "{instr.planned_data?.instructions || instr.instruction_text || 'No specific notes'}"
+                                                                    </p>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg ${instr.scheduled_date !== getTodayStr() ? 'text-destructive bg-destructive/5 border border-destructive/10' : 'text-primary bg-primary/5'}`}>
+                                                                            <Clock className="w-3 h-3" />
+                                                                            {instr.scheduled_date !== getTodayStr() ? `${instr.scheduled_date} ${instr.scheduled_time?.slice(0, 5)}` : instr.scheduled_time?.slice(0, 5)}
+                                                                        </div>
+                                                                        {instr.planned_data?.amount ? (
+                                                                            <div className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 italic">
+                                                                                {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
+                                                                            </div>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </div>
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    variant="secondary"
+                                                                    className="rounded-xl h-14 w-14 flex-shrink-0 flex flex-col gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
+                                                                    onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?instruction=${instr.id}&mode=activity`)}
+                                                                >
+                                                                    <ClipboardList className="w-5 h-5" />
+                                                                    <span className="text-[8px] font-black uppercase tracking-tighter">Record</span>
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
-                                        <Button 
-                                            size="sm" 
-                                            variant="secondary"
-                                            className="rounded-xl h-14 w-14 flex-shrink-0 flex flex-col gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
-                                            onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase()}?instruction=${instr.id}&mode=activity`)}
-                                        >
-                                            <ClipboardList className="w-5 h-5" />
-                                            <span className="text-[8px] font-black uppercase tracking-tighter">Record</span>
-                                        </Button>
-                                    </div>
-                                </div>
+                                    );
+                                })}
                             </div>
                         ))}
                     </div>
@@ -423,63 +466,86 @@ const UserDashboard = () => {
                         <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1">Tap "New Instruction" to add one</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
-                        {supervisorInstructions.map((instr) => (
-                            <div key={instr.id} className={`bg-card border rounded-2xl p-4 shadow-sm transition-all ${instr.is_completed ? 'opacity-50 border-green-200 bg-green-50/30' : ''}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            {instr.is_completed ? (
-                                                <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
-                                                    ✓ Done by {instr.worker?.full_name || 'worker'}
-                                                </span>
-                                            ) : (
-                                                <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">⏳ Pending</span>
-                                            )}
-                                            <span className="text-xs font-bold text-foreground truncate">
-                                                {instr.activity_type} — {instr.tanks?.name || instr.sections?.name || 'Section Wide'}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                            <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                                                <Clock className="w-3 h-3" />
-                                                {instr.scheduled_time?.slice(0,5) || '—'}
+                    <div className="space-y-6">
+                        {Object.entries(groupedSupervisorInstructions).map(([sectionName, activities]) => (
+                            <div key={sectionName} className="space-y-4">
+                                <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest border-b pb-1 border-border/50 flex items-center gap-2">
+                                    <Layers className="w-3.5 h-3.5" />
+                                    {sectionName}
+                                </h4>
+                                {Object.entries(activities).map(([activityName, instrs]) => {
+                                    const Icon = ACTIVITY_ICONS[activityName] || ClipboardList;
+                                    return (
+                                        <div key={activityName} className="space-y-3 pl-1 sm:pl-3">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="p-1 rounded bg-muted">
+                                                    <Icon className="w-3 h-3 text-muted-foreground" />
+                                                </div>
+                                                <h5 className="text-[10px] font-bold text-foreground/80 uppercase tracking-wider">{activityName}</h5>
                                             </div>
-                                            {instr.planned_data?.amount && (
-                                                <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 font-medium">
-                                                    {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
-                                                </span>
-                                            )}
-                                            {instr.planned_data?.instructions && (
-                                                <span className="text-[10px] text-muted-foreground italic truncate max-w-[160px]">
-                                                    "{instr.planned_data.instructions}"
-                                                </span>
-                                            )}
+                                            <div className="space-y-3">
+                                                {instrs.map((instr) => (
+                                                    <div key={instr.id} className={`bg-card border rounded-2xl p-4 shadow-sm transition-all ml-2 ${instr.is_completed ? 'opacity-50 border-green-200 bg-green-50/30' : ''}`}>
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    {instr.is_completed ? (
+                                                                        <span className="text-[9px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                                                                            ✓ Done by {instr.worker?.full_name || 'worker'}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full flex-shrink-0">⏳ Pending</span>
+                                                                    )}
+                                                                    <span className="text-xs font-bold text-foreground truncate">
+                                                                        {instr.tanks?.name ? `Tank ${instr.tanks.name}` : 'Section Wide'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                                                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                                                                        <Clock className="w-3 h-3" />
+                                                                        {instr.scheduled_time?.slice(0,5) || '—'}
+                                                                    </div>
+                                                                    {instr.planned_data?.amount && (
+                                                                        <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 font-medium">
+                                                                            {instr.planned_data.amount} {instr.planned_data.unit} {instr.planned_data.item}
+                                                                        </span>
+                                                                    )}
+                                                                    {instr.planned_data?.instructions && (
+                                                                        <span className="text-[10px] text-muted-foreground italic truncate max-w-[160px]">
+                                                                            "{instr.planned_data.instructions}"
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {!instr.is_completed && (
+                                                                <div className="flex gap-1.5 flex-shrink-0">
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                                                                        onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?editInstruction=${instr.id}`)}
+                                                                        title="Edit instruction"
+                                                                    >
+                                                                        <Pencil className="w-3.5 h-3.5" />
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                                                        onClick={() => handleDeleteInstruction(instr.id)}
+                                                                        title="Delete instruction"
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </Button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {!instr.is_completed && (
-                                        <div className="flex gap-1.5 flex-shrink-0">
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-8 w-8 text-primary hover:bg-primary/10"
-                                                onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?editInstruction=${instr.id}`)}
-                                                title="Edit instruction"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                            </Button>
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                                onClick={() => handleDeleteInstruction(instr.id)}
-                                                title="Delete instruction"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
+                                    );
+                                })}
                             </div>
                         ))}
                     </div>

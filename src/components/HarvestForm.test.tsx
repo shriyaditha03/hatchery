@@ -24,10 +24,13 @@ describe('HarvestForm', () => {
     isPlanningMode,
   });
 
-  it('renders correctly and shows renamed "To Harvest" field in population mode', () => {
-    render(<HarvestForm {...getProps()} />);
-    expect(screen.getByText('3. To Harvest *')).toBeInTheDocument();
+  it('renders correctly and shows appropriate harvest label based on mode', () => {
+    const { rerender } = render(<HarvestForm {...getProps()} />);
+    expect(screen.getByText('3. Harvested population *')).toBeInTheDocument();
     expect(screen.getByText('6. Population After Harvest')).toBeInTheDocument();
+
+    rerender(<HarvestForm {...getProps({}, true)} />);
+    expect(screen.getByText('3. To Harvest *')).toBeInTheDocument();
   });
 
   it('calculates harvestedPopulation automatically in bag mode', async () => {
@@ -37,8 +40,7 @@ describe('HarvestForm', () => {
     const sizeInput = screen.getByPlaceholderText('Qty per bag');
     const countInput = screen.getByPlaceholderText('Total bags');
 
-    // Simulate entering bag size
-    await user.type(sizeInput, '50');
+    await fireEvent.change(sizeInput, { target: { value: '50' } });
     expect(mockOnDataChange).toHaveBeenCalledWith(expect.objectContaining({ spoonBagSize: '50' }));
 
     // By re-rendering with updated props, we could test the effect, but we can also just provide both to see if the effect fires
@@ -69,8 +71,7 @@ describe('HarvestForm', () => {
     
     // To manually edit, the user types in the "Calculated automatically" input (Population After Harvest)
     const afterHarvestInput = screen.getByPlaceholderText('Calculated automatically');
-    await user.clear(afterHarvestInput);
-    await user.type(afterHarvestInput, '750');
+    fireEvent.change(afterHarvestInput, { target: { value: '750' } });
 
     // The handler should notify the manual edit
     expect(mockOnDataChange).toHaveBeenCalledWith(expect.any(Function));

@@ -13,6 +13,9 @@ interface TankShiftingFormProps {
   onCommentsChange: (val: string) => void;
   availableTanks: any[];
   isPlanningMode?: boolean;
+  sourceTankId?: string;
+  stockedTankIds?: string[];
+  fetchLatestPopulation?: (tid: string) => Promise<number>;
 }
 
 const TankShiftingForm = ({
@@ -21,7 +24,10 @@ const TankShiftingForm = ({
   comments,
   onCommentsChange,
   availableTanks,
-  isPlanningMode = false
+  isPlanningMode = false,
+  sourceTankId,
+  stockedTankIds = [],
+  fetchLatestPopulation
 }: TankShiftingFormProps) => {
   const [destinations, setDestinations] = useState<any[]>(data.destinations || [{ id: Date.now() }]);
 
@@ -44,7 +50,22 @@ const TankShiftingForm = ({
     }
   };
 
-  const handleDestChange = (id: number, updates: Record<string, any>) => {
+  const handleDestChange = async (id: number, updates: Record<string, any>) => {
+    if (updates.tankId) {
+      if (stockedTankIds.includes(updates.tankId)) {
+        const confirmed = window.confirm('You are mixing 2 Tanks, are you sure you want to go ahead');
+        if (!confirmed) {
+          return; // Cancel the selection
+        }
+        if (fetchLatestPopulation) {
+          const pop = await fetchLatestPopulation(updates.tankId);
+          updates.currentPopulation = pop.toString();
+        }
+      } else {
+        updates.currentPopulation = '0';
+      }
+    }
+
     const newDests = destinations.map(d => {
       if (d.id === id) {
         return { ...d, ...updates };
@@ -127,7 +148,7 @@ const TankShiftingForm = ({
                         handleDestChange(dest.id, { sectionId: val, tankId: '' }); // Update section and reset tank
                     }}
                 >
-                  <SelectTrigger className="h-10 rounded-xl">
+                  <SelectTrigger className="h-10 rounded-xl" data-testid="dest-section-select">
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -148,11 +169,13 @@ const TankShiftingForm = ({
                     onValueChange={(val) => handleDestChange(dest.id, { tankId: val })}
                     disabled={!dest.sectionId}
                 >
-                  <SelectTrigger className="h-10 rounded-xl">
+                  <SelectTrigger className="h-10 rounded-xl" data-testid="dest-tank-select">
                     <SelectValue placeholder="Select tank" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {availableTanks.find(s => s.id === dest.sectionId)?.tanks.map((tank: any) => (
+                    {availableTanks.find(s => s.id === dest.sectionId)?.tanks
+                      .filter((tank: any) => tank.id !== sourceTankId)
+                      .map((tank: any) => (
                       <SelectItem key={tank.id} value={tank.id} className="text-xs">
                         {tank.name}
                       </SelectItem>
@@ -161,7 +184,7 @@ const TankShiftingForm = ({
                 </Select>
               </div>
 
-              {/* Population in Destination (Auto-loaded placeholder) */}
+              {/* Population in Destination (Auto-loaded) */}
               <div className="space-y-1.5">
                 <Label className="text-xs">7. Current Population</Label>
                 <Input

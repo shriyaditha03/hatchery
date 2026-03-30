@@ -114,8 +114,23 @@ const RecordActivity = () => {
     if (instructionIdParam) return false;
     if (modeParam === 'instruction') return true;
     if (modeParam === 'activity') return false;
-    return user?.role === 'supervisor';
+    return false; // Default to false, sync in useEffect
   });
+
+  // Sync isPlanningMode when user/params change
+  useEffect(() => {
+    if (editInstructionId) {
+      setIsPlanningMode(true);
+    } else if (instructionIdParam) {
+      setIsPlanningMode(false);
+    } else if (modeParam === 'instruction') {
+      setIsPlanningMode(true);
+    } else if (modeParam === 'activity') {
+      setIsPlanningMode(false);
+    } else if (user) {
+      setIsPlanningMode(user.role === 'supervisor');
+    }
+  }, [user, editInstructionId, instructionIdParam, modeParam]);
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
   const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);
@@ -884,20 +899,19 @@ const RecordActivity = () => {
     const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
 
     if (selectionScope === 'all') {
-      const section = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-      if (section) targets = section.tanks.map((t: any) => t.id);
+      targets = [null]; // One record for the whole section
     } else if (selectionScope === 'custom') {
       targets = selectedTankIds;
     } else {
       targets = [tankId];
     }
 
-    if (!isSpecialActivity) {
+    if (!isSpecialActivity && selectionScope !== 'all') {
       if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
         toast.error('Please select at least one tank');
         return;
       }
-    } else {
+    } else if (isSpecialActivity) {
       // For Algae/Artemia, if no targets, create one record with null tank
       if (targets.length === 0 || (targets.length === 1 && !targets[0])) {
         targets = [null];
@@ -908,12 +922,17 @@ const RecordActivity = () => {
       setLoading(true);
       const records = targets.map(tId => {
         let farmId = activeFarmId;
-        let sectionId = null;
+        let sectionId = selectedSectionId || activeSectionId || null;
         
         if (tId) {
           const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
           if (section) {
             sectionId = section.id || null;
+            farmId = section.farm_id || null;
+          }
+        } else if (sectionId) {
+          const section = availableTanks.find(s => s.id === sectionId);
+          if (section) {
             farmId = section.farm_id || null;
           }
         }
@@ -1747,7 +1766,7 @@ const RecordActivity = () => {
                     <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
                       <TabsList className="bg-muted/50 h-8 p-0.5">
                         <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
-                        <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All Tanks</TabsTrigger>
+                        <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs" data-testid="all-tanks-tab">All Tanks in Section</TabsTrigger>
                         <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
                       </TabsList>
                     </Tabs>
@@ -1766,15 +1785,15 @@ const RecordActivity = () => {
                           setSelectedTankIds([]);
                         }}
                       >
-                        <SelectTrigger className="h-11">
-                          <SelectValue placeholder="Choose section" />
+                        <SelectTrigger className="h-11" data-testid="section-select">
+                          <SelectValue placeholder="Select section" />
                         </SelectTrigger>
                         <SelectContent>
                           {availableTanks
                             .filter(s => activeFarmId ? s.farm_id === activeFarmId : true)
                             .map(section => (
                               <SelectItem key={section.id} value={section.id}>
-                                {user?.role === 'owner' && !activeFarmId ? `${section.farm_name} - ${section.name}` : section.name}
+                                {section.farm_name} - {section.name}
                               </SelectItem>
                             ))
                           }
@@ -1798,8 +1817,8 @@ const RecordActivity = () => {
                           }}
                           disabled={!selectedSectionId && !activeSectionId}
                         >
-                          <SelectTrigger className="h-11">
-                            <SelectValue placeholder="Choose tank" />
+                          <SelectTrigger className="h-11" data-testid="tank-select">
+                            <SelectValue placeholder="Select tank" />
                           </SelectTrigger>
                           <SelectContent>
                             {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
@@ -1862,7 +1881,7 @@ const RecordActivity = () => {
                   onValueChange={v => setActivity(v as ActivityType)}
                 >
                   <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Choose activity" />
+                    <SelectValue placeholder="Select activity" />
                   </SelectTrigger>
                   <SelectContent>
                     {ACTIVITIES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -2298,6 +2317,9 @@ const RecordActivity = () => {
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
+            sourceTankId={tankId}
+            stockedTankIds={stockedTankIds}
+            fetchLatestPopulation={fetchLatestPopulation}
           />
         )}
 
