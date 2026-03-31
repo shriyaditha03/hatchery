@@ -17,30 +17,64 @@ import {
     Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
     FlaskConical, Leaf, MapPin, Scissors, MoveRight
 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import logo from '@/assets/aqua-nexus-logo.png';
 
 const OwnerDashboard = () => {
     const { user, logout, activeFarmId, setActiveFarmId } = useAuth();
     const navigate = useNavigate();
     const [farms, setFarms] = useState<any[]>([]);
+    const [activeModule, setActiveModule] = useState<'LRT' | 'MATURATION'>('LRT');
 
     useEffect(() => {
         if (user?.hatchery_id) {
             supabase
                 .from('farms')
-                .select('id, name, address')
+                .select('id, name, address, category')
                 .eq('hatchery_id', user.hatchery_id)
                 .order('created_at', { ascending: true })
                 .then(({ data }) => {
                     if (data && data.length > 0) {
                         setFarms(data);
+                        
+                        // Smart selection: if no active farm, or current active farm is not in the data,
+                        // pick the first one from the current active module if possible
                         if (!activeFarmId) {
-                            setActiveFarmId(data[0].id);
+                            const firstInModule = data.find(f => (f.category || 'LRT') === activeModule);
+                            if (firstInModule) {
+                                setActiveFarmId(firstInModule.id);
+                            } else {
+                                // If no farms in active module, switch module to the first available farm's category
+                                const firstFarm = data[0];
+                                setActiveModule((firstFarm.category || 'LRT') as 'LRT' | 'MATURATION');
+                                setActiveFarmId(firstFarm.id);
+                            }
+                        } else {
+                            // If we HAVE an active farm, ensure the module tab matches it
+                            const currentFarm = data.find(f => f.id === activeFarmId);
+                            if (currentFarm && (currentFarm.category || 'LRT') !== activeModule) {
+                                setActiveModule((currentFarm.category || 'LRT') as 'LRT' | 'MATURATION');
+                            }
                         }
                     }
                 });
         }
     }, [user, activeFarmId, setActiveFarmId]);
+
+    // Handle module switch
+    const handleModuleChange = (module: string) => {
+        const newModule = module as 'LRT' | 'MATURATION';
+        setActiveModule(newModule);
+        
+        // If current active farm project is not in the new module, switch to first farm of new module
+        const currentFarm = farms.find(f => f.id === activeFarmId);
+        if (!currentFarm || (currentFarm.category || 'LRT') !== newModule) {
+            const firstInNewModule = farms.find(f => (f.category || 'LRT') === newModule);
+            if (firstInNewModule) {
+                setActiveFarmId(firstInNewModule.id);
+            }
+        }
+    };
 
     if (!user) return null;
 
@@ -62,6 +96,7 @@ const OwnerDashboard = () => {
         navigate('/login');
     };
 
+    const filteredFarms = farms.filter(f => (f.category || 'LRT') === activeModule);
     const activeFarm = farms.find(f => f.id === activeFarmId);
     const activeFarmName = activeFarm?.name || 'Select Farm';
     const activeFarmAddress = activeFarm?.address;
@@ -118,6 +153,26 @@ const OwnerDashboard = () => {
                     </div>
                 </div>
 
+                {/* Module Toggle */}
+                <div className="mt-6 flex justify-center">
+                    <Tabs value={activeModule} onValueChange={handleModuleChange} className="w-full max-w-[300px]">
+                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-11 p-1">
+                            <TabsTrigger 
+                                value="LRT" 
+                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
+                            >
+                                LRT
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="MATURATION" 
+                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
+                            >
+                                MATURATION
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
+
                 <div className="mt-6 flex flex-col gap-2">
                     <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Farm</label>
                     <DropdownMenu>
@@ -130,8 +185,8 @@ const OwnerDashboard = () => {
                         <DropdownMenuContent className="w-full sm:w-64">
                             <DropdownMenuLabel>Switch Farm</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {farms.length > 0 ? (
-                                farms.map(farm => (
+                            {filteredFarms.length > 0 ? (
+                                filteredFarms.map(farm => (
                                     <DropdownMenuItem 
                                         key={farm.id} 
                                         onClick={() => setActiveFarmId(farm.id)}
@@ -141,7 +196,7 @@ const OwnerDashboard = () => {
                                     </DropdownMenuItem>
                                 ))
                             ) : (
-                                <DropdownMenuItem disabled>No farms available</DropdownMenuItem>
+                                <DropdownMenuItem disabled>No {activeModule} farms</DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => navigate('/owner/create-farm')}>
