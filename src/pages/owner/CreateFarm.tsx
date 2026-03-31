@@ -121,6 +121,7 @@ const CreateFarm = () => {
     const [step, setStep] = useState(1);
 
     const [farmName, setFarmName] = useState('');
+    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION'>('LRT');
     const [sectionCount, setSectionCount] = useState<number | string>(1);
     const [sections, setSections] = useState<SectionConfig[]>([]);
     const [collapsedSections, setCollapsedSections] = useState<number[]>([]);
@@ -304,7 +305,7 @@ const CreateFarm = () => {
             // 1. Create Farm
             const { data: farm, error: farmError } = await supabase
                 .from('farms')
-                .insert([{ hatchery_id: user.hatchery_id, name: farmName }])
+                .insert([{ hatchery_id: user.hatchery_id, name: farmName, category: farmCategory }])
                 .select().single();
 
             if (farmError) throw farmError;
@@ -386,6 +387,20 @@ const CreateFarm = () => {
                                     className="h-12 text-md"
                                 />
                                 <p className="text-[10px] text-muted-foreground">Give your farm a memorable name</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="farmCategory" className="font-semibold">Module Type</Label>
+                                <Select value={farmCategory} onValueChange={(val: any) => setFarmCategory(val)}>
+                                    <SelectTrigger id="farmCategory" className="h-12 text-md rounded-xl">
+                                        <SelectValue placeholder="Select Module Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
+                                        <SelectItem value="MATURATION">Maturation</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-[10px] text-muted-foreground">Choose the appropriate module for this farm</p>
                             </div>
 
                             <div className="space-y-2">

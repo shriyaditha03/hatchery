@@ -78,6 +78,7 @@ const EditFarm = () => {
     const [saving, setSaving] = useState(false);
 
     const [farmName, setFarmName] = useState('');
+    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION'>('LRT');
     const [sections, setSections] = useState<SectionConfig[]>([]);
     const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
 
@@ -100,6 +101,7 @@ const EditFarm = () => {
 
             if (farmError) throw farmError;
             setFarmName(farm.name);
+            setFarmCategory(farm.category || 'LRT');
 
             // 2. Get Sections
             const { data: sectionsData, error: sectionError } = await supabase
@@ -282,10 +284,9 @@ const EditFarm = () => {
                 return;
             }
 
-            // 1. Update Farm Name
             const { error: farmError } = await supabase
                 .from('farms')
-                .update({ name: farmName })
+                .update({ name: farmName, category: farmCategory })
                 .eq('id', farmId);
             if (farmError) throw farmError;
 
@@ -395,14 +396,28 @@ const EditFarm = () => {
 
                 <Card className="rounded-2xl border-none shadow-sm overflow-hidden">
                     <CardContent className="p-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="farmName">Farm Name</Label>
-                            <Input
-                                id="farmName"
-                                value={farmName}
-                                onChange={(e) => setFarmName(e.target.value)}
-                                placeholder="e.g. Block A"
-                            />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="farmName">Farm Name</Label>
+                                <Input
+                                    id="farmName"
+                                    value={farmName}
+                                    onChange={(e) => setFarmName(e.target.value)}
+                                    placeholder="e.g. Block A"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="farmCategory">Module Type</Label>
+                                <Select value={farmCategory} onValueChange={(val: any) => setFarmCategory(val)}>
+                                    <SelectTrigger id="farmCategory">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
+                                        <SelectItem value="MATURATION">Maturation</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

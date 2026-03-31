@@ -37,7 +37,8 @@ const UserDashboard = () => {
                 id: a.section_id as string, 
                 name: a.section_name as string,
                 farm_id: a.farm_id,
-                farm_name: a.farm_name
+                farm_name: a.farm_name,
+                farm_category: a.farm_category
             }));
         
         // Remove duplicates (in case user has multiple tank-level records for same section)
@@ -49,6 +50,9 @@ const UserDashboard = () => {
         const groups: Record<string, Record<string, any[]>> = {};
         instructions.forEach(instr => {
             const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
+            if (instr.farms?.category === 'MATURATION' && !sectionName.includes('Maturation')) {
+                // Optionally add a label here if needed, but for now we'll just use the name
+            }
             const activityName = instr.activity_type;
             if (!groups[sectionName]) groups[sectionName] = {};
             if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
@@ -104,6 +108,7 @@ const UserDashboard = () => {
 
             if (sectionIds.length === 0 && farmIds.length === 0) {
                 setInstructions([]);
+                setLoading(false);
                 return;
             }
 
@@ -112,7 +117,7 @@ const UserDashboard = () => {
                 .from('activity_charts')
                 .select(`
                     *,
-                    farms (name),
+                    farms (name, category),
                     sections (name),
                     tanks (name)
                 `)
@@ -123,12 +128,15 @@ const UserDashboard = () => {
             const sectionFilter = sectionIds.length > 0 ? `section_id.in.(${sectionIds.join(',')})` : '';
             const farmFilter = farmIds.length > 0 ? `and(farm_id.in.(${farmIds.join(',')}),section_id.is.null,tank_id.is.null)` : '';
             
-            let orFilter = '';
-            if (sectionFilter && farmFilter) orFilter = `${sectionFilter},${farmFilter}`;
-            else orFilter = sectionFilter || farmFilter;
+            let accessOr = '';
+            if (sectionFilter && farmFilter) accessOr = `${sectionFilter},${farmFilter}`;
+            else accessOr = sectionFilter || farmFilter;
 
-            if (orFilter) {
-                query = query.or(orFilter);
+            if (accessOr) {
+                // If worker, combine access filter with assignment filter in a single .or()
+                // PostgREST doesn't support nested OR/AND cleanly without complex strings,
+                // but we can use multiple .or() calls as they are implicitly ANDed.
+                query = query.or(accessOr);
             }
 
             // Also check if assigned specifically to this user or unassigned
@@ -153,7 +161,7 @@ const UserDashboard = () => {
             const today = getTodayStr();
             const { data, error } = await supabase
                 .from('activity_charts')
-                .select(`*, tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
+                .select(`*, farms(name), tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
                 .eq('created_by', user?.id)
                 .or(`is_completed.eq.false,scheduled_date.eq.${today}`)
                 .order('is_completed', { ascending: true })
@@ -427,7 +435,7 @@ const UserDashboard = () => {
                                                                     size="sm" 
                                                                     variant="secondary"
                                                                     className="rounded-xl h-14 w-14 flex-shrink-0 flex flex-col gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
-                                                                    onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?instruction=${instr.id}&mode=activity`)}
+                                                                    onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(/\s+/g, '-')}?instruction=${instr.id}&mode=activity`)}
                                                                 >
                                                                     <ClipboardList className="w-5 h-5" />
                                                                     <span className="text-[8px] font-black uppercase tracking-tighter">Record</span>
@@ -457,7 +465,13 @@ const UserDashboard = () => {
                     </div>
                 </div>
 
-                {supervisorInstructions.length === 0 ? (
+                {loading ? (
+                    <div className="space-y-3">
+                        {[1, 2].map(i => (
+                            <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
+                        ))}
+                    </div>
+                ) : supervisorInstructions.length === 0 ? (
                     <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <ClipboardList className="w-6 h-6 text-muted-foreground opacity-50" />
@@ -523,7 +537,7 @@ const UserDashboard = () => {
                                                                         size="icon"
                                                                         variant="ghost"
                                                                         className="h-8 w-8 text-primary hover:bg-primary/10"
-                                                                        onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(' ','-')}?editInstruction=${instr.id}`)}
+                                                                        onClick={() => navigate(`/user/activity/${instr.activity_type.toLowerCase().replace(/\s+/g, '-')}?editInstruction=${instr.id}`)}
                                                                         title="Edit instruction"
                                                                     >
                                                                         <Pencil className="w-3.5 h-3.5" />

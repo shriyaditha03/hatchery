@@ -18,6 +18,7 @@ export interface UserProfile {
   access?: Array<{
     farm_id: string;
     farm_name: string;
+    farm_category: string;
     section_id: string | null;
     section_name: string | null;
     tank_id: string | null;
@@ -117,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Owners get access to all farms in their hatchery
         const { data: farms, error: farmsError } = await supabase
           .from('farms')
-          .select('id, name')
+          .select('id, name, category')
           .eq('hatchery_id', profile.hatchery_id);
         
         if (farms) {
@@ -125,6 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           fullAccess = farms.map(f => ({
             farm_id: f.id,
             farm_name: f.name,
+            farm_category: f.category || 'LRT',
             section_id: null,
             section_name: null,
             tank_id: null
@@ -139,6 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             tank_id,
             farms (
               name,
+              category,
               sections (id, name)
             ),
             sections (name)
@@ -155,6 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               fullAccess.push({
                 farm_id: a.farm_id,
                 farm_name: a.farms?.name || 'Unknown Farm',
+                farm_category: a.farms?.category || 'LRT',
                 section_id: a.section_id,
                 section_name: a.sections?.name,
                 tank_id: a.tank_id
@@ -165,6 +169,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 fullAccess.push({
                   farm_id: a.farm_id,
                   farm_name: a.farms.name,
+                  farm_category: a.farms.category || 'LRT',
                   section_id: s.id,
                   section_name: s.name,
                   tank_id: null

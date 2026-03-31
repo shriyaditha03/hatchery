@@ -131,6 +131,30 @@ const RecordActivity = () => {
       setIsPlanningMode(user.role === 'supervisor');
     }
   }, [user, editInstructionId, instructionIdParam, modeParam]);
+
+  // Set initial activity from URL parameter
+  useEffect(() => {
+    if (type && !activity && !editId && !instructionIdParam && !editInstructionId) {
+      const typeMap: Record<string, ActivityType> = {
+        'feed': 'Feed',
+        'treatment': 'Treatment',
+        'water': 'Water Quality',
+        'animal': 'Animal Quality',
+        'stocking': 'Stocking',
+        'observation': 'Observation',
+        'artemia': 'Artemia',
+        'algae': 'Algae',
+        'harvest': 'Harvest',
+        'shifting': 'Tank Shifting',
+        'tank-shifting': 'Tank Shifting'
+      };
+      
+      const mappedActivity = typeMap[type.toLowerCase()];
+      if (mappedActivity) {
+        setActivity(mappedActivity);
+      }
+    }
+  }, [type, availableTanks.length]);
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>('single');
   const [selectedTankIds, setSelectedTankIds] = useState<string[]>([]);
   const [availableAlgaeSourceIds, setAvailableAlgaeSourceIds] = useState<string[]>([]);

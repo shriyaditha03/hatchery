@@ -67,6 +67,7 @@ interface Farm {
     id: string;
     hatchery_id: string;
     name: string;
+    category?: 'LRT' | 'MATURATION';
     sections: Section[];
 }
 
@@ -305,7 +306,10 @@ const ManageFarms = () => {
                                             <h3 className="font-semibold text-lg">{farm.name}</h3>
                                         </div>
                                         <div className="flex items-center gap-2 ml-auto">
-                                            <span className="text-[10px] text-muted-foreground bg-background px-2 py-0.5 rounded-full border font-bold">
+                                            <span className="text-[10px] text-muted-foreground bg-background px-2 py-0.5 rounded-full border font-bold uppercase">
+                                                {farm.category || 'LRT'}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground bg-background px-2 py-0.5 rounded-full border font-bold uppercase">
                                                 {farm.sections.length} SECTIONS
                                             </span>
                                             <DropdownMenu>

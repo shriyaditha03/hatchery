@@ -57,6 +57,7 @@ create table public.farms (
   plot_area_sqm double precision,
   plot_length_m double precision,
   plot_width_m double precision,
+  category text default 'LRT' check (category in ('LRT', 'MATURATION')),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
