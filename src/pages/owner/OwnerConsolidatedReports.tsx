@@ -189,6 +189,41 @@ const OwnerConsolidatedReports = () => {
                     )}
                 </div>
             );
+        } else if (typeLower === 'sourcing & mating') {
+            return (
+                <div className="space-y-0.5">
+                    <div>M: {data.malesCount || '0'}, F: {data.femalesCount || '0'} (Total: {data.totalAnimals || '0'})</div>
+                    <div className="text-[9px] text-muted-foreground">Source: {data.supplier || 'N/A'}, Variety: {data.variety || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'spawning') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Spawned: {data.spawnedCount || '0'}, Mated: {data.matedCount || '0'}</div>
+                    <div className="text-[9px] text-muted-foreground">Tank: {data.tankId || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'egg count') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Total Eggs: {data.totalEggs || '0'}, Avg/Female: {data.avgEggsPerFemale || '0'}</div>
+                    <div className="text-[9px] text-muted-foreground">Spawn Date: {data.spawnDate || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'nauplii harvest') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Harvested: {data.totalNauplii || '0'}, Stage: {data.stage || 'N/A'}</div>
+                    <div className="text-[9px] text-muted-foreground">Hatch Rate: {data.hatchRate || '0'}%</div>
+                </div>
+            );
+        } else if (typeLower === 'nauplii sale') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Sold: {data.quantitySold || '0'}, Customer: {data.customerName || 'N/A'}</div>
+                    <div className="text-[9px] text-muted-foreground">Price: {data.pricePerMillion || '0'} /M</div>
+                </div>
+            );
         }
 
         return '-';
@@ -220,6 +255,11 @@ const OwnerConsolidatedReports = () => {
             'Animal Quality': 'bg-rose-100 text-rose-700',
             'Stocking': 'bg-emerald-100 text-emerald-700',
             'Observation': 'bg-purple-100 text-purple-700',
+            'Sourcing & Mating': 'bg-indigo-100 text-indigo-700',
+            'Spawning': 'bg-pink-100 text-pink-700',
+            'Egg Count': 'bg-amber-100 text-amber-700',
+            'Nauplii Harvest': 'bg-emerald-100 text-emerald-700',
+            'Nauplii Sale': 'bg-blue-100 text-blue-700',
         };
         return colors[type] || 'bg-gray-100 text-gray-700';
     };

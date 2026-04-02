@@ -15,16 +15,15 @@ import {
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
     Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
-    FlaskConical, Leaf, MapPin, Scissors, MoveRight
+    FlaskConical, Leaf, MapPin, Scissors, MoveRight, Heart, Sparkles, ShoppingCart, ArrowUpRight
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import logo from '@/assets/aqua-nexus-logo.png';
 
 const OwnerDashboard = () => {
-    const { user, logout, activeFarmId, setActiveFarmId } = useAuth();
+    const { user, logout, activeFarmId, setActiveFarmId, activeModule, setActiveModule } = useAuth();
     const navigate = useNavigate();
     const [farms, setFarms] = useState<any[]>([]);
-    const [activeModule, setActiveModule] = useState<'LRT' | 'MATURATION'>('LRT');
 
     useEffect(() => {
         if (user?.hatchery_id) {
@@ -52,11 +51,6 @@ const OwnerDashboard = () => {
                                 setActiveModule((firstFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
                                 setActiveFarmId(firstFarm.id);
                             }
-                        } else {
-                            const currentFarm = farmsData.find(f => f.id === activeFarmId);
-                            if (currentFarm) {
-                                setActiveModule((currentFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
-                            }
                         }
                     }
                 });
@@ -80,7 +74,7 @@ const OwnerDashboard = () => {
 
     if (!user) return null;
 
-    const activities = [
+    const lrtActivities = [
         { name: 'Feed', icon: Utensils, route: '/owner/reports/feed', color: 'bg-orange-100 text-orange-600' },
         { name: 'Treatment', icon: Beaker, route: '/owner/reports/treatment', color: 'bg-blue-100 text-blue-600' },
         { name: 'Water Quality', icon: Waves, route: '/owner/reports/water', color: 'bg-cyan-100 text-cyan-600' },
@@ -92,6 +86,22 @@ const OwnerDashboard = () => {
         { name: 'Artemia', icon: FlaskConical, route: '/owner/reports/artemia', color: 'bg-teal-100 text-teal-600' },
         { name: 'Algae', icon: Leaf, route: '/owner/reports/algae', color: 'bg-green-100 text-green-700' },
     ];
+    
+    const maturationActivities = [
+        { name: 'Feed', icon: Utensils, route: '/owner/reports/feed', color: 'bg-orange-100 text-orange-600' },
+        { name: 'Treatment', icon: Beaker, route: '/owner/reports/treatment', color: 'bg-blue-100 text-blue-600' },
+        { name: 'Water Quality', icon: Waves, route: '/owner/reports/water', color: 'bg-cyan-100 text-cyan-600' },
+        { name: 'Animal Quality', icon: Search, route: '/owner/reports/animal', color: 'bg-rose-100 text-rose-600' },
+        { name: 'Stocking', icon: Layers, route: '/owner/reports/stocking', color: 'bg-emerald-100 text-emerald-600' },
+        { name: 'Observation', icon: Eye, route: '/owner/reports/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Sourcing & Mating', icon: Heart, route: '/owner/reports/sourcing & mating', color: 'bg-rose-100 text-rose-600' },
+        { name: 'Spawning', icon: Sparkles, route: '/owner/reports/spawning', color: 'bg-amber-100 text-amber-600' },
+        { name: 'Egg Count', icon: Layers, route: '/owner/reports/egg count', color: 'bg-blue-100 text-blue-600' },
+        { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/owner/reports/nauplii harvest', color: 'bg-emerald-100 text-emerald-600' },
+        { name: 'Nauplii Sale', icon: ShoppingCart, route: '/owner/reports/nauplii sale', color: 'bg-indigo-100 text-indigo-600' },
+    ];
+
+    const activities = activeModule === 'MATURATION' ? maturationActivities : lrtActivities;
 
     const handleLogout = async () => {
         await logout();

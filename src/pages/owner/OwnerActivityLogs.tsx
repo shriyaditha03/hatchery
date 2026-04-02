@@ -66,7 +66,12 @@ const OwnerActivityLogs = () => {
                 'stocking': 'Stocking',
                 'observation': 'Observation',
                 'artemia': 'Artemia',
-                'algae': 'Algae'
+                'algae': 'Algae',
+                'sourcing & mating': 'Sourcing & Mating',
+                'spawning': 'Spawning',
+                'egg count': 'Egg Count',
+                'nauplii harvest': 'Nauplii Harvest',
+                'nauplii sale': 'Nauplii Sale'
             };
             const dbType = typeMap[type?.toLowerCase() || ''] || type;
 
@@ -290,6 +295,41 @@ const OwnerActivityLogs = () => {
                     </div>
                 );
             }
+        } else if (typeLower === 'sourcing & mating') {
+            return (
+                <div className="space-y-0.5">
+                    <div>M: {data.malesCount || '0'}, F: {data.femalesCount || '0'} (Total: {data.totalAnimals || '0'})</div>
+                    <div className="text-[9px] text-muted-foreground">Source: {data.supplier || 'N/A'}, Variety: {data.variety || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'spawning') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Spawned: {data.spawnedCount || '0'}, Mated: {data.matedCount || '0'}</div>
+                    <div className="text-[9px] text-muted-foreground">Tank: {data.tankId || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'egg count') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Total Eggs: {data.totalEggs || '0'}, Avg/Female: {data.avgEggsPerFemale || '0'}</div>
+                    <div className="text-[9px] text-muted-foreground">Spawn Date: {data.spawnDate || 'N/A'}</div>
+                </div>
+            );
+        } else if (typeLower === 'nauplii harvest') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Harvested: {data.totalNauplii || '0'}, Stage: {data.stage || 'N/A'}</div>
+                    <div className="text-[9px] text-muted-foreground">Hatch Rate: {data.hatchRate || '0'}%</div>
+                </div>
+            );
+        } else if (typeLower === 'nauplii sale') {
+            return (
+                <div className="space-y-0.5">
+                    <div>Sold: {data.quantitySold || '0'}, Customer: {data.customerName || 'N/A'}</div>
+                    <div className="text-[9px] text-muted-foreground">Price: {data.pricePerMillion || '0'} /M</div>
+                </div>
+            );
         }
 
         return '-';
@@ -304,6 +344,11 @@ const OwnerActivityLogs = () => {
         if (typeLower === 'observation') return { total: 'Total Dead', unit: 'qty', icon: <Info className="w-4 h-4" /> };
         if (typeLower === 'algae') return { total: 'Avg Cell Count', unit: 'M/ml', icon: <FlaskConical className="w-4 h-4" /> };
         if (typeLower === 'artemia') return { total: 'Total Harvested', unit: 'M', icon: <FlaskConical className="w-4 h-4" /> };
+        if (typeLower === 'sourcing & mating') return { total: 'Total Animals', unit: 'qty', icon: <Layers className="w-4 h-4" /> };
+        if (typeLower === 'spawning') return { total: 'Total Spawned', unit: 'qty', icon: <Layers className="w-4 h-4" /> };
+        if (typeLower === 'egg count') return { total: 'Total Eggs', unit: 'M', icon: <Layers className="w-4 h-4" /> };
+        if (typeLower === 'nauplii harvest') return { total: 'Total Nauplii', unit: 'M', icon: <Layers className="w-4 h-4" /> };
+        if (typeLower === 'nauplii sale') return { total: 'Total Sold', unit: 'M', icon: <Layers className="w-4 h-4" /> };
         return { total: 'Total', unit: '', icon: <BarChart2 className="w-4 h-4" /> };
     };
 
