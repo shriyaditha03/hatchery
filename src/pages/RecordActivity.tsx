@@ -7,7 +7,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database, User } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database, User, ChevronDown } from 'lucide-react';
+import { 
+  Plus, 
+  Trash2, 
+  Calculator, 
+  CheckCircle2, 
+  FlaskConical, 
+  AlertCircle,
+  Clock,
+  Calendar,
+  Users,
+  Camera,
+  MessageSquare,
+  ArrowRight,
+  ArrowUpRight
+} from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RatingScale from '@/components/RatingScale';
@@ -17,6 +32,11 @@ import ArtemiaForm from '@/components/ArtemiaForm';
 import AlgaeForm from '@/components/AlgaeForm';
 import HarvestForm from '@/components/HarvestForm';
 import TankShiftingForm from '@/components/TankShiftingForm';
+import SourcingMatingForm from '@/components/SourcingMatingForm';
+import SpawningForm from '@/components/SpawningForm';
+import EggCountForm from '@/components/EggCountForm';
+import NaupliiHarvestForm from '../components/NaupliiHarvestForm';
+import NaupliiSaleForm from '@/components/NaupliiSaleForm';
 import ImageUpload from '@/components/ImageUpload';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { toast } from 'sonner';
@@ -33,7 +53,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -83,22 +103,31 @@ export const WATER_QUALITY_RANGES: Record<string, string> = {
 
 const RecordActivity = () => {
   const navigate = useNavigate();
-  const { user, activeFarmId, activeSectionId, setActiveFarmId, setActiveSectionId } = useAuth();
+  const { 
+    user, 
+    activeFarmId,
+    activeSectionId, 
+    setActiveFarmId,
+    setActiveSectionId, 
+    activeModule, 
+    setActiveModule 
+  } = useAuth();
   const [searchParams] = useSearchParams();
   const { type } = useParams();
   const editId = searchParams.get('edit');
   const instructionIdParam = searchParams.get('instruction');
   const editInstructionId = searchParams.get('editInstruction');
   const modeParam = searchParams.get('mode');
+  const sectionParam = searchParams.get('section');
+  const categoryParam = searchParams.get('category');
   const { addActivity, updateActivity } = useActivities();
-
   const [loading, setLoading] = useState(false);
   const [availableTanks, setAvailableTanks] = useState<any[]>([]);
   const [stockedTankIds, setStockedTankIds] = useState<string[]>([]);
   const [dbFeedTypes, setDbFeedTypes] = useState<string[]>(FEED_TYPES);
   const [dbTreatmentTypes, setDbTreatmentTypes] = useState<string[]>(TREATMENT_TYPES);
   const [selectedFarmId, setSelectedFarmId] = useState<string>('');
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const [selectedSectionId, setSelectedSectionId] = useState<string>(sectionParam || '');
 
   const [date, setDate] = useState(getTodayStr());
   const [time, setTime] = useState(formatDate(getNowLocal(), 'HH:mm'));
@@ -114,7 +143,7 @@ const RecordActivity = () => {
     if (instructionIdParam) return false;
     if (modeParam === 'instruction') return true;
     if (modeParam === 'activity') return false;
-    return false; // Default to false, sync in useEffect
+    return user?.role === 'supervisor';
   });
 
   // Sync isPlanningMode when user/params change
@@ -132,7 +161,20 @@ const RecordActivity = () => {
     }
   }, [user, editInstructionId, instructionIdParam, modeParam]);
 
-  // Set initial activity from URL parameter
+  // Set initial activity and section from URL parameters
+  useEffect(() => {
+    if (sectionParam && sectionParam !== activeSectionId) {
+      setSelectedSectionId(sectionParam);
+      setActiveSectionId(sectionParam);
+    }
+  }, [sectionParam]);
+
+  useEffect(() => {
+    if ((categoryParam === 'MATURATION' || categoryParam === 'LRT') && categoryParam !== activeModule) {
+      setActiveModule(categoryParam);
+    }
+  }, [categoryParam]);
+
   useEffect(() => {
     if (type && !activity && !editId && !instructionIdParam && !editInstructionId) {
       const typeMap: Record<string, ActivityType> = {
@@ -146,7 +188,13 @@ const RecordActivity = () => {
         'algae': 'Algae',
         'harvest': 'Harvest',
         'shifting': 'Tank Shifting',
-        'tank-shifting': 'Tank Shifting'
+        'tank-shifting': 'Tank Shifting',
+        'mating': 'Sourcing & Mating',
+        'sourcing-mating': 'Sourcing & Mating',
+        'spawning': 'Spawning',
+        'egg-count': 'Egg Count',
+        'nauplii-harvest': 'Nauplii Harvest',
+        'nauplii-sale': 'Nauplii Sale'
       };
       
       const mappedActivity = typeMap[type.toLowerCase()];
@@ -163,10 +211,38 @@ const RecordActivity = () => {
   const [photoUrl, setPhotoUrl] = useState('');
   const [timeSlot, setTimeSlot] = useState<string>('');
   const [isRedirectedFromObservation, setIsRedirectedFromObservation] = useState(false);
+  const [sourcingMatingData, setSourcingMatingData] = useState<any>({
+    sourceTanks: [],
+    matingTankId: '',
+    matedCount: '',
+    balanceCount: 0,
+    totalSourced: 0,
+    matedDestinations: [],
+    returnDestinations: []
+  });
+  const [spawningData, setSpawningData] = useState<any>({
+    tankId: '',
+    spawnedCount: '',
+    balanceCount: '',
+    totalFemales: 0,
+    returnDestinations: []
+  });
+  const [eggCountData, setEggCountData] = useState<any>({
+    entries: [{ id: '1', tankId: '', tankName: '', spawnedCount: '', totalEggsMillions: '', fertilizationPercent: '' }],
+    summary: { totalEggs: 0, avgFertilization: 0, totalFertilized: 0, fertilizedPerAnimal: 0 }
+  });
+  const [naupliiHarvestData, setNaupliiHarvestData] = useState<any>({
+    sources: [{ id: '1', tankId: '', tankName: '', population: '' }],
+    destinations: [{ id: '1', tankId: '', tankName: '', population: '' }],
+    summary: { totalHarvested: 0, totalDistributed: 0, balance: 0 }
+  });
+
+  const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+  const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
-  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale';
 
   // Live Time Update Effect
   useEffect(() => {
@@ -187,70 +263,52 @@ const RecordActivity = () => {
   }, [user]);
 
   const fetchTanks = async () => {
-    if (!user) return;
+    if (!user || !user.access) return;
     setLoading(true);
     try {
-      // Fetch tanks from farms the user has access to
-      const { data: accessData, error: accessError } = await supabase
-        .from('farm_access')
-        .select(`
-          farm_id,
-          section_id,
-          tank_id,
-          farms (
-            name,
-            sections (
-              id,
-              name,
-              tanks (id, name)
-            )
-          )
-        `)
-        .eq('user_id', user.id);
-
-      if (accessError) throw accessError;
+      // Use the access info already provided by the AuthContext
+      const accessData = user.access;
 
       // Group tanks by section to avoid flat list & duplicates
       const sectionsMap = new Map<string, any>();
 
-      accessData?.forEach((access: any) => {
-        if (!access.farms) return;
+      // Collect all section IDs and farm IDs we need to fetch full data for
+      // (This handles cases where the user has whole-farm access)
+      const farmIdsWithWholeAccess = new Set(accessData.filter(a => !a.section_id).map(a => a.farm_id));
+      const specificSectionIds = new Set(accessData.filter(a => a.section_id).map(a => a.section_id));
 
-        const farm = access.farms;
-        const allSections = farm.sections || [];
+      // Fetch full details for these sections and their tanks
+      // We do one combined query for efficiency
+      let query = supabase.from('sections').select('id, name, farm_id, farms(name, category), tanks(id, name)');
+      
+      if (farmIdsWithWholeAccess.size > 0 && specificSectionIds.size > 0) {
+        query = query.or(`farm_id.in.(${Array.from(farmIdsWithWholeAccess).join(',')}),id.in.(${Array.from(specificSectionIds).join(',')})`);
+      } else if (farmIdsWithWholeAccess.size > 0) {
+        query = query.in('farm_id', Array.from(farmIdsWithWholeAccess));
+      } else if (specificSectionIds.size > 0) {
+        query = query.in('id', Array.from(specificSectionIds));
+      } else {
+        setAvailableTanks([]);
+        return;
+      }
 
-        allSections.forEach((section: any) => {
-          // Rule 1: User has access to the whole Farm
-          const hasFarmAccess = !access.section_id && !access.tank_id;
-          
-          // Rule 2: User has access to this specific Section
-          const hasSectionAccess = access.section_id === section.id;
-          
-          // Rule 3: User has access to specific Tanks in this section
-          const accessedTanks = section.tanks?.filter((tank: any) => 
-            hasFarmAccess || hasSectionAccess || access.tank_id === tank.id
-          );
+      const { data: fullData, error: fullError } = await query;
+      if (fullError) throw fullError;
 
-          if (accessedTanks && accessedTanks.length > 0) {
-            const existing = sectionsMap.get(section.id);
-            if (existing) {
-              // Merge tanks if multiple access records apply (e.g. Tank A and Tank B from same section)
-              const tankIds = new Set(existing.tanks.map((t: any) => t.id));
-              accessedTanks.forEach((t: any) => {
-                if (!tankIds.has(t.id)) {
-                  existing.tanks.push(t);
-                }
-              });
-            } else {
-              sectionsMap.set(section.id, {
-                id: section.id,
-                name: section.name,
-                farm_name: farm.name,
-                farm_id: access.farm_id,
-                tanks: accessedTanks
-              });
-            }
-          }
+      fullData?.forEach((section: any) => {
+        const farm = section.farms;
+        if (!farm) return;
+
+        // Skip if this section is logically filtered away? 
+        // No, we fetch all and let the UI filter by module/category later if needed.
+        
+        sectionsMap.set(section.id, {
+          id: section.id,
+          name: section.name,
+          farm_name: farm.name,
+          farm_id: section.farm_id,
+          farm_category: farm.category || 'LRT',
+          tanks: section.tanks || []
         });
       });
 
@@ -277,7 +335,11 @@ const RecordActivity = () => {
   // Load Feed and Treatment Types from DB
   useEffect(() => {
     if (user?.hatchery_id) {
-      supabase.from('feed_types').select('name').eq('hatchery_id', user.hatchery_id).eq('is_active', true)
+      supabase.from('feed_types')
+        .select('name')
+        .eq('hatchery_id', user.hatchery_id)
+        .eq('is_active', true)
+        .eq('section_category', activeModule) // Filter by active module
         .then(({ data, error }) => {
           if (!error && data && data.length > 0) {
             setDbFeedTypes(data.map(d => d.name));
@@ -286,7 +348,11 @@ const RecordActivity = () => {
           }
         });
 
-      supabase.from('treatment_types').select('name').eq('hatchery_id', user.hatchery_id).eq('is_active', true)
+      supabase.from('treatment_types')
+        .select('name')
+        .eq('hatchery_id', user.hatchery_id)
+        .eq('is_active', true)
+        .eq('section_category', activeModule) // Filter by active module
         .then(({ data, error }) => {
           if (!error && data && data.length > 0) {
             setDbTreatmentTypes(data.map(d => d.name));
@@ -295,7 +361,7 @@ const RecordActivity = () => {
           }
         });
     }
-  }, [user]);
+  }, [user, activeModule]);
 
   // Load available workers for assignment (only in planning mode, scoped to selected farm)
   useEffect(() => {
@@ -425,6 +491,7 @@ const RecordActivity = () => {
         if (actType === 'Observation' && pd.observationData) setObservationData(pd.observationData);
         if (actType === 'Harvest' && pd.harvestData) setHarvestData(pd.harvestData);
         if (actType === 'Tank Shifting' && pd.tankShiftingData) setTankShiftingData(pd.tankShiftingData);
+        if (actType === 'Nauplii Sale' && pd.naupliiSaleData) setNaupliiSaleData(pd.naupliiSaleData);
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
@@ -520,6 +587,8 @@ const RecordActivity = () => {
       setHarvestData(planned_data.harvestData);
     } else if (currentAct === 'Tank Shifting' && planned_data.tankShiftingData) {
       setTankShiftingData(planned_data.tankShiftingData);
+    } else if (currentAct === 'Nauplii Sale' && planned_data.naupliiSaleData) {
+      setNaupliiSaleData(planned_data.naupliiSaleData);
     }
     
     setSelectedInstructionId(instruction.id);
@@ -585,6 +654,10 @@ const RecordActivity = () => {
           setHarvestData(data.data);
         } else if (actType === 'Tank Shifting') {
           setTankShiftingData(data.data);
+        } else if (actType === 'Sourcing & Mating') {
+          setSourcingMatingData(data.data);
+        } else if (actType === 'Spawning') {
+          setSpawningData(data.data);
         }
       }
     } catch (err) {
@@ -632,22 +705,44 @@ const RecordActivity = () => {
         naupliiStockedMillion: undefined
       }));
 
+      const tankSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
+      const currentFarmId = tankSection?.farm_id || selectedFarmId || activeFarmId;
+      
+      if (!currentFarmId) {
+        console.warn('No farm ID found for tank:', tid);
+      }
+      
       const { data, error } = await supabase
         .from('activity_logs')
-        .select('data')
+        .select('data, activity_type')
         .eq('tank_id', tid)
-        .eq('activity_type', 'Stocking')
+        .in('activity_type', ['Stocking', 'Observation'])
+        .eq('farm_id', currentFarmId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (!error && data && data.data) {
+        const isStocking = data.activity_type === 'Stocking';
+        const isMaturation = activeFarmCategory === 'MATURATION';
+        
         setObservationData(prev => ({
           ...prev,
           stockingId: data.data.stockingId,
           broodstockSource: data.data.broodstockSource,
+          broodstockType: data.data.broodstockType,
+          sex: data.data.sex,
           hatcheryName: data.data.hatcheryName,
           tankStockingNumber: data.data.tankStockingNumber,
+          presentPopulationM: isMaturation 
+            ? (isStocking ? data.data.totalMales : data.data.presentPopulationM) 
+            : undefined,
+          presentPopulationF: isMaturation 
+            ? (isStocking ? data.data.totalFemales : data.data.presentPopulationF) 
+            : undefined,
+          presentPopulation: !isMaturation 
+            ? (isStocking ? data.data.tankStockingNumber : data.data.presentPopulation) 
+            : undefined,
           naupliiStockedMillion: data.data.naupliiStocked || data.data.naupliiStockedMillion
         }));
       }
@@ -670,19 +765,19 @@ const RecordActivity = () => {
       if (!error && data && data.data) {
         let population = 0;
         if (data.activity_type === 'Stocking') {
-          population = parseFloat(data.data.tankStockingNumber || '0');
+          population = activeFarmCategory === 'MATURATION' 
+            ? parseFloat(data.data.totalMales || '0') + parseFloat(data.data.totalFemales || '0')
+            : parseFloat(data.data.tankStockingNumber || '0');
         } else if (data.activity_type === 'Observation') {
-          population = parseFloat(data.data.presentPopulation || '0');
+          population = activeFarmCategory === 'MATURATION' 
+            ? parseFloat(data.data.presentPopulationM || '0') + parseFloat(data.data.presentPopulationF || '0')
+            : parseFloat(data.data.presentPopulation || '0');
         } else if (data.activity_type === 'Harvest') {
           population = parseFloat(data.data.populationAfterHarvest || '0');
         } else if (data.activity_type === 'Tank Shifting') {
-           // For tank shifting, we need to know if the current tank was source or destination
-           // But since activity_logs is per tank, it's easier: 
-           // If it's a 'Tank Shifting' record for THIS tank, it MUST have the final population for this tank.
            if (data.data.sourceTankId === tid) {
                population = parseFloat(data.data.remainingInSource || '0');
            } else {
-               // If it's a destination, we need to find the population for this specific tank
                const dest = (data.data.destinations || []).find((d: any) => d.tankId === tid);
                population = parseFloat(dest?.populationToShift || '0') + parseFloat(dest?.currentPopulation || '0');
            }
@@ -708,7 +803,7 @@ const RecordActivity = () => {
     }
   }, [activity, tankId, editId]);
 
-  // Auto-select activity from URL (if not editing)
+  // Pre-fill activity from URL (if not editing)
   useEffect(() => {
     if (type && !editId) {
       const map: Record<string, ActivityType> = {
@@ -725,12 +820,20 @@ const RecordActivity = () => {
         'harvest': 'Harvest',
         'tank shifting': 'Tank Shifting',
         'shifting': 'Tank Shifting',
+        'sourcing & mating': 'Sourcing & Mating',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
       }
     }
   }, [type, editId]);
+
+  // Auto-set selectionScope to 'all' for Maturation Stocking
+  useEffect(() => {
+    if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+      setSelectionScope('all');
+    }
+  }, [activeFarmCategory, activity]);
 
   // Feed fields
   const [feedType, setFeedType] = useState('');
@@ -763,6 +866,7 @@ const RecordActivity = () => {
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
   const [harvestData, setHarvestData] = useState<any>({});
   const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
+  const [naupliiSaleData, setNaupliiSaleData] = useState<any>({});
 
   const [comments, setComments] = useState('');
 
@@ -909,6 +1013,11 @@ const RecordActivity = () => {
       case 'Algae': return { ...baseData, ...algaeData };
       case 'Harvest': return { ...baseData, ...harvestData };
       case 'Tank Shifting': return { ...baseData, ...tankShiftingData };
+      case 'Sourcing & Mating': return { ...baseData, ...sourcingMatingData };
+      case 'Spawning': return { ...baseData, ...spawningData };
+      case 'Egg Count': return { ...baseData, ...eggCountData };
+      case 'Nauplii Harvest': return { ...baseData, ...naupliiHarvestData };
+      case 'Nauplii Sale': return { ...baseData, ...naupliiSaleData };
       default: return baseData;
     }
   };
@@ -1060,7 +1169,8 @@ const RecordActivity = () => {
             artemiaData: activity === 'Artemia' ? artemiaData : undefined,
             algaeData: activity === 'Algae' ? algaeData : undefined,
             harvestData: activity === 'Harvest' ? harvestData : undefined,
-            tankShiftingData: activity === 'Tank Shifting' ? tankShiftingData : undefined
+            tankShiftingData: activity === 'Tank Shifting' ? tankShiftingData : undefined,
+            sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
@@ -1082,7 +1192,8 @@ const RecordActivity = () => {
           stockingData: activity === 'Stocking' ? stockingData : undefined,
           observationData: activity === 'Observation' ? observationData : undefined,
           artemiaData: activity === 'Artemia' ? artemiaData : undefined,
-          algaeData: activity === 'Algae' ? algaeData : undefined
+          algaeData: activity === 'Algae' ? algaeData : undefined,
+          sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined
         };
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
@@ -1152,7 +1263,12 @@ const RecordActivity = () => {
 
     if (activity === 'Stocking') {
       const required = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
-      const missing = required.filter(f => {
+      // If Maturation, naupliiStocked is not required (as it's hidden)
+      const adjustedRequired = activeFarmCategory === 'MATURATION' 
+        ? required.filter(f => f !== 'naupliiStocked')
+        : required;
+        
+      const missing = adjustedRequired.filter(f => {
         const val = stockingData[f];
         return val === undefined || val === null || val === '' || (typeof val === 'string' && val.trim() === '');
       });
@@ -1163,8 +1279,16 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Observation') {
-      const required = ['animalQualityScore', 'waterQualityScore', 'presentPopulation'];
-      const missing = required.filter(f => !observationData[f] || (typeof observationData[f] === 'string' && !observationData[f].trim()));
+      const isMaturation = activeFarmCategory === 'MATURATION';
+      const requiredFields = isMaturation
+          ? ['animalQualityScore', 'waterQualityScore', 'presentPopulationM', 'presentPopulationF']
+          : ['animalQualityScore', 'waterQualityScore', 'presentPopulation'];
+          
+      const missing = requiredFields.filter(f => {
+          const val = observationData[f];
+          return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim());
+      });
+      
       if (missing.length > 0) {
         toast.error('Please fill in all observation details');
         return;
@@ -1310,11 +1434,85 @@ const RecordActivity = () => {
       }
     }
 
+    if (activity === 'Sourcing & Mating' && !isPlanningMode) {
+      const { sourceTanks, matedCount, matedDestinations, returnDestinations } = sourcingMatingData;
+      const totalSourced = sourceTanks.reduce((sum: number, s: any) => sum + (parseFloat(s.femaleCount) || 0), 0);
+      const totalDistributedMated = matedDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
+      const totalDistributedReturn = returnDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
+      const matedVal = parseFloat(matedCount) || 0;
+      const balanceCount = Math.max(0, totalSourced - matedVal);
+
+      if (totalSourced === 0) {
+        toast.error('Please enter at least one source tank count');
+        return;
+      }
+      if (totalDistributedMated !== matedVal) {
+        toast.error(`Mated redistribution (${totalDistributedMated}) must match total mated (${matedVal})`);
+        return;
+      }
+      if (totalDistributedReturn !== balanceCount) {
+        toast.error(`Return redistribution (${totalDistributedReturn}) must match balance (${balanceCount})`);
+        return;
+      }
+    }
+
+    if (activity === 'Nauplii Harvest' && !isPlanningMode) {
+      const { sources, destinations, summary } = naupliiHarvestData;
+      const validSources = sources.filter((s:any) => s.tankId && s.population);
+      const validDestinations = destinations.filter((d:any) => d.tankId && d.population);
+      
+      if (validSources.length === 0) {
+        toast.error('Please record at least one source tank');
+        return;
+      }
+      if (validDestinations.length === 0) {
+        toast.error('Please record at least one destination tank');
+        return;
+      }
+      if (Math.abs(summary.balance) > 0.001) {
+        toast.error(`Population is not balanced. Current balance: ${summary.balance} mil`);
+        return;
+      }
+    }
+
+    if (activity === 'Egg Count' && !isPlanningMode) {
+      const { entries } = eggCountData;
+      const validEntries = entries.filter((e: any) => e.tankId && e.totalEggsMillions);
+      if (validEntries.length === 0) {
+        toast.error('Please record results for at least one tank');
+        return;
+      }
+    }
+
+    if (activity === 'Spawning' && !isPlanningMode) {
+      const { tankId, spawnedCount, balanceCount, returnDestinations } = spawningData;
+      if (!tankId) {
+        toast.error('Please select a spawning tank');
+        return;
+      }
+      const sVal = parseFloat(spawnedCount) || 0;
+      const bVal = parseFloat(balanceCount) || 0;
+      const totalFemales = sVal + bVal;
+      const totalRedistributed = returnDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
+      
+      if (totalFemales === 0) {
+        toast.error('Please enter spawned or balance counts');
+        return;
+      }
+      if (totalRedistributed !== totalFemales) {
+        toast.error(`Total females (${totalFemales}) must match total redistributed (${totalRedistributed})`);
+        return;
+      }
+    }
+
     let targets = [];
     if (selectionScope === 'all') {
-      const section = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-      if (section) {
-        targets = section.tanks
+      const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+      const activeFarmName = activeSection?.farm_name || '';
+      const activeFarmCategory = activeSection?.farm_category || 'LRT';
+      const displayLabel = activeSection?.name || 'Select Section';
+      if (activeSection) {
+        targets = activeSection.tanks
           .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
           .map((t: any) => t.id);
       }
@@ -1402,6 +1600,17 @@ const RecordActivity = () => {
           }
 
           const currentBuildData = buildData();
+          
+          // Apply per-tank allocation for Maturation Stocking
+          if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && tId) {
+            const alloc = stockingData.allocations?.[tId];
+            if (!alloc || (Number(alloc.m || 0) === 0 && Number(alloc.f || 0) === 0)) {
+               return null; // Skip tanks with no allocation
+            }
+            currentBuildData.tankStockingNumber = (Number(alloc.m || 0) + Number(alloc.f || 0)).toString();
+            currentBuildData.totalMales = alloc.m || '0';
+            currentBuildData.totalFemales = alloc.f || '0';
+          }
           
           // Variance Tracking & Auto-matching
           // Find if this specific tank matches an instruction
@@ -1613,14 +1822,16 @@ const RecordActivity = () => {
           return logId;
         });
 
-        await Promise.all(promises);
+        const results = await Promise.all(promises);
+        const savedCount = results.filter(Boolean).length;
+
         // Show a combined success message
         if (completedInstructionIds.size > 0) {
-          toast.success(targets.length > 1
-            ? `${targets.length} activities recorded & task marked done!`
+          toast.success(savedCount > 1
+            ? `${savedCount} activities recorded & task marked done!`
             : 'Activity recorded & task marked done!');
         } else {
-          toast.success(targets.length > 1 ? `${targets.length} activities recorded!` : 'Activity recorded!');
+          toast.success(savedCount > 1 ? `${savedCount} activities recorded!` : 'Activity recorded!');
         }
       }
 
@@ -1648,26 +1859,62 @@ const RecordActivity = () => {
     }
   };
 
+  const activeFarmName = activeSection?.farm_name || '';
+  
+  const filteredActivities = activeFarmCategory === 'MATURATION' 
+    ? ACTIVITIES.filter(a => a !== 'Artemia' && a !== 'Algae' && a !== 'Harvest' && a !== 'Tank Shifting')
+    : ACTIVITIES;
+
   return (
     <div className="min-h-screen bg-background pb-12">
       {/* Header */}
-      <div className="ocean-gradient p-4 pb-6 rounded-b-2xl shadow-sm mb-6">
-        <Breadcrumbs lightTheme className="mb-2" />
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              const target = user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard';
-              navigate(target);
-            }}
-            className="text-primary-foreground hover:bg-primary-foreground/10"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-lg font-bold text-primary-foreground">
-            {editId ? 'Edit Activity' : isPlanningMode ? 'Plan Activity' : 'Record Activity'}
-          </h1>
+        <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest">
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>Dashboard</span>
+              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
+              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || 'Section'}</span>
+              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <span className={activity ? 'text-white/80' : 'text-white'}>{isPlanningMode ? 'Plan Activity' : (editId ? 'Edit Record' : 'Record Activity')}</span>
+              {activity && (
+                <>
+                  <ChevronDown className="w-3 h-3 -rotate-90" />
+                  <span className="text-white">{activity}</span>
+                </>
+              )}
+            </div>
+          </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                const target = user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard';
+                navigate(target);
+              }}
+              className="text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-primary-foreground" data-testid="main-heading">
+                  {editId ? 'Edit Activity' : isPlanningMode ? 'Plan Activity' : 'Record Activity'}
+                </h1>
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${
+                  activeFarmCategory === 'MATURATION' 
+                    ? 'bg-purple-500/20 text-purple-200 border-purple-500/30' 
+                    : 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30'
+                }`}>
+                  {activeFarmCategory}
+                </span>
+              </div>
+              <p className="text-xs text-white/70 font-medium">{activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}</p>
+            </div>
+          </div>
         </div>
  
         {selectedInstructionId && (
@@ -1678,7 +1925,7 @@ const RecordActivity = () => {
         )}
       </div>
 
-      <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto">
+      <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto" data-testid="main-content">
         {/* Supervisor Instruction Note - Read Only Display for Workers */}
         {selectedInstructionData?.planned_data?.instructions && !isPlanningMode && (
           <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up space-y-2 bg-primary/5">
@@ -1724,7 +1971,7 @@ const RecordActivity = () => {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Date</Label>
+              <Label className="text-xs">Date</Label>
               <Input
                 type="date"
                 value={date}
@@ -1736,7 +1983,7 @@ const RecordActivity = () => {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Time</Label>
+              <Label className="text-xs">Time</Label>
               <div className="flex gap-2">
                 <Input
                   type="time"
@@ -1774,7 +2021,7 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {(activity || !type) && !isSpecialActivity && (
+        {(activity || !type) && !isSpecialActivity && !(activeFarmCategory === 'MATURATION' && (activity === 'Stocking' || activity === 'Sourcing & Mating' || activity === 'Nauplii Sale')) && (
 
 
           <div className="glass-card rounded-2xl p-4 space-y-4">
@@ -1786,7 +2033,7 @@ const RecordActivity = () => {
                     {type ? 'Location & Scope' : 'Location & Activity'}
                   </h2>
                   
-                  {!editId && (
+                  {!editId && !(activeFarmCategory === 'MATURATION' && activity === 'Stocking') && (
                     <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
                       <TabsList className="bg-muted/50 h-8 p-0.5">
                         <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
@@ -1826,7 +2073,7 @@ const RecordActivity = () => {
                     </div>
                   )}
 
-                  {!isSpecialActivity && (
+                  {!isSpecialActivity && !(activeFarmCategory === 'MATURATION' && activity === 'Stocking') && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">
                         {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
@@ -1904,11 +2151,11 @@ const RecordActivity = () => {
                   value={activity}
                   onValueChange={v => setActivity(v as ActivityType)}
                 >
-                  <SelectTrigger className="h-11">
+                  <SelectTrigger className="h-11" data-testid="activity-select">
                     <SelectValue placeholder="Select activity" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ACTIVITIES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    {filteredActivities.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -2262,12 +2509,16 @@ const RecordActivity = () => {
                 <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
               </div>
             )}
-            {isPlanningMode && (
-              <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Instructions</Label>
-                <Textarea value={comments} onChange={e => setComments(e.target.value)} placeholder="Add instructions for the worker..." rows={3} />
-              </div>
-            )}
+            <div className="space-y-1.5 pt-2 border-t border-dashed">
+              <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
+              <Textarea 
+                value={comments} 
+                onChange={e => setComments(e.target.value)} 
+                placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."} 
+                rows={3} 
+                className="rounded-xl"
+              />
+            </div>
           </div>
         )}
 
@@ -2280,6 +2531,21 @@ const RecordActivity = () => {
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
             isPlanningMode={isPlanningMode}
+            activeFarmCategory={activeFarmCategory}
+            selectionScope={selectionScope}
+            selectedTanks={(() => {
+              if (selectionScope === 'all') {
+                const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+                return activeSection?.tanks.filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id)) || [];
+              } else if (selectionScope === 'custom') {
+                const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+                return activeSection?.tanks.filter((t: any) => selectedTankIds.includes(t.id) && (activity === 'Stocking' || editId || stockedTankIds.includes(t.id))) || [];
+              } else {
+                const activeSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
+                const t = activeSection?.tanks.find((t: any) => t.id === tankId);
+                return t ? [t] : [];
+              }
+            })()}
           />
         )}
 
@@ -2292,6 +2558,7 @@ const RecordActivity = () => {
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
             isPlanningMode={isPlanningMode}
+            activeFarmCategory={activeFarmCategory}
             onGoToStocking={() => {
               setActivity('Stocking');
               setIsRedirectedFromObservation(true);
@@ -2347,12 +2614,80 @@ const RecordActivity = () => {
           />
         )}
 
+        {activity === 'Sourcing & Mating' && (
+          <SourcingMatingForm
+            data={sourcingMatingData}
+            onDataChange={setSourcingMatingData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            activeSectionId={selectedSectionId || activeSectionId}
+            isPlanningMode={isPlanningMode}
+          />
+        )}
+
+        {activity === 'Spawning' && (
+          <SpawningForm
+            data={spawningData}
+            onDataChange={setSpawningData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            activeSectionId={selectedSectionId || activeSectionId}
+            isPlanningMode={isPlanningMode}
+          />
+        )}
+
+        {activity === 'Egg Count' && (
+          <EggCountForm
+            data={eggCountData}
+            onDataChange={setEggCountData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            activeSectionId={selectedSectionId || activeSectionId}
+          />
+        )}
+
+        {activity === 'Nauplii Harvest' && (
+          <NaupliiHarvestForm
+            data={naupliiHarvestData}
+            onDataChange={setNaupliiHarvestData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            activeSectionId={selectedSectionId || activeSectionId}
+          />
+        )}
+
+        {activity === 'Nauplii Sale' && (
+          <NaupliiSaleForm
+            data={naupliiSaleData}
+            onDataChange={setNaupliiSaleData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            isPlanningMode={isPlanningMode}
+          />
+        )}
+
         {/* Save */}
         {activity && (
           <Button 
             onClick={isPlanningMode ? handleSaveInstruction : handleSave} 
             className="w-full h-14 text-base font-semibold rounded-2xl gap-2 animate-fade-in-up" 
             disabled={loading}
+            data-testid="save-activity-button"
           >
             {loading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

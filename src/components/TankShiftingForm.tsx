@@ -148,7 +148,7 @@ const TankShiftingForm = ({
                         handleDestChange(dest.id, { sectionId: val, tankId: '' }); // Update section and reset tank
                     }}
                 >
-                  <SelectTrigger className="h-10 rounded-xl" data-testid="dest-section-select">
+                  <SelectTrigger id="dest-section-select" className="h-10 rounded-xl" data-testid="dest-section-select">
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -169,7 +169,7 @@ const TankShiftingForm = ({
                     onValueChange={(val) => handleDestChange(dest.id, { tankId: val })}
                     disabled={!dest.sectionId}
                 >
-                  <SelectTrigger className="h-10 rounded-xl" data-testid="dest-tank-select">
+                  <SelectTrigger id="dest-tank-select" className="h-10 rounded-xl" data-testid="dest-tank-select">
                     <SelectValue placeholder="Select tank" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -186,8 +186,9 @@ const TankShiftingForm = ({
 
               {/* Population in Destination (Auto-loaded) */}
               <div className="space-y-1.5">
-                <Label className="text-xs">7. Current Population</Label>
+                <Label className="text-xs" htmlFor="current-pop">7. Current Population</Label>
                 <Input
+                  id="current-pop"
                   type="number"
                   value={dest.currentPopulation || '0'}
                   readOnly
@@ -197,8 +198,9 @@ const TankShiftingForm = ({
 
               {/* Population to shift */}
               <div className="space-y-1.5">
-                <Label className="text-xs">Population to Shift *</Label>
+                <Label className="text-xs" htmlFor="pop-to-shift">Population to Shift *</Label>
                 <Input
+                  id="pop-to-shift"
                   type="number"
                   value={dest.populationToShift || ''}
                   onChange={(e) => handleDestChange(dest.id, { populationToShift: e.target.value })}

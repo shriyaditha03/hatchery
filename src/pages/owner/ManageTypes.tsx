@@ -14,6 +14,7 @@ interface TypeItem {
     name: string;
     description: string | null;
     is_active: boolean;
+    section_category: string;
 }
 
 const DEFAULT_FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -23,6 +24,7 @@ const ManageTypes = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'feed' | 'treatment'>('feed');
+    const [activeModule, setActiveModule] = useState<'LRT' | 'MATURATION'>('LRT');
     
     const [items, setItems] = useState<TypeItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ const ManageTypes = () => {
         if (user?.hatchery_id) {
             fetchItems();
         }
-    }, [user, activeTab]);
+    }, [user, activeTab, activeModule]);
 
     const fetchItems = async () => {
         if (!user?.hatchery_id) return;
@@ -50,8 +52,9 @@ const ManageTypes = () => {
             const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
             const { data, error } = await supabase
                 .from(table)
-                .select('id, name, description, is_active')
+                .select('id, name, description, is_active, section_category')
                 .eq('hatchery_id', user.hatchery_id)
+                .eq('section_category', activeModule)
                 .order('name');
             
             if (error) throw error;
@@ -94,7 +97,8 @@ const ManageTypes = () => {
                 .insert(newDefaults.map(name => ({
                     name,
                     hatchery_id: user.hatchery_id,
-                    description: 'Default type'
+                    description: 'Default type',
+                    section_category: activeModule
                 })))
                 .select();
 
@@ -133,7 +137,8 @@ const ManageTypes = () => {
                 .insert({
                     name: newName.trim(),
                     description: newDesc.trim() || null,
-                    hatchery_id: user?.hatchery_id
+                    hatchery_id: user?.hatchery_id,
+                    section_category: activeModule
                 })
                 .select()
                 .single();
@@ -272,6 +277,30 @@ const ManageTypes = () => {
                         }`}
                     >
                         Treatment Types
+                    </button>
+                </div>
+
+                {/* Module Selector */}
+                <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50 overflow-hidden">
+                    <button
+                        onClick={() => setActiveModule('LRT')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                            activeModule === 'LRT' 
+                                ? 'bg-blue-600 text-white shadow-md transform scale-[1.02]' 
+                                : 'text-blue-400 hover:text-blue-600'
+                        }`}
+                    >
+                        LRT Module
+                    </button>
+                    <button
+                        onClick={() => setActiveModule('MATURATION')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                            activeModule === 'MATURATION' 
+                                ? 'bg-blue-600 text-white shadow-md transform scale-[1.02]' 
+                                : 'text-blue-400 hover:text-blue-600'
+                        }`}
+                    >
+                        MATURATION Module
                     </button>
                 </div>
 

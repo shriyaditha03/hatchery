@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp, Utensils, Waves } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -426,6 +426,8 @@ const EditFarm = () => {
                     {sections.map((section, sIdx) => {
                         const sectionId = section.id || `new-sec-${sIdx}`;
                         const isCollapsed = collapsedSections.includes(sectionId);
+                        const totalVolume = section.tanks.reduce((sum, t) => sum + (Number(t.volume) || 0), 0);
+                        const totalArea = section.tanks.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
                         
                         return (
                         <div key={sectionId} className="space-y-4">
@@ -446,9 +448,17 @@ const EditFarm = () => {
                                             }}
                                         />
                                         {isCollapsed && (
-                                            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                                                {section.tanks.length} TANKS
-                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                                    {section.tanks.length} TANKS
+                                                </span>
+                                                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                    <Utensils className="w-3 h-3" /> {totalVolume.toLocaleString()} L
+                                                </span>
+                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                    <Waves className="w-3 h-3" /> {totalArea.toLocaleString()} m²
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -575,11 +585,20 @@ const EditFarm = () => {
                                         </CardContent>
                                     </Card>
                                 ))}
-                                <Button variant="outline" onClick={() => addTank(sIdx)} className="border-dashed h-12 rounded-xl border-2 hover:bg-muted/50">
-                                    <Plus className="w-4 h-4 mr-2" /> Add Tank to {section.name}
-                                </Button>
-                            </div>
-                            )}
+                                    <Button variant="outline" onClick={() => addTank(sIdx)} className="border-dashed h-12 rounded-xl border-2 hover:bg-muted/50 w-full mb-2">
+                                        <Plus className="w-4 h-4 mr-2" /> Add Tank to {section.name}
+                                    </Button>
+
+                                    {/* Section Capacity Summary Footer */}
+                                    <div className="mt-2 bg-muted/20 rounded-xl p-3 border border-dashed border-muted flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <span>Section Total Capacity</span>
+                                        <div className="flex items-center gap-4">
+                                            <span className="flex items-center gap-1.5"><Utensils className="w-3.5 h-3.5 text-emerald-500" /> <span className="text-foreground">{totalVolume.toLocaleString()} L</span></span>
+                                            <span className="flex items-center gap-1.5"><Waves className="w-3.5 h-3.5 text-blue-500" /> <span className="text-foreground">{totalArea.toLocaleString()} m²</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                )}
                         </div>
                     );
                     })}

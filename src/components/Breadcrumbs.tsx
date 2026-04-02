@@ -18,7 +18,7 @@ const routeNames: Record<string, string> = {
   'daily-report': 'Daily Report',
 };
 
-// Activity types
+// Activity types mapped from URL slug to display name
 const activityNames: Record<string, string> = {
   'feed': 'Feed',
   'treatment': 'Treatment',
@@ -26,6 +26,17 @@ const activityNames: Record<string, string> = {
   'animal': 'Animal Quality',
   'stocking': 'Stocking',
   'observation': 'Observation',
+  'artemia': 'Artemia',
+  'algae': 'Algae',
+  'harvest': 'Harvest',
+  'shifting': 'Tank Shifting',
+  'tank-shifting': 'Tank Shifting',
+  'mating': 'Sourcing & Mating',
+  'sourcing-mating': 'Sourcing & Mating',
+  'spawning': 'Spawning',
+  'egg-count': 'Egg Count',
+  'nauplii-harvest': 'Nauplii Harvest',
+  'nauplii-sale': 'Nauplii Sale',
 };
 
 export const Breadcrumbs = ({ className = "", lightTheme = false }: { className?: string, lightTheme?: boolean }) => {

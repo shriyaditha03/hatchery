@@ -11,21 +11,51 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, FileText, ClipboardList, Utensils, Beaker, Eye, Search, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Trash2, Plus, Scissors, MoveRight } from 'lucide-react';
+import { 
+  Plus, Search, ClipboardList, Check, ArrowRightLeft, 
+  Droplet, Thermometer, Wind, Activity, Heart, Sparkles,
+  RefreshCcw, LogOut, ChevronRight, User, Settings, Info,
+  ExternalLink, Menu, X, Filter, BarChart3, TrendingDown,
+  Tractor, Scale, Trash2, Calendar, Utensils, Beaker, Eye, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Scissors, MoveRight, FileText, Database, ArrowUpRight, ShoppingCart
+} from 'lucide-react';
 import logo from '@/assets/aqua-nexus-logo.png';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { getTodayStr } from '@/lib/date-utils';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const ACTIVITY_ICONS: Record<string, any> = {
+  'Feed': Utensils,
+  'Treatment': Beaker,
+  'Water Quality': Waves,
+  'Animal Quality': Activity,
+  'Stocking': Plus,
+  'Observation': Eye,
+  'Artemia': Droplet,
+  'Algae': Wind,
+  'Harvest': Scissors,
+  'Tank Shifting': ArrowRightLeft,
+  'Sourcing & Mating': Heart,
+  'Spawning': Sparkles
+};
 
 const UserDashboard = () => {
-    const { user, logout, activeFarmId, setActiveFarmId, activeSectionId, setActiveSectionId } = useAuth();
+    const { 
+        user, 
+        logout, 
+        activeFarmId, 
+        setActiveFarmId, 
+        activeSectionId, 
+        setActiveSectionId,
+        activeModule,
+        setActiveModule,
+        supervisorMode,
+        setSupervisorMode
+    } = useAuth();
     const navigate = useNavigate();
     const [instructions, setInstructions] = useState<any[]>([]);
     const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [supervisorMode, setSupervisorMode] = useState<'instruction' | 'activity'>(
-        user?.role === 'supervisor' ? 'instruction' : 'activity'
-    );
 
     if (!user) return null;
 
@@ -46,24 +76,34 @@ const UserDashboard = () => {
             .map(id => allSections.find(s => s.id === id)!);
     }, [user.access]);
 
+    // Current module's sections
+    const filteredSections = useMemo(() => {
+        return sections.filter(s => (s.farm_category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+    }, [sections, activeModule]);
+
+    const filteredInstructions = useMemo(() => {
+        return instructions.filter(instr => (instr.farms?.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+    }, [instructions, activeModule]);
+
+    const filteredSupervisorInstructions = useMemo(() => {
+        return supervisorInstructions.filter(instr => (instr.farms?.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+    }, [supervisorInstructions, activeModule]);
+
     const groupedInstructions = useMemo(() => {
         const groups: Record<string, Record<string, any[]>> = {};
-        instructions.forEach(instr => {
+        filteredInstructions.forEach(instr => {
             const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
-            if (instr.farms?.category === 'MATURATION' && !sectionName.includes('Maturation')) {
-                // Optionally add a label here if needed, but for now we'll just use the name
-            }
             const activityName = instr.activity_type;
             if (!groups[sectionName]) groups[sectionName] = {};
             if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
             groups[sectionName][activityName].push(instr);
         });
         return groups;
-    }, [instructions]);
+    }, [filteredInstructions]);
 
     const groupedSupervisorInstructions = useMemo(() => {
         const groups: Record<string, Record<string, any[]>> = {};
-        supervisorInstructions.forEach(instr => {
+        filteredSupervisorInstructions.forEach(instr => {
             const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
             const activityName = instr.activity_type;
             if (!groups[sectionName]) groups[sectionName] = {};
@@ -71,15 +111,22 @@ const UserDashboard = () => {
             groups[sectionName][activityName].push(instr);
         });
         return groups;
-    }, [supervisorInstructions]);
+    }, [filteredSupervisorInstructions]);
 
+    // EFFECT: When tab is manually changed, if current section doesn't match the new module,
+    // auto-select the first section of that new module.
     useEffect(() => {
-        if (!activeSectionId && sections.length > 0) {
-            const first = sections[0];
-            setActiveFarmId(first.farm_id);
-            setActiveSectionId(first.id);
+        if (sections.length > 0) {
+            const currentActiveInModule = filteredSections.find(s => s.id === activeSectionId);
+            if (!currentActiveInModule) {
+                const first = filteredSections[0];
+                if (first) {
+                    setActiveFarmId(first.farm_id);
+                    setActiveSectionId(first.id);
+                }
+            }
         }
-    }, [activeSectionId, sections]);
+    }, [activeModule, filteredSections, sections, activeSectionId]);
 
     useEffect(() => {
         fetchInstructions();
@@ -187,18 +234,38 @@ const UserDashboard = () => {
     const activeSection = sections.find(s => s.id === activeSectionId);
     const displayLabel = activeSection?.name || 'Select Section';
 
-    const activities = [
-        { name: 'Feed', icon: Utensils, route: '/user/activity/feed', color: 'bg-orange-100 text-orange-600' },
-        { name: 'Treatment', icon: Beaker, route: '/user/activity/treatment', color: 'bg-blue-100 text-blue-600' },
-        { name: 'Water Quality', icon: Waves, route: '/user/activity/water', color: 'bg-cyan-100 text-cyan-600' },
-        { name: 'Animal Quality', icon: Search, route: '/user/activity/animal', color: 'bg-rose-100 text-rose-600' },
-        { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
-        { name: 'Observation', icon: Eye, route: '/user/activity/observation', color: 'bg-purple-100 text-purple-600' },
-        { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
-        { name: 'Tank Shifting', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
-        { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
-        { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
-    ];
+    const activities = useMemo(() => {
+        const base = [
+            { name: 'Feed', icon: Utensils, route: '/user/activity/feed', color: 'bg-orange-100 text-orange-600' },
+            { name: 'Treatment', icon: Beaker, route: '/user/activity/treatment', color: 'bg-blue-100 text-blue-600' },
+            { name: 'Water Quality', icon: Waves, route: '/user/activity/water', color: 'bg-cyan-100 text-cyan-600' },
+            { name: 'Animal Quality', icon: Search, route: '/user/activity/animal', color: 'bg-rose-100 text-rose-600' },
+            { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
+            { name: 'Observation', icon: Eye, route: '/user/activity/observation', color: 'bg-purple-100 text-purple-600' },
+            { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
+            { name: 'Tank Shifting', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
+            { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
+            { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
+        ];
+
+        if (activeModule.toUpperCase() === 'MATURATION') {
+            const maturationBase = base.filter(a => 
+                a.name !== 'Artemia' && 
+                a.name !== 'Algae' && 
+                a.name !== 'Harvest' && 
+                a.name !== 'Tank Shifting'
+            );
+            return [
+                ...maturationBase,
+                { name: 'Sourcing & Mating', icon: Heart, route: '/user/activity/mating', color: 'bg-pink-100 text-pink-600' },
+                { name: 'Spawning', icon: Sparkles, route: '/user/activity/spawning', color: 'bg-amber-100 text-amber-600' },
+                { name: 'Egg Count', icon: Database, route: '/user/activity/egg-count', color: 'bg-indigo-100 text-indigo-600' },
+                { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/user/activity/nauplii-harvest', color: 'bg-emerald-100 text-emerald-600' },
+                { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' }
+            ];
+        }
+        return base;
+    }, [activeModule]);
 
     const ACTIVITY_ICONS: Record<string, any> = {
         'Feed': Utensils,
@@ -210,7 +277,8 @@ const UserDashboard = () => {
         'Artemia': Beaker,
         'Algae': Waves,
         'Harvest': Scissors,
-        'Tank Shifting': MoveRight
+        'Tank Shifting': MoveRight,
+        'Nauplii Sale': ShoppingCart
     };
 
     const handleLogout = async () => {
@@ -230,8 +298,8 @@ const UserDashboard = () => {
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
-            <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg">
-                <Breadcrumbs lightTheme className="mb-4" />
+            <div className="ocean-gradient p-3 sm:p-4 pb-6 rounded-b-3xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-2" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />
@@ -260,42 +328,72 @@ const UserDashboard = () => {
                     </DropdownMenu>
                 </div>
 
-                <div className="mt-6 text-white/90">
-                    <p className="text-sm uppercase tracking-wider opacity-80">{user.role}</p>
-                    <h2 className="text-2xl font-bold">Hello, {user.name}</h2>
+                <div className="mt-2 flex items-center justify-between">
+                    <div className="text-white/90">
+                        <p className="text-xs uppercase tracking-wider opacity-70">{user?.role === 'supervisor' ? 'Supervisor' : 'Worker'} Portal</p>
+                        <h2 className="text-lg font-bold">Welcome, {user.name}</h2>
+                    </div>
                 </div>
 
-                {/* Location Picker for Workers/Supervisors */}
-                {(user.role === 'worker' || user.role === 'supervisor') && sections.length > 0 && (
-                    <div className="mt-6 flex flex-wrap gap-2 animate-fade-in">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="secondary" size="sm" className="bg-white/20 hover:bg-white/30 text-white border-0 h-10 px-4 rounded-xl gap-2 backdrop-blur-sm shadow-inner transition-all hover:scale-[1.02] active:scale-95">
-                                    <div className="p-1 px-2 rounded-lg bg-white/20 text-white flex items-center gap-2">
-                                        <Layers className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] uppercase font-black tracking-tighter">Current Section</span>
+                {/* Module Toggle */}
+                <div className="mt-3 flex justify-center">
+                    <Tabs value={activeModule} onValueChange={(val: any) => setActiveModule(val)} className="w-full max-w-[280px]">
+                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-8 p-0.5">
+                            <TabsTrigger 
+                                value="LRT" 
+                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
+                            >
+                                LRT
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="MATURATION" 
+                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
+                            >
+                                MATURATION
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-1">
+                    <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Section</span>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-9 font-semibold text-sm">
+                                {displayLabel}
+                                <ChevronDown className="h-4 w-4 opacity-70" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-full sm:w-64">
+                            <DropdownMenuLabel>Switch Section</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {sections.map((section) => (
+                                <DropdownMenuItem 
+                                    key={section.id} 
+                                    onClick={() => {
+                                        const secModule = (section.farm_category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION';
+                                        setActiveFarmId(section.farm_id);
+                                        setActiveSectionId(section.id);
+                                        // Manually switch module when explicitly picking a section
+                                        if (secModule !== activeModule) {
+                                            setActiveModule(secModule);
+                                        }
+                                    }}
+                                    className={section.id === activeSectionId ? "font-bold bg-muted" : ""}
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="text-sm">{section.name} (Farm: {section.farm_name})</span>
                                     </div>
-                                    <span className="text-xs font-bold">{displayLabel}</span>
-                                    <ChevronDown className="w-3 h-3 opacity-60 ml-auto" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 rounded-xl border-white/10 shadow-2xl p-1">
-                                <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground px-2 py-2">Assigned Sections</DropdownMenuLabel>
-                                {sections.map(s => (
-                                    <DropdownMenuItem 
-                                        key={s.id} 
-                                        onClick={() => handleSectionSelect(s.id)}
-                                        className={`rounded-lg cursor-pointer py-2 px-3 mb-1 transition-colors ${activeSectionId === s.id ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-accent'}`}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span>{s.name}</span>
-                                        </div>
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                )}
+                                </DropdownMenuItem>
+                            ))}
+                            {sections.length === 0 && (
+                                <DropdownMenuItem disabled>
+                                    No sections assigned to you
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
 
             {/* Mode Toggle for Supervisors */}
@@ -325,21 +423,28 @@ const UserDashboard = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
 
                     {/* 6 Activity Icons */}
-                    {activities.map((act) => (
-                        <Button
-                            key={act.name}
-                            variant="outline"
-                            className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                            onClick={() => navigate(`${act.route}?mode=${supervisorMode}`)}
-                        >
-                            <div className={`p-1.5 rounded-lg ${act.color}`}>
-                                <act.icon className="w-5 h-5" />
-                            </div>
-                            <span className="font-semibold text-foreground text-xs text-left">
-                                {act.name}
-                            </span>
-                        </Button>
-                    ))}
+                    {activities.map((act) => {
+                        const Icon = act.icon;
+                        return (
+                            <Button
+                                key={act.name}
+                                variant="outline"
+                                className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
+                                onClick={() => {
+                                    const sectionToUse = filteredSections.find(s => s.id === activeSectionId) || filteredSections[0];
+                                    const targetSectionId = sectionToUse?.id || activeSectionId;
+                                    navigate(`${act.route}?mode=${supervisorMode}&section=${targetSectionId}&category=${activeModule}`);
+                                }}
+                            >
+                                <div className={`p-1.5 rounded-lg ${act.color}`}>
+                                    <Icon className="w-5 h-5" />
+                                </div>
+                                <span className="font-semibold text-foreground text-xs text-left">
+                                    {act.name}
+                                </span>
+                            </Button>
+                        );
+                    })}
 
                     {/* 7th Icon: Daily Report (Worker) OR Consolidated Reports (Supervisor) */}
                     <Button
@@ -365,9 +470,9 @@ const UserDashboard = () => {
                     <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">
                         {user.role === 'supervisor' ? 'Record Pending Activities' : 'Pending Instructions'}
                     </h3>
-                    {instructions.length > 0 && (
+                    {filteredInstructions.length > 0 && (
                         <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            {instructions.length} Pending
+                            {filteredInstructions.length} Pending
                         </span>
                     )}
                 </div>
@@ -378,7 +483,7 @@ const UserDashboard = () => {
                             <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
                         ))}
                     </div>
-                ) : instructions.length === 0 ? (
+                ) : filteredInstructions.length === 0 ? (
                     <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <CheckCircle2 className="w-6 h-6 text-muted-foreground opacity-50" />
@@ -471,7 +576,7 @@ const UserDashboard = () => {
                             <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
                         ))}
                     </div>
-                ) : supervisorInstructions.length === 0 ? (
+                ) : filteredSupervisorInstructions.length === 0 ? (
                     <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <ClipboardList className="w-6 h-6 text-muted-foreground opacity-50" />

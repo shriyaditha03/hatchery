@@ -56,8 +56,9 @@ const HarvestForm = ({
 
       {/* 1. Population Before Harvest */}
       <div className="space-y-1.5">
-        <Label className="text-xs">1. Population (Before Harvest)</Label>
+        <Label className="text-xs" htmlFor="pop-before">1. Population (Before Harvest)</Label>
         <Input
+          id="pop-before"
           type="number"
           value={data.populationBeforeHarvest || ''}
           readOnly
@@ -91,8 +92,9 @@ const HarvestForm = ({
       {harvestMode === 'bag' ? (
         <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">4. Spoon / Bag Qty (Size)</Label>
+            <Label className="text-xs" htmlFor="bag-size">4. Spoon / Bag Qty (Size)</Label>
             <Input
+              id="bag-size"
               type="number"
               value={data.spoonBagSize || ''}
               onChange={e => handleChange('spoonBagSize', e.target.value)}
@@ -101,8 +103,9 @@ const HarvestForm = ({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">5. Number of Spoons / Bags</Label>
+            <Label className="text-xs" htmlFor="bag-count">5. Number of Spoons / Bags</Label>
             <Input
+              id="bag-count"
               type="number"
               value={data.spoonBagCount || ''}
               onChange={e => handleChange('spoonBagCount', e.target.value)}
@@ -113,8 +116,9 @@ const HarvestForm = ({
         </div>
       ) : (
         <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
-          <Label className="text-xs">3. {isPlanningMode ? 'To Harvest' : 'Harvested population'} *</Label>
+          <Label className="text-xs" htmlFor="harvest-pop">3. {isPlanningMode ? 'To Harvest' : 'Harvested population'} *</Label>
           <Input
+            id="harvest-pop"
             type="number"
             value={data.harvestedPopulation || ''}
             onChange={e => handleChange('harvestedPopulation', e.target.value)}
@@ -127,12 +131,13 @@ const HarvestForm = ({
       {/* 6. Population After Harvest */}
       <div className="space-y-1.5 pt-2 border-t border-dashed">
         <div className="flex justify-between items-center">
-            <Label className="text-xs">6. Population After Harvest</Label>
+            <Label className="text-xs" htmlFor="pop-after">6. Population After Harvest</Label>
             {data.isAfterPopulationManuallyEdited && (
                 <span className="text-[9px] font-bold text-amber-500 uppercase bg-amber-500/10 px-2 py-0.5 rounded-full">Manual Edit</span>
             )}
         </div>
         <Input
+          id="pop-after"
           type="number"
           value={data.populationAfterHarvest || ''}
           onChange={e => {

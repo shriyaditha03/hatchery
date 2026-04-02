@@ -208,12 +208,16 @@ const UserDailyReport = () => {
                                     {Object.entries(selectedLog.data || {}).map(([key, value]: [string, any]) => {
                                         if (['date', 'time', 'ampm', 'comments', 'photo_url'].includes(key)) return null;
 
-                                        // Handle nested objects (like waterData)
+                                        // Handle nested objects (like waterData or maturation allocations)
                                         if (typeof value === 'object' && value !== null) {
                                             return Object.entries(value).map(([subKey, subValue]: [string, any]) => (
                                                 <div key={`${key}-${subKey}`} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0 hover:bg-muted/5 transition-colors px-1 rounded-md">
                                                     <span className="text-sm text-muted-foreground capitalize">{subKey.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                    <span className="text-sm font-bold text-foreground">{subValue || '—'}</span>
+                                                    <span className="text-sm font-bold text-foreground">
+                                                        {typeof subValue === 'object' && subValue !== null
+                                                            ? Object.entries(subValue).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join(', ')
+                                                            : (subValue || '—')}
+                                                    </span>
                                                 </div>
                                             ));
                                         }
@@ -221,7 +225,11 @@ const UserDailyReport = () => {
                                         return (
                                             <div key={key} className="flex justify-between items-center py-2 border-b border-dashed border-muted last:border-0 hover:bg-muted/5 transition-colors px-1 rounded-md">
                                                 <span className="text-sm text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                <span className="text-sm font-bold text-foreground">{value || '—'}</span>
+                                                <span className="text-sm font-bold text-foreground">
+                                                    {typeof value === 'object' && value !== null 
+                                                        ? JSON.stringify(value) 
+                                                        : (value || '—')}
+                                                </span>
                                             </div>
                                         );
                                     })}

@@ -30,30 +30,32 @@ const OwnerDashboard = () => {
         if (user?.hatchery_id) {
             supabase
                 .from('farms')
-                .select('id, name, address, category')
+                .select('id, name, category')
                 .eq('hatchery_id', user.hatchery_id)
                 .order('created_at', { ascending: true })
-                .then(({ data }) => {
-                    if (data && data.length > 0) {
-                        setFarms(data);
-                        
-                        // Smart selection: if no active farm, or current active farm is not in the data,
-                        // pick the first one from the current active module if possible
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error('Error fetching farms:', error);
+                        return;
+                    }
+                    
+                    const farmsData = data || [];
+                    setFarms(farmsData);
+                    
+                    if (farmsData.length > 0) {
                         if (!activeFarmId) {
-                            const firstInModule = data.find(f => (f.category || 'LRT') === activeModule);
+                            const firstInModule = farmsData.find(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
                             if (firstInModule) {
                                 setActiveFarmId(firstInModule.id);
                             } else {
-                                // If no farms in active module, switch module to the first available farm's category
-                                const firstFarm = data[0];
-                                setActiveModule((firstFarm.category || 'LRT') as 'LRT' | 'MATURATION');
+                                const firstFarm = farmsData[0];
+                                setActiveModule((firstFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
                                 setActiveFarmId(firstFarm.id);
                             }
                         } else {
-                            // If we HAVE an active farm, ensure the module tab matches it
-                            const currentFarm = data.find(f => f.id === activeFarmId);
-                            if (currentFarm && (currentFarm.category || 'LRT') !== activeModule) {
-                                setActiveModule((currentFarm.category || 'LRT') as 'LRT' | 'MATURATION');
+                            const currentFarm = farmsData.find(f => f.id === activeFarmId);
+                            if (currentFarm) {
+                                setActiveModule((currentFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
                             }
                         }
                     }
@@ -68,8 +70,8 @@ const OwnerDashboard = () => {
         
         // If current active farm project is not in the new module, switch to first farm of new module
         const currentFarm = farms.find(f => f.id === activeFarmId);
-        if (!currentFarm || (currentFarm.category || 'LRT') !== newModule) {
-            const firstInNewModule = farms.find(f => (f.category || 'LRT') === newModule);
+        if (!currentFarm || (currentFarm.category || 'LRT').toUpperCase() !== newModule.toUpperCase()) {
+            const firstInNewModule = farms.find(f => (f.category || 'LRT').toUpperCase() === newModule.toUpperCase());
             if (firstInNewModule) {
                 setActiveFarmId(firstInNewModule.id);
             }
@@ -96,16 +98,15 @@ const OwnerDashboard = () => {
         navigate('/login');
     };
 
-    const filteredFarms = farms.filter(f => (f.category || 'LRT') === activeModule);
+    const filteredFarms = farms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
     const activeFarm = farms.find(f => f.id === activeFarmId);
     const activeFarmName = activeFarm?.name || 'Select Farm';
-    const activeFarmAddress = activeFarm?.address;
 
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
-            <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg">
-                <Breadcrumbs lightTheme className="mb-4" />
+            <div className="ocean-gradient p-3 sm:p-4 pb-6 rounded-b-3xl shadow-lg">
+                <Breadcrumbs lightTheme className="mb-2" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />
@@ -146,17 +147,17 @@ const OwnerDashboard = () => {
                     </DropdownMenu>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between">
+                <div className="mt-2 flex items-center justify-between">
                     <div className="text-white/90">
-                        <p className="text-sm uppercase tracking-wider opacity-80">Owner Portal</p>
-                        <h2 className="text-2xl font-bold">Welcome, {user.name}</h2>
+                        <p className="text-xs uppercase tracking-wider opacity-70">Owner Portal</p>
+                        <h2 className="text-lg font-bold">Welcome, {user.name}</h2>
                     </div>
                 </div>
 
                 {/* Module Toggle */}
-                <div className="mt-6 flex justify-center">
-                    <Tabs value={activeModule} onValueChange={handleModuleChange} className="w-full max-w-[300px]">
-                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-11 p-1">
+                <div className="mt-3 flex justify-center">
+                    <Tabs value={activeModule} onValueChange={handleModuleChange} className="w-full max-w-[280px]">
+                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-8 p-0.5">
                             <TabsTrigger 
                                 value="LRT" 
                                 className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
@@ -173,11 +174,11 @@ const OwnerDashboard = () => {
                     </Tabs>
                 </div>
 
-                <div className="mt-6 flex flex-col gap-2">
+                <div className="mt-3 flex flex-col gap-1">
                     <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Farm</label>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-12 font-semibold">
+                            <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-9 font-semibold text-sm">
                                 {activeFarmName}
                                 <ChevronDown className="h-4 w-4 opacity-70" />
                             </Button>
@@ -205,9 +206,9 @@ const OwnerDashboard = () => {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {activeFarmAddress && (
+                    {activeFarm?.address && (
                         <p className="text-white/60 text-[10px] mt-1 flex items-center gap-1 ml-1 animate-in fade-in slide-in-from-top-1 duration-500">
-                            <MapPin className="w-3 h-3" /> {activeFarmAddress}
+                            <MapPin className="w-3 h-3" /> {activeFarm.address}
                         </p>
                     )}
                 </div>
@@ -218,21 +219,24 @@ const OwnerDashboard = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
 
                     {/* 6 Activity Icons */}
-                    {activities.map((act) => (
-                        <Button
-                            key={act.name}
-                            variant="outline"
-                            className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                            onClick={() => navigate(act.route)}
-                        >
-                            <div className={`p-1.5 rounded-lg ${act.color}`}>
-                                <act.icon className="w-5 h-5" />
-                            </div>
-                            <span className="font-semibold text-foreground text-xs text-left">
-                                {act.name}
-                            </span>
-                        </Button>
-                    ))}
+                    {activities.map((act) => {
+                        const Icon = act.icon;
+                        return (
+                            <Button
+                                key={act.name}
+                                variant="outline"
+                                className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
+                                onClick={() => navigate(act.route)}
+                            >
+                                <div className={`p-1.5 rounded-lg ${act.color}`}>
+                                    <Icon className="w-5 h-5" />
+                                </div>
+                                <span className="font-semibold text-foreground text-xs text-left">
+                                    {act.name}
+                                </span>
+                            </Button>
+                        );
+                    })}
 
                 </div>
             </div>

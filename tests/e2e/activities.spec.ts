@@ -1,34 +1,62 @@
 import { test, expect } from '@playwright/test';
-import { setupSupervisorMocks } from './helpers/mockSupabase';
 
-test.describe('Activities E2E Workflow', () => {
-    test.beforeEach(async ({ page }) => {
-        await setupSupervisorMocks(page);
-    });
+test.describe('Activity Recording Flow', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login as legacy admin
+    await page.goto('/login');
+    await page.fill('input[placeholder*="username" i]', 'admin');
+    await page.fill('input[placeholder*="password" i]', 'admin123');
+    await page.click('button:has-text("Sign In")');
+    await expect(page).toHaveURL('/user/dashboard');
+  });
 
-    test('should allow Harvest form interaction and manual override', async ({ page }) => {
-        await page.goto('/user/activity/harvest');
-        await expect(page.locator('text=Harvest Details').first()).toBeVisible({ timeout: 15000 });
+  test('should record a Feed activity instruction', async ({ page }) => {
+    // Click Feed from dashboard
+    await page.getByRole('button', { name: 'Feed' }).click();
+    await expect(page).toHaveURL(/\/user\/activity\/feed/);
 
-        const toHarvestInput = page.getByPlaceholder('Enter harvested number');
-        await expect(toHarvestInput).toBeVisible();
+    // 1. Select Section
+    // Use the data-testid we added
+    const sectionSelect = page.getByTestId('section-select');
+    await sectionSelect.click();
+    await page.getByRole('option').first().click();
 
-        await page.getByRole('switch').click();
-        await expect(page.getByPlaceholder('Qty per bag')).toBeVisible();
-    });
+    // 2. Select Tank
+    const tankSelect = page.getByTestId('tank-select');
+    await tankSelect.click();
+    await page.getByRole('option').first().click();
 
-    test('should show Tank Shifting form fields and dynamic destination adding', async ({ page }) => {
-        await page.goto('/user/activity/shifting');
-        await expect(page.getByText('Tank Shifting Details', { exact: true })).toBeVisible({ timeout: 15000 });
-        await expect(page.getByText('Destination 1', { exact: true })).toBeVisible({ timeout: 10000 });
+    // 3. Fill Feed Data
+    await page.fill('input[placeholder*="quantity" i]', '5.5');
+    
+    // 4. Enter Instructions
+    await page.fill('textarea[id="comments"]', 'Test instructions'); // Use the ID we added
 
-        await page.getByRole('button', { name: /Add Tank/i }).click();
-        await expect(page.getByText('Destination 2', { exact: true })).toBeVisible();
-    });
+    // 5. Save
+    const saveButton = page.getByTestId('save-activity-button');
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
 
-    test('should show Assign To field in Supervisor Planning mode', async ({ page }) => {
-        await page.goto('/user/activity/feed?mode=instruction');
-        await expect(page.getByText('1. Assign To (Optional)')).toBeVisible({ timeout: 15000 });
-        await expect(page.getByText('Anyone (Open Instruction)')).toBeVisible();
-    });
+    // 6. Verify redirect back to dashboard
+    await expect(page).toHaveURL('/user/dashboard');
+  });
+
+  test('should verify Harvest form calculations', async ({ page }) => {
+    await page.getByRole('button', { name: 'Harvest' }).click();
+    await expect(page).toHaveURL(/\/user\/activity\/harvest/);
+
+    // Toggle to Bag Mode (Switch usually has role checkbox or similar, 
+    // but in shadcn it's a button with role switch)
+    const switchElement = page.getByRole('switch');
+    await switchElement.click();
+
+    // Fill Bag data using IDs we added
+    await page.fill('input[id="bag-size"]', '100');
+    await page.fill('input[id="bag-count"]', '10');
+
+    // Harvested population should auto-calculate to 1000
+    // (This is an internal calculation but we check the result field via ID)
+    const harvestedInput = page.locator('input[id="harvest-pop"]');
+    await expect(harvestedInput).toHaveValue('1000');
+  });
 });

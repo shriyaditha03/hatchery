@@ -36,6 +36,10 @@ interface AuthContextType {
   setActiveFarmId: (id: string | null) => void;
   activeSectionId: string | null;
   setActiveSectionId: (id: string | null) => void;
+  activeModule: 'LRT' | 'MATURATION';
+  setActiveModule: (module: 'LRT' | 'MATURATION') => void;
+  supervisorMode: 'instruction' | 'activity';
+  setSupervisorMode: (mode: 'instruction' | 'activity') => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -44,8 +48,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeFarmId, setActiveFarmId] = useState<string | null>(null);
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [activeFarmId, setActiveFarmIdState] = useState<string | null>(() => {
+    return localStorage.getItem('activeFarmId'); // Standardize key
+  });
+  const [activeSectionId, setActiveSectionIdState] = useState<string | null>(() => {
+    return localStorage.getItem('activeSectionId');
+  });
+  const [activeModule, setActiveModuleState] = useState<'LRT' | 'MATURATION'>(() => {
+    const saved = localStorage.getItem('activeDashboardModule');
+    if (saved === 'LRT' || saved === 'MATURATION') return saved;
+    return 'LRT';
+  });
+  const [supervisorMode, setSupervisorModeState] = useState<'instruction' | 'activity'>(() => {
+    const saved = localStorage.getItem('activeSupervisorMode');
+    if (saved === 'instruction' || saved === 'activity') return saved;
+    return 'activity'; // Default based on role happens in dashboard or here
+  });
 
   useEffect(() => {
     // Check active session
@@ -126,7 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           fullAccess = farms.map(f => ({
             farm_id: f.id,
             farm_name: f.name,
-            farm_category: f.category || 'LRT',
+            farm_category: ( (Array.isArray(f.category) ? f.category[0] : f.category) || 'LRT').toUpperCase(),
             section_id: null,
             section_name: null,
             tank_id: null
@@ -157,8 +175,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               // Specific section access
               fullAccess.push({
                 farm_id: a.farm_id,
-                farm_name: a.farms?.name || 'Unknown Farm',
-                farm_category: a.farms?.category || 'LRT',
+                farm_name: (Array.isArray(a.farms) ? a.farms[0]?.name : a.farms?.name) || 'Unknown Farm',
+                farm_category: ((Array.isArray(a.farms) ? a.farms[0]?.category : a.farms?.category) || 'LRT').toUpperCase(),
                 section_id: a.section_id,
                 section_name: a.sections?.name,
                 tank_id: a.tank_id
@@ -168,8 +186,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               a.farms.sections.forEach((s: any) => {
                 fullAccess.push({
                   farm_id: a.farm_id,
-                  farm_name: a.farms.name,
-                  farm_category: a.farms.category || 'LRT',
+                  farm_name: (Array.isArray(a.farms) ? a.farms[0]?.name : a.farms?.name),
+                  farm_category: ((Array.isArray(a.farms) ? a.farms[0]?.category : a.farms?.category) || 'LRT').toUpperCase(),
                   section_id: s.id,
                   section_name: s.name,
                   tank_id: null
@@ -212,17 +230,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(userData);
 
-      // Load last active farm from localStorage if exists, or keep null
-      const savedFarmId = localStorage.getItem(`activeFarm_${userData.id}`);
-      if (savedFarmId) {
-        setActiveFarmId(savedFarmId);
-      }
-
-      const savedSectionId = localStorage.getItem(`activeSection_${userData.id}`);
-      if (savedSectionId) {
-        setActiveSectionId(savedSectionId);
-      }
-
+      // (Loaded via useState initializer now)
       return { data: userData };
     } catch (error: any) {
       console.error('Error fetching profile:', error);
@@ -306,34 +314,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setSession(null);
     setActiveFarmId(null);
-    setActiveSectionId(null);
+    setActiveSectionIdState(null);
   };
 
-  const handleSetActiveFarmId = (id: string | null) => {
-    setActiveFarmId(id);
-    if (user) {
-      if (id) {
-        localStorage.setItem(`activeFarm_${user.id}`, id);
-      } else {
-        localStorage.removeItem(`activeFarm_${user.id}`);
-      }
-      // Reset section when farm changes unless it's null
-      if (activeSectionId) {
-        setActiveSectionId(null);
-        localStorage.removeItem(`activeSection_${user.id}`);
-      }
+  const setActiveFarmId = (id: string | null) => {
+    setActiveFarmIdState(id);
+    if (id) {
+      localStorage.setItem('activeFarmId', id);
+    } else {
+      localStorage.removeItem('activeFarmId');
     }
   };
 
-  const handleSetActiveSectionId = (id: string | null) => {
-    setActiveSectionId(id);
-    if (user) {
-      if (id) {
-        localStorage.setItem(`activeSection_${user.id}`, id);
-      } else {
-        localStorage.removeItem(`activeSection_${user.id}`);
-      }
+  const setActiveSectionId = (id: string | null) => {
+    setActiveSectionIdState(id);
+    if (id) {
+      localStorage.setItem('activeSectionId', id);
+    } else {
+      localStorage.removeItem('activeSectionId');
     }
+  };
+
+  const setActiveModule = (module: 'LRT' | 'MATURATION') => {
+    setActiveModuleState(module);
+    localStorage.setItem('activeDashboardModule', module);
+  };
+
+  const setSupervisorMode = (mode: 'instruction' | 'activity') => {
+    setSupervisorModeState(mode);
+    localStorage.setItem('activeSupervisorMode', mode);
   };
 
   return (
@@ -345,9 +354,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logout, 
       isAuthenticated: !!user,
       activeFarmId,
-      setActiveFarmId: handleSetActiveFarmId,
+      setActiveFarmId,
       activeSectionId,
-      setActiveSectionId: handleSetActiveSectionId
+      setActiveSectionId,
+      activeModule,
+      setActiveModule,
+      supervisorMode,
+      setSupervisorMode
     }}>
       {children}
     </AuthContext.Provider>

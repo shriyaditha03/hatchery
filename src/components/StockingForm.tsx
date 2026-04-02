@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Button } from '@/components/ui/button';
 import { ClipboardList } from 'lucide-react';
 import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '../pages/RecordActivity';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface StockingFormProps {
   data: any;
@@ -17,6 +18,9 @@ interface StockingFormProps {
   photoUrl: string;
   onPhotoUrlChange: (val: string) => void;
   isPlanningMode?: boolean;
+  activeFarmCategory?: string;
+  selectedTanks?: any[];
+  selectionScope?: 'single' | 'all' | 'custom';
 }
 
 const StockingForm = ({
@@ -26,7 +30,10 @@ const StockingForm = ({
   onCommentsChange,
   photoUrl,
   onPhotoUrlChange,
-  isPlanningMode = false
+  isPlanningMode = false,
+  activeFarmCategory = 'LRT',
+  selectedTanks = [],
+  selectionScope = 'single'
 }: StockingFormProps) => {
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
@@ -135,60 +142,336 @@ const StockingForm = ({
         <p className="text-[10px] text-muted-foreground mt-1">Format: BS#_HN#_YYMMDD (Broodstock_Hatchery_Date)</p>
       </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">Source of Broodstock *</Label>
-        <Input
-          value={data.broodstockSource || ''}
-          onChange={e => handleChange('broodstockSource', e.target.value)}
-          placeholder="Enter broodstock source"
-          className="h-11"
-        />
-      </div>
+      {activeFarmCategory === 'MATURATION' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+          {/* Shared fields for both modes */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source of Broodstock (Supplier) *</Label>
+            <Input
+              value={data.broodstockSource || ''}
+              onChange={e => handleChange('broodstockSource', e.target.value)}
+              placeholder="Enter supplier name"
+              className="h-12 bg-muted/20 border-muted focus:bg-background transition-all"
+            />
+          </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">Name of the Hatchery or Section *</Label>
-        <Input
-          value={data.hatcheryName || ''}
-          onChange={e => handleChange('hatcheryName', e.target.value)}
-          placeholder="Enter hatchery / section name"
-          className="h-11"
-        />
-      </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Name of Hatchery *</Label>
+            <Input
+              value={data.hatcheryName || ''}
+              onChange={e => handleChange('hatcheryName', e.target.value)}
+              placeholder="Enter hatchery name"
+              className="h-12 bg-muted/20 border-muted focus:bg-background transition-all"
+            />
+          </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">Tank Stocking Number (Population) *</Label>
-        <Input
-          type="number"
-          min="0"
-          value={data.tankStockingNumber || ''}
-          onChange={e => {
-            const val = e.target.value;
-            if (val === '' || parseFloat(val) >= 0) {
-              handleChange('tankStockingNumber', val);
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">7) Brood Stock Type / Variant / Line *</Label>
+            <Input
+              value={data.broodstockType || ''}
+              onChange={e => handleChange('broodstockType', e.target.value)}
+              placeholder="e.g. Growth / Hardy / Line A"
+              className="h-12 bg-muted/20 border-muted focus:bg-background transition-all"
+            />
+          </div>
+
+          {isPlanningMode ? (
+            /* Simplified fields for Instruction Mode */
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">8) Number of the Animals *</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={data.tankStockingNumber || ''}
+                  onChange={e => handleChange('tankStockingNumber', e.target.value)}
+                  placeholder="0"
+                  className="h-12 bg-muted/20 border-muted focus:bg-background transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">9) Sex of the animals *</Label>
+                <select
+                  value={data.sex || ''}
+                  onChange={e => handleChange('sex', e.target.value)}
+                  className="w-full h-12 rounded-lg border border-muted bg-muted/20 px-3 py-2 text-sm focus:bg-background focus:ring-2 focus:ring-primary/20 appearance-none outline-none transition-all"
+                >
+                  <option value="">Select Sex</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+            </>
+          ) : (
+            /* Complex fields for Activity Mode */
+            <>
+
+          {/* Population & Losses Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Row 6: TOTAL BS Received */}
+            <div className="glass-card bg-emerald-50/30 border-emerald-100/50 p-4 rounded-2xl space-y-3">
+              <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.1em]">6) TOTAL BS Received / Booked *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Male (M)</Label>
+                  <Input 
+                    type="number" value={data.totalMalesReceived || ''} 
+                    onChange={e => handleChange('totalMalesReceived', e.target.value)}
+                    className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Female (F)</Label>
+                  <Input 
+                    type="number" value={data.totalFemalesReceived || ''} 
+                    onChange={e => handleChange('totalFemalesReceived', e.target.value)}
+                    className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 7: Air Transport Loss */}
+            <div className="glass-card bg-red-50/30 border-red-100/50 p-4 rounded-2xl space-y-3">
+              <Label className="text-[10px] font-black text-red-700 uppercase tracking-[0.1em]">7) BS Animals lost in Air transport</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-red-600/70 uppercase">Male (M)</Label>
+                  <Input 
+                    type="number" value={data.airLossM || ''} 
+                    onChange={e => handleChange('airLossM', e.target.value)}
+                    className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-red-600/70 uppercase">Female (F)</Label>
+                  <Input 
+                    type="number" value={data.airLossF || ''} 
+                    onChange={e => handleChange('airLossF', e.target.value)}
+                    className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 8: AQF Loss */}
+            <div className="glass-card bg-orange-50/30 border-orange-100/50 p-4 rounded-2xl space-y-3">
+              <Label className="text-[10px] font-black text-orange-700 uppercase tracking-[0.1em]">8) BS Animals lost in AQF</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Male (M)</Label>
+                  <Input 
+                    type="number" value={data.aqfLossM || ''} 
+                    onChange={e => handleChange('aqfLossM', e.target.value)}
+                    className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Female (F)</Label>
+                  <Input 
+                    type="number" value={data.aqfLossF || ''} 
+                    onChange={e => handleChange('aqfLossF', e.target.value)}
+                    className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 9: Transport to Hatchery Loss */}
+            <div className="glass-card bg-amber-50/30 border-amber-100/50 p-4 rounded-2xl space-y-3">
+              <Label className="text-[10px] font-black text-amber-700 uppercase tracking-[0.1em]">9) BS Animals lost in Transit to Hatchery</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Male (M)</Label>
+                  <Input 
+                    type="number" value={data.hatcheryLossM || ''} 
+                    onChange={e => handleChange('hatcheryLossM', e.target.value)}
+                    className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Female (F)</Label>
+                  <Input 
+                    type="number" value={data.hatcheryLossF || ''} 
+                    onChange={e => handleChange('hatcheryLossF', e.target.value)}
+                    className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 10: Remaining Stocking Population */}
+          {(() => {
+            const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
+            const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
+            
+            // Sync with tankStockingNumber (Total) for compatibility
+            const total = remM + remF;
+            if (data.tankStockingNumber !== total.toString()) {
+               setTimeout(() => handleChange('tankStockingNumber', total.toString()), 0);
             }
-          }}
-          placeholder="0"
-          className="h-11"
-        />
-      </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
-        <Input
-          type="number"
-          min="0"
-          step="any"
-          value={data.naupliiStocked || ''}
-          onChange={e => {
-            const val = e.target.value;
-            if (val === '' || parseFloat(val) >= 0) {
-              handleChange('naupliiStocked', val);
-            }
-          }}
-          placeholder="0"
-          className="h-11"
-        />
-      </div>
+            return (
+              <div className="p-4 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-200 space-y-3 border-none">
+                <div className="flex justify-between items-center">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">10) Remaining Stocking Population</Label>
+                  <div className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold">LIVE CALCULATION</div>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="text-center border-r border-white/20">
+                    <p className="text-3xl font-black">{remM}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Males (M)</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-3xl font-black">{remF}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Females (F)</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Row 11: Select TANKS Allocation */}
+          {(selectionScope === 'all' || selectionScope === 'custom' || selectedTanks.length > 0) && (
+            <div className="space-y-4 pt-4 border-t border-dashed">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">11) Select TANKS & Allocation</Label>
+                <div className="text-[10px] font-bold bg-muted px-2 py-1 rounded-md text-muted-foreground uppercase">
+                  {selectedTanks.length} Tanks Selected
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                {selectedTanks.map((tank: any) => (
+                  <div key={tank.id} className="flex items-center gap-4 bg-muted/10 p-4 rounded-2xl border hover:border-primary/30 transition-all group">
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-foreground">{tank.name}</p>
+                      {activeFarmCategory !== 'MATURATION' && (
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Current: {tank.current_stock || 0}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <div className="relative group/input">
+                        <Input 
+                          type="number"
+                          placeholder="M"
+                          value={data.allocations?.[tank.id]?.m || ''}
+                          onChange={e => {
+                            const newAllocations = { ...(data.allocations || {}) };
+                            newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
+                            handleChange('allocations', newAllocations);
+                          }}
+                          className="w-20 h-11 text-center font-bold bg-background pr-2"
+                        />
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">M</span>
+                      </div>
+                      <div className="relative group/input">
+                        <Input 
+                          type="number"
+                          placeholder="F"
+                          value={data.allocations?.[tank.id]?.f || ''}
+                          onChange={e => {
+                            const newAllocations = { ...(data.allocations || {}) };
+                            newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
+                            handleChange('allocations', newAllocations);
+                          }}
+                          className="w-20 h-11 text-center font-bold bg-background pr-2"
+                        />
+                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">F</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Allocation Validation */}
+              {(() => {
+                const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
+                const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
+                
+                const allocatedM = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.m) || 0), 0);
+                const allocatedF = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.f) || 0), 0);
+                
+                const isValid = allocatedM === remM && allocatedF === remF;
+                
+                return (
+                  <div className={`p-3 rounded-xl border text-center transition-all duration-500 ${isValid ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                    <p className="text-[10px] font-black uppercase tracking-widest">
+                      {isValid ? '✅ Allocation Balanced' : '⚠️ Allocation Mismatch'}
+                    </p>
+                    <p className="text-[9px] font-bold opacity-70">
+                      Males: {String(allocatedM)} / {String(remM)} | Females: {String(allocatedF)} / {String(remF)}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )}
+
+  {activeFarmCategory !== 'MATURATION' && (
+        <>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Source of Broodstock *</Label>
+            <Input
+              value={data.broodstockSource || ''}
+              onChange={e => handleChange('broodstockSource', e.target.value)}
+              placeholder="Enter broodstock source"
+              className="h-11"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Name of the Hatchery or Section *</Label>
+            <Input
+              value={data.hatcheryName || ''}
+              onChange={e => handleChange('hatcheryName', e.target.value)}
+              placeholder="Enter hatchery / section name"
+              className="h-11"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Tank Stocking Number (Population) *</Label>
+            <Input
+              type="number"
+              min="0"
+              value={data.tankStockingNumber || ''}
+              onChange={e => {
+                const val = e.target.value;
+                if (val === '' || parseFloat(val) >= 0) {
+                  handleChange('tankStockingNumber', val);
+                }
+              }}
+              placeholder="0"
+              className="h-11"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              value={data.naupliiStocked || ''}
+              onChange={e => {
+                const val = e.target.value;
+                if (val === '' || parseFloat(val) >= 0) {
+                  handleChange('naupliiStocked', val);
+                }
+              }}
+              placeholder="0"
+              className="h-11"
+            />
+          </div>
+        </>
+      )}
 
       {isPlanningMode === false && (
         <div className="space-y-4 pt-2 border-t border-dashed">

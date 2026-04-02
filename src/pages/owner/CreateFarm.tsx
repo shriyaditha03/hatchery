@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Plus, ArrowRight, Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp, Utensils, Waves } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -433,7 +433,17 @@ const CreateFarm = () => {
                     </Card>
                 ) : (
                     <div className="space-y-8 animate-in fade-in duration-500">
-                        {sections.map((section, sIdx) => (
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold">Tank Setup</h2>
+                            <span className="text-[10px] bg-primary/10 text-primary px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-primary/20 animate-pulse">
+                                {farmCategory} MODULE
+                            </span>
+                        </div>
+                        {sections.map((section, sIdx) => {
+                            const totalVolume = section.tanks.reduce((sum, t) => sum + (Number(t.volume) || 0), 0);
+                            const totalArea = section.tanks.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
+                            
+                            return (
                             <div key={sIdx} className="space-y-4">
                                 <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md" onClick={() => toggleSection(sIdx)}>
                                     <div className="flex items-center gap-3">
@@ -453,9 +463,17 @@ const CreateFarm = () => {
                                                     }}
                                                 />
                                                 {collapsedSections.includes(sIdx) && (
-                                                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                                                        {section.tanks.length} TANKS
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5 ml-2">
+                                                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                                            {section.tanks.length} TANKS
+                                                        </span>
+                                                        <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                            <Utensils className="w-3 h-3" /> {totalVolume.toLocaleString()} L
+                                                        </span>
+                                                        <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                            <Waves className="w-3 h-3" /> {totalArea.toLocaleString()} m²
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure Section</p>
@@ -499,145 +517,163 @@ const CreateFarm = () => {
                                                 </Button>
                                             </div>
                                         ) : (
-                                            section.tanks.map((tank, tIdx) => (
-                                                <Card key={tIdx} className="rounded-2xl border shadow-sm overflow-hidden bg-card/40 transition-all hover:bg-card">
-                                                <CardContent className="p-4 space-y-4">
-                                                    <div className="flex justify-between items-center bg-muted/20 -mx-4 -mt-4 px-4 py-3 border-b mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-6 h-6 rounded-md bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                                                                {tIdx + 1}
+                                            <>
+                                                {section.tanks.map((tank, tIdx) => (
+                                                    <Card key={tIdx} className="rounded-2xl border shadow-sm overflow-hidden bg-card/40 transition-all hover:bg-card">
+                                                        <CardContent className="p-4 space-y-4">
+                                                            <div className="flex justify-between items-center bg-muted/20 -mx-4 -mt-4 px-4 py-3 border-b mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-6 h-6 rounded-md bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                                                                        {tIdx + 1}
+                                                                    </div>
+                                                                    <Input
+                                                                        className="font-bold border-none bg-transparent p-0 text-sm focus-visible:ring-0 h-auto"
+                                                                        value={tank.name}
+                                                                        onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
+                                                                    <span className="text-[9px] bg-muted px-2 py-0.5 rounded-md font-bold text-muted-foreground uppercase tracking-wider">
+                                                                        {section.name.charAt(0)}{sIdx + 1}.{tIdx + 1}
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <Input
-                                                                className="font-bold border-none bg-transparent p-0 text-sm focus-visible:ring-0 h-auto"
-                                                                value={tank.name}
-                                                                onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
-                                                            <span className="text-[9px] bg-muted px-2 py-0.5 rounded-md font-bold text-muted-foreground uppercase tracking-wider">
-                                                                {section.name.charAt(0)}{sIdx + 1}.{tIdx + 1}
-                                                            </span>
-                                                        </div>
-                                                    </div>
 
-                                                    <div className="grid grid-cols-2 gap-4 pt-1">
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Material Type</Label>
-                                                            <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
-                                                                <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="FRP">FRP</SelectItem>
-                                                                    <SelectItem value="CONCRETE">Concrete</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Shape</Label>
-                                                            <Select value={tank.shape} onValueChange={(val: any) => updateTank(sIdx, tIdx, { shape: val })}>
-                                                                <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="RECTANGLE">Rectangular</SelectItem>
-                                                                    <SelectItem value="CIRCLE">Circular</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.1"
-                                                                className="h-10 text-xs rounded-xl shadow-none"
-                                                                value={tank.height || ''}
-                                                                onChange={(e) => {
-                                                                    const val = parseFloat(e.target.value);
-                                                                    if (e.target.value === '' || val >= 0) {
-                                                                        updateTank(sIdx, tIdx, { height: e.target.value === '' ? 0 : val });
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        {tank.shape === 'CIRCLE' ? (
-                                                            <div className="space-y-1.5">
-                                                                <Label className="text-[10px] uppercase text-muted-foreground font-bold">Radius (m)</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="0.1"
-                                                                    className="h-10 text-xs rounded-xl shadow-none"
-                                                                    value={tank.radius || ''}
-                                                                    onChange={(e) => {
-                                                                        const val = parseFloat(e.target.value);
-                                                                        if (e.target.value === '' || val >= 0) {
-                                                                            updateTank(sIdx, tIdx, { radius: e.target.value === '' ? 0 : val });
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        ) : (
-                                                            <>
+                                                            <div className="grid grid-cols-2 gap-4 pt-1">
                                                                 <div className="space-y-1.5">
-                                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Length (m)</Label>
+                                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Material Type</Label>
+                                                                    <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
+                                                                        <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="FRP">FRP</SelectItem>
+                                                                            <SelectItem value="CONCRETE">Concrete</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                                <div className="space-y-1.5">
+                                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Shape</Label>
+                                                                    <Select value={tank.shape} onValueChange={(val: any) => updateTank(sIdx, tIdx, { shape: val })}>
+                                                                        <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="RECTANGLE">Rectangular</SelectItem>
+                                                                            <SelectItem value="CIRCLE">Circular</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
+                                                                <div className="space-y-1.5">
+                                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
                                                                     <Input
                                                                         type="number"
                                                                         min="0"
                                                                         step="0.1"
                                                                         className="h-10 text-xs rounded-xl shadow-none"
-                                                                        value={tank.length || ''}
+                                                                        value={tank.height || ''}
                                                                         onChange={(e) => {
                                                                             const val = parseFloat(e.target.value);
                                                                             if (e.target.value === '' || val >= 0) {
-                                                                                updateTank(sIdx, tIdx, { length: e.target.value === '' ? 0 : val });
+                                                                                updateTank(sIdx, tIdx, { height: e.target.value === '' ? 0 : val });
                                                                             }
                                                                         }}
                                                                     />
                                                                 </div>
-                                                                <div className="space-y-1.5">
-                                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Width (m)</Label>
-                                                                    <Input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step="0.1"
-                                                                        className="h-10 text-xs rounded-xl shadow-none"
-                                                                        value={tank.width || ''}
-                                                                        onChange={(e) => {
-                                                                            const val = parseFloat(e.target.value);
-                                                                            if (e.target.value === '' || val >= 0) {
-                                                                                updateTank(sIdx, tIdx, { width: e.target.value === '' ? 0 : val });
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                                {tank.shape === 'CIRCLE' ? (
+                                                                    <div className="space-y-1.5">
+                                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Radius (m)</Label>
+                                                                        <Input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            step="0.1"
+                                                                            className="h-10 text-xs rounded-xl shadow-none"
+                                                                            value={tank.radius || ''}
+                                                                            onChange={(e) => {
+                                                                                const val = parseFloat(e.target.value);
+                                                                                if (e.target.value === '' || val >= 0) {
+                                                                                    updateTank(sIdx, tIdx, { radius: e.target.value === '' ? 0 : val });
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="space-y-1.5">
+                                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Length (m)</Label>
+                                                                            <Input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.1"
+                                                                                className="h-10 text-xs rounded-xl shadow-none"
+                                                                                value={tank.length || ''}
+                                                                                onChange={(e) => {
+                                                                                    const val = parseFloat(e.target.value);
+                                                                                    if (e.target.value === '' || val >= 0) {
+                                                                                        updateTank(sIdx, tIdx, { length: e.target.value === '' ? 0 : val });
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="space-y-1.5">
+                                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Width (m)</Label>
+                                                                            <Input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.1"
+                                                                                className="h-10 text-xs rounded-xl shadow-none"
+                                                                                value={tank.width || ''}
+                                                                                onChange={(e) => {
+                                                                                    const val = parseFloat(e.target.value);
+                                                                                    if (e.target.value === '' || val >= 0) {
+                                                                                        updateTank(sIdx, tIdx, { width: e.target.value === '' ? 0 : val });
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
 
-                                                    <div className="pt-2 grid grid-cols-2 gap-3 border-t border-dashed">
-                                                        <div className="bg-primary/5 p-2 rounded-xl border border-primary/10">
-                                                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Total Volume</p>
-                                                            <p className="font-extrabold text-primary text-md">{tank.volume.toLocaleString()} <span className="text-[10px] font-bold">LITRES</span></p>
-                                                        </div>
-                                                        <div className="bg-primary/5 p-2 rounded-xl border border-primary/10">
-                                                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Surface Area</p>
-                                                            <p className="font-extrabold text-primary text-md">{tank.area.toLocaleString()} <span className="text-[10px] font-bold">m²</span></p>
-                                                        </div>
+                                                            <div className="pt-2 grid grid-cols-2 gap-3 border-t border-dashed">
+                                                                <div className="bg-primary/5 p-2 rounded-xl border border-primary/10">
+                                                                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Total Volume</p>
+                                                                    <p className="font-extrabold text-primary text-md">{tank.volume.toLocaleString()} <span className="text-[10px] font-bold">LITRES</span></p>
+                                                                </div>
+                                                                <div className="bg-primary/5 p-2 rounded-xl border border-primary/10">
+                                                                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Surface Area</p>
+                                                                    <p className="font-extrabold text-primary text-md">{tank.area.toLocaleString()} <span className="text-[10px] font-bold">m²</span></p>
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
+
+                                                {/* Section Capacity Summary Footer */}
+                                                <div className="mt-4 bg-muted/20 rounded-xl p-3 border border-dashed border-muted flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                                    <span>Section Total Capacity</span>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <Utensils className="w-3.5 h-3.5 text-emerald-500" /> 
+                                                            <span className="text-foreground">{totalVolume.toLocaleString()} L</span>
+                                                        </span>
+                                                        <span className="flex items-center gap-1.5">
+                                                            <Waves className="w-3.5 h-3.5 text-blue-500" /> 
+                                                            <span className="text-foreground">{totalArea.toLocaleString()} m²</span>
+                                                        </span>
                                                     </div>
-                                                </CardContent>
-                                            </Card>
-                                        ))
-                                    )}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
 
                         <div className="flex justify-center pt-4">
                             <Button

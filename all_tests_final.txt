@@ -1,0 +1,1080 @@
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/shriy/OneDrive/Desktop/aquanexus[39m
+
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mtoLocal[2m > [22mshould convert a string to a Date object[32m 3[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mtoLocal[2m > [22mshould handle timestamp numbers[32m 1[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mformatDate[2m > [22mshould format a date string correctly with default pattern[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mformatDate[2m > [22mshould format a date with custom pattern[32m 0[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mgetTodayStr[2m > [22mshould return a string in yyyy-MM-dd format[32m 0[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22misTodayLocal[2m > [22mshould return true for today[32m 0[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22misTodayLocal[2m > [22mshould return false for yesterday[32m 0[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/date-utils.test.ts[2m > [22mdate-utils[2m > [22mgetDateRangeUTC[2m > [22mshould return valid ISO strings for start and end of day local[32m 1[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/HarvestForm.test.tsx[2m > [22mHarvestForm[2m > [22mrenders initial population correctly[32m 100[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/HarvestForm.test.tsx[2m > [22mHarvestForm[2m > [22mtoggles between direct population and bag count modes[32m 104[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/HarvestForm.test.tsx[2m > [22mHarvestForm[2m > [22mauto-calculates harvested population in bag mode[32m 10[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/HarvestForm.test.tsx[2m > [22mHarvestForm[2m > [22mauto-calculates population after harvest[32m 12[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/HarvestForm.test.tsx[2m > [22mHarvestForm[2m > [22mallows manual override of population after harvest[32m 15[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mrenders source information correctly[32m 170[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mallows adding a destination tank[32m 112[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mfilters source tank from destination dropdown[32m 25[2mms[22m[39m
+ [31m×[39m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mcalculates total shifted and remaining population correctly[32m 37[2mms[22m[39m
+[31m   → expected "spy" to be called with arguments: [ ObjectContaining{…} ][90m
+
+Number of calls: [1m0[22m
+[31m[39m
+ [32m✓[39m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mshows warning when mixing tanks[32m 41[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/ObservationForm.test.tsx[2m > [22mObservationForm[2m > [22mrenders LRT-specific fields correctly[32m 80[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/ObservationForm.test.tsx[2m > [22mObservationForm[2m > [22mrenders Maturation-specific fields correctly[32m 32[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/ObservationForm.test.tsx[2m > [22mObservationForm[2m > [22mshows "No Stocking Record Found" when data is missing[32m 37[2mms[22m[39m
+ [31m×[39m src/components/__tests__/ObservationForm.test.tsx[2m > [22mObservationForm[2m > [22mcalculates and displays scores correctly[32m 20[2mms[22m[39m
+[31m   → Unable to find an element with the text: 9.0 / 10. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up"[31m
+    [36m>[31m
+      [36m<h2[31m
+        [33mclass[31m=[32m"text-sm font-semibold text-muted-foreground uppercase tracking-wider"[31m
+      [36m>[31m
+        [0mObservation Details[0m
+      [36m</h2>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"space-y-3"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-xl border border-dashed relative group"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-0.5 col-span-2"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[31m
+            [36m>[31m
+              [0mBatch ID (Stocking ID)[0m
+            [36m</p>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-sm font-black text-foreground"[31m
+            [36m>[31m
+              [0mBATCH001[0m
+            [36m</p>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-0.5"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[31m
+            [36m>[31m
+              [0mHatchery Source[0m
+            [36m</p>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-sm font-black text-foreground capitalize truncate"[31m
+              [33mtitle[31m=[32m"Hatchery A"[31m
+            [36m>[31m
+              [0mHatchery A[0m
+            [36m</p>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-0.5"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[31m
+            [36m>[31m
+              [0mHatchery / Section Name[0m
+            [36m</p>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-sm font-black text-foreground capitalize truncate"[31m
+              [33mtitle[31m=[32m"LRT Section 1"[31m
+            [36m>[31m
+              [0mLRT Section 1[0m
+            [36m</p>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-0.5 border-t border-dashed border-muted-foreground/20 pt-2"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[31m
+            [36m>[31m
+              [0mTank Stocking No.[0m
+            [36m</p>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-sm font-black text-foreground"[31m
+            [36m>[31m
+              [0m5000[0m
+            [36m</p>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-0.5 text-right border-t border-dashed border-muted-foreground/20 pt-2"[31m
+          [36m>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[31m
+            [36m>[31m
+              [0mNauplii Stocked (M)[0m
+            [36m</p>[31m
+            [36m<p[31m
+              [33mclass[31m=[32m"text-sm font-black text-foreground"[31m
+            [36m>[31m
+              [0m0.5[0m
+            [36m</p>[31m
+          [36m</div>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"space-y-1.5"[31m
+      [36m>[31m
+        [36m<label[31m
+          [33mclass[31m=[32m"font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs"[31m
+          [33mfor[31m=[32m"present-pop"[31m
+        [36m>[31m
+          [0mPresent Population in the Tank *[0m
+        [36m</label>[31m
+        [36m<input[31m
+          [33mclass[31m=[32m"flex w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-11"[31m
+          [33mid[31m=[32m"present-pop"[31m
+          [33mmin[31m=[32m"0"[31m
+          [33mplaceholder[31m=[32m"0"[31m
+          [33mtype[31m=[32m"number"[31m
+          [33mvalue[31m=[32m"4500"[31m
+        [36m/>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"space-y-4 pt-2 border-t border-dashed"[31m
+      [36m>[31m
+        [36m<label[31m
+          [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center"[31m
+        [36m>[31m
+          [0mAnimal Condition Quality[0m
+        [36m</label>[31m
+        [36m<button[31m
+          [33maria-controls[31m=[32m"radix-:ri:"[31m
+          [33maria-expanded[31m=[32m"false"[31m
+          [33maria-haspopup[31m=[32m"dialog"[31m
+          [33mclass[31m=[32m"inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:text-accent-foreground py-2 w-full h-14 justify-between px-4 rounded-2xl border-dashed hover:border-primary hover:bg-primary/5 group transition-all"[31m
+          [33mdata-state[31m=[32m"closed"[31m
+          [33mtype[31m=[32m"button"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-3"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors"[31m
+            [36m>[31m
+              [36m<svg[31m
+                [33mclass[31m=[32m"lucide lucide-clipboard-list w-5 h-5 text-primary"[31m
+                [33mfill[31m=[32m"none"[31m
+                [33mheight[31m=[32m"24"[31m
+                [33mstroke[31m=[32m"currentColor"[31m
+                [33mstroke-linecap[31m=[32m"round"[31m
+                [33mstroke-linejoin[31m=[32m"round"[31m
+                [33mstroke-width[31m=[32m"2"[31m
+                [33mviewBox[31m=[32m"0 0 24 24"[31m
+                [33mwidth[31m=[32m"24"[31m
+                [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+              [36m>[31m
+                [36m<rect[31m
+                  [33mheight[31m=[32m"4"[31m
+                  [33mrx[31m=[32m"1"[31m
+                 ...[39m
+[90mstderr[2m | src/pages/__tests__/RecordActivity.test.tsx[2m > [22m[2mRecordActivity[2m > [22m[2mrenders breadcrumbs and activity title
+[22m[39mError fetching tanks: TypeError: query.in is not a function
+    at fetchTanks [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:235:25[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:208:5
+    at commitHookEffectListMount [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27023:14[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26808:9
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/__tests__/RecordActivity.test.tsx[2m > [22m[2mRecordActivity[2m > [22m[2mmaps URL type param to internal activity name
+[22m[39mError fetching tanks: TypeError: query.in is not a function
+    at fetchTanks [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:235:25[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:208:5
+    at commitHookEffectListMount [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27023:14[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26808:9
+
+[90mstderr[2m | src/pages/__tests__/RecordActivity.test.tsx[2m > [22m[2mRecordActivity[2m > [22m[2mfilters out Artemia and Algae in MATURATION module
+[22m[39mError fetching tanks: TypeError: query.in is not a function
+    at fetchTanks [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:235:25[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:208:5
+    at commitHookEffectListMount [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27023:14[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26808:9
+
+ [31m×[39m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22mrenders breadcrumbs and activity title[32m 213[2mms[22m[39m
+[31m   → Unable to find an element with the text: /Record Activity/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"min-h-screen bg-background pb-12"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"mb-4"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest"[31m
+          [36m>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mDashboard[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mFarm[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mSection[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"text-white"[31m
+            [36m>[31m
+              [0mPlan Activity[0m
+            [36m</span>[31m
+          [36m</div>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"flex items-center justify-between"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-3"[31m
+          [36m>[31m
+            [36m<button[31m
+              [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground h-10 w-10 text-primary-foreground hover:bg-primary-foreground/10"[31m
+            [36m>[31m
+              [36m<svg[31m
+                [33mclass[31m=[32m"lucide lucide-arrow-left w-5 h-5"[31m
+                [33mfill[31m=[32m"none"[31m
+                [33mheight[31m=[32m"24"[31m
+                [33mstroke[31m=[32m"currentColor"[31m
+                [33mstroke-linecap[31m=[32m"round"[31m
+                [33mstroke-linejoin[31m=[32m"round"[31m
+                [33mstroke-width[31m=[32m"2"[31m
+                [33mviewBox[31m=[32m"0 0 24 24"[31m
+                [33mwidth[31m=[32m"24"[31m
+                [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+              [36m>[31m
+                [36m<path[31m
+                  [33md[31m=[32m"m12 19-7-7 7-7"[31m
+                [36m/>[31m
+                [36m<path[31m
+                  [33md[31m=[32m"M19 12H5"[31m
+                [36m/>[31m
+              [36m</svg>[31m
+            [36m</button>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"flex flex-col"[31m
+            [36m>[31m
+              [36m<div[31m
+                [33mclass[31m=[32m"flex items-center gap-2"[31m
+              [36m>[31m
+                [36m<h1[31m
+                  [33mclass[31m=[32m"text-lg font-bold text-primary-foreground"[31m
+                [36m>[31m
+                  [0mPlan Activity[0m
+                [36m</h1>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"text-[9px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-200 border-emerald-500/30"[31m
+                [36m>[31m
+                  [0mLRT[0m
+                [36m</span>[31m
+              [36m</div>[31m
+              [36m<p[31m
+                [33mclass[31m=[32m"text-xs text-white/70 font-medium"[31m
+              [36m>[31m
+                [0m [0m
+              [36m</p>[31m
+            [36m</div>[31m
+          [36m</div>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up"[31m
+        [36m>[31m
+          [36m<label[31m
+            [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2"[31m
+          [36m>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-user lucid...[39m
+ [32m✓[39m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22mmaps URL type param to internal activity name[32m 61[2mms[22m[39m
+[90mstderr[2m | src/pages/__tests__/RecordActivity.test.tsx[2m > [22m[2mRecordActivity[2m > [22m[2msets Planning Mode for supervisors
+[22m[39mError fetching tanks: TypeError: query.in is not a function
+    at fetchTanks [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:235:25[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:208:5
+    at commitHookEffectListMount [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27023:14[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26808:9
+
+[90mstderr[2m | src/pages/__tests__/RecordActivity.test.tsx[2m > [22m[2mRecordActivity[2m > [22m[2msets Activity Mode for workers
+[22m[39mError fetching tanks: TypeError: query.in is not a function
+    at fetchTanks [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:235:25[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39msrc\pages\RecordActivity.tsx:208:5
+    at commitHookEffectListMount [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(C:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:27023:14[90m)[39m
+    at [90mC:\Users\shriy\OneDrive\Desktop\aquanexus\[39mnode_modules\[4mreact-dom[24m\cjs\react-dom.development.js:26808:9
+
+ [31m×[39m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22mfilters out Artemia and Algae in MATURATION module[32m 85[2mms[22m[39m
+[31m   → Unable to find an element by: [data-testid="activity-select"]
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"min-h-screen bg-background pb-12"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"mb-4"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest"[31m
+          [36m>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mDashboard[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mFarm[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"hover:text-white cursor-pointer transition-colors"[31m
+            [36m>[31m
+              [0mSection[0m
+            [36m</span>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"m6 9 6 6 6-6"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<span[31m
+              [33mclass[31m=[32m"text-white"[31m
+            [36m>[31m
+              [0mPlan Activity[0m
+            [36m</span>[31m
+          [36m</div>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"flex items-center justify-between"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-3"[31m
+          [36m>[31m
+            [36m<button[31m
+              [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground h-10 w-10 text-primary-foreground hover:bg-primary-foreground/10"[31m
+            [36m>[31m
+              [36m<svg[31m
+                [33mclass[31m=[32m"lucide lucide-arrow-left w-5 h-5"[31m
+                [33mfill[31m=[32m"none"[31m
+                [33mheight[31m=[32m"24"[31m
+                [33mstroke[31m=[32m"currentColor"[31m
+                [33mstroke-linecap[31m=[32m"round"[31m
+                [33mstroke-linejoin[31m=[32m"round"[31m
+                [33mstroke-width[31m=[32m"2"[31m
+                [33mviewBox[31m=[32m"0 0 24 24"[31m
+                [33mwidth[31m=[32m"24"[31m
+                [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+              [36m>[31m
+                [36m<path[31m
+                  [33md[31m=[32m"m12 19-7-7 7-7"[31m
+                [36m/>[31m
+                [36m<path[31m
+                  [33md[31m=[32m"M19 12H5"[31m
+                [36m/>[31m
+              [36m</svg>[31m
+            [36m</button>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"flex flex-col"[31m
+            [36m>[31m
+              [36m<div[31m
+                [33mclass[31m=[32m"flex items-center gap-2"[31m
+              [36m>[31m
+                [36m<h1[31m
+                  [33mclass[31m=[32m"text-lg font-bold text-primary-foreground"[31m
+                [36m>[31m
+                  [0mPlan Activity[0m
+                [36m</h1>[31m
+                [36m<span[31m
+                  [33mclass[31m=[32m"text-[9px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-200 border-emerald-500/30"[31m
+                [36m>[31m
+                  [0mLRT[0m
+                [36m</span>[31m
+              [36m</div>[31m
+              [36m<p[31m
+                [33mclass[31m=[32m"text-xs text-white/70 font-medium"[31m
+              [36m>[31m
+                [0m [0m
+              [36m</p>[31m
+            [36m</div>[31m
+          [36m</div>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up"[31m
+        [36m>[31m
+          [36m<label[31m
+            [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2"[31m
+          [36m>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-user lucid...[39m
+ [32m✓[39m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22msets Planning Mode for supervisors[32m 54[2mms[22m[39m
+ [32m✓[39m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22msets Activity Mode for workers[32m 52[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/components/__tests__/ObservationForm.test.tsx[2m > [22mObservationForm[2m > [22mcalculates and displays scores correctly
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find an element with the text: 9.0 / 10. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up"[39m
+    [36m>[39m
+      [36m<h2[39m
+        [33mclass[39m=[32m"text-sm font-semibold text-muted-foreground uppercase tracking-wider"[39m
+      [36m>[39m
+        [0mObservation Details[0m
+      [36m</h2>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-3"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-xl border border-dashed relative group"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-0.5 col-span-2"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[39m
+            [36m>[39m
+              [0mBatch ID (Stocking ID)[0m
+            [36m</p>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm font-black text-foreground"[39m
+            [36m>[39m
+              [0mBATCH001[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-0.5"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[39m
+            [36m>[39m
+              [0mHatchery Source[0m
+            [36m</p>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm font-black text-foreground capitalize truncate"[39m
+              [33mtitle[39m=[32m"Hatchery A"[39m
+            [36m>[39m
+              [0mHatchery A[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-0.5"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[39m
+            [36m>[39m
+              [0mHatchery / Section Name[0m
+            [36m</p>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm font-black text-foreground capitalize truncate"[39m
+              [33mtitle[39m=[32m"LRT Section 1"[39m
+            [36m>[39m
+              [0mLRT Section 1[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-0.5 border-t border-dashed border-muted-foreground/20 pt-2"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[39m
+            [36m>[39m
+              [0mTank Stocking No.[0m
+            [36m</p>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm font-black text-foreground"[39m
+            [36m>[39m
+              [0m5000[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-0.5 text-right border-t border-dashed border-muted-foreground/20 pt-2"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-[10px] uppercase font-bold text-muted-foreground"[39m
+            [36m>[39m
+              [0mNauplii Stocked (M)[0m
+            [36m</p>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm font-black text-foreground"[39m
+            [36m>[39m
+              [0m0.5[0m
+            [36m</p>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-1.5"[39m
+      [36m>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs"[39m
+          [33mfor[39m=[32m"present-pop"[39m
+        [36m>[39m
+          [0mPresent Population in the Tank *[0m
+        [36m</label>[39m
+        [36m<input[39m
+          [33mclass[39m=[32m"flex w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-11"[39m
+          [33mid[39m=[32m"present-pop"[39m
+          [33mmin[39m=[32m"0"[39m
+          [33mplaceholder[39m=[32m"0"[39m
+          [33mtype[39m=[32m"number"[39m
+          [33mvalue[39m=[32m"4500"[39m
+        [36m/>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"space-y-4 pt-2 border-t border-dashed"[39m
+      [36m>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center"[39m
+        [36m>[39m
+          [0mAnimal Condition Quality[0m
+        [36m</label>[39m
+        [36m<button[39m
+          [33maria-controls[39m=[32m"radix-:ri:"[39m
+          [33maria-expanded[39m=[32m"false"[39m
+          [33maria-haspopup[39m=[32m"dialog"[39m
+          [33mclass[39m=[32m"inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:text-accent-foreground py-2 w-full h-14 justify-between px-4 rounded-2xl border-dashed hover:border-primary hover:bg-primary/5 group transition-all"[39m
+          [33mdata-state[39m=[32m"closed"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-clipboard-list w-5 h-5 text-primary"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<rect[39m
+                  [33mheight[39m=[32m"4"[39m
+                  [33mrx[39m=[32m"1"[39m
+                 ...
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+[90m [2m❯[22m getByText node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/components/__tests__/ObservationForm.test.tsx:[2m105:19[22m[39m
+    [90m103| [39m
+    [90m104| [39m    [90m// Initial avg should be visible if passed[39m
+    [90m105| [39m    [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m'9.0 / 10'[39m))[33m.[39m[34mtoBeDefined[39m()[33m;[39m
+    [90m   | [39m                  [31m^[39m
+    [90m106| [39m  })[33m;[39m
+    [90m107| [39m})[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/components/__tests__/TankShiftingForm.test.tsx[2m > [22mTankShiftingForm[2m > [22mcalculates total shifted and remaining population correctly
+[31m[1mAssertionError[22m: expected "spy" to be called with arguments: [ ObjectContaining{…} ][90m
+
+Number of calls: [1m0[22m
+[31m[39m
+[36m [2m❯[22m src/components/__tests__/TankShiftingForm.test.tsx:[2m102:30[22m[39m
+    [90m100| [39m
+    [90m101| [39m    [90m// useEffect for calculation should have been called[39m
+    [90m102| [39m    expect(mockOnDataChange).toHaveBeenCalledWith(expect.objectContain…
+    [90m   | [39m                             [31m^[39m
+    [90m103| [39m      totalShifted[33m:[39m [34m2000[39m[33m,[39m
+    [90m104| [39m      remainingInSource[33m:[39m [34m8000[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22mrenders breadcrumbs and activity title
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find an element with the text: /Record Activity/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"min-h-screen bg-background pb-12"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"mb-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mDashboard[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mFarm[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mSection[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-white"[39m
+            [36m>[39m
+              [0mPlan Activity[0m
+            [36m</span>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center justify-between"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-3"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground h-10 w-10 text-primary-foreground hover:bg-primary-foreground/10"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-arrow-left w-5 h-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m12 19-7-7 7-7"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 12H5"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-col"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-center gap-2"[39m
+              [36m>[39m
+                [36m<h1[39m
+                  [33mclass[39m=[32m"text-lg font-bold text-primary-foreground"[39m
+                [36m>[39m
+                  [0mPlan Activity[0m
+                [36m</h1>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"text-[9px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-200 border-emerald-500/30"[39m
+                [36m>[39m
+                  [0mLRT[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-xs text-white/70 font-medium"[39m
+              [36m>[39m
+                [0m [0m
+              [36m</p>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-user lucid...
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+[90m [2m❯[22m getByText node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/pages/__tests__/RecordActivity.test.tsx:[2m69:19[22m[39m
+    [90m 67| [39m  [34mit[39m([32m'renders breadcrumbs and activity title'[39m[33m,[39m () [33m=>[39m {
+    [90m 68| [39m    [34mrenderWithRouter[39m([32m'/user/activity/feed'[39m)[33m;[39m
+    [90m 69| [39m    [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([36m/Record Activity/i[39m))[33m.[39m[34mtoBeDefined[39m()[33m;[39m
+    [90m   | [39m                  [31m^[39m
+    [90m 70| [39m  })[33m;[39m
+    [90m 71| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/pages/__tests__/RecordActivity.test.tsx[2m > [22mRecordActivity[2m > [22mfilters out Artemia and Algae in MATURATION module
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find an element by: [data-testid="activity-select"]
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"min-h-screen bg-background pb-12"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"mb-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mDashboard[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mFarm[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"hover:text-white cursor-pointer transition-colors"[39m
+            [36m>[39m
+              [0mSection[0m
+            [36m</span>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down w-3 h-3 -rotate-90"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-white"[39m
+            [36m>[39m
+              [0mPlan Activity[0m
+            [36m</span>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center justify-between"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center gap-3"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground h-10 w-10 text-primary-foreground hover:bg-primary-foreground/10"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-arrow-left w-5 h-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m12 19-7-7 7-7"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 12H5"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-col"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-center gap-2"[39m
+              [36m>[39m
+                [36m<h1[39m
+                  [33mclass[39m=[32m"text-lg font-bold text-primary-foreground"[39m
+                [36m>[39m
+                  [0mPlan Activity[0m
+                [36m</h1>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"text-[9px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-200 border-emerald-500/30"[39m
+                [36m>[39m
+                  [0mLRT[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-xs text-white/70 font-medium"[39m
+              [36m>[39m
+                [0m [0m
+              [36m</p>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-user lucid...
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+[90m [2m❯[22m getByTestId node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/pages/__tests__/RecordActivity.test.tsx:[2m89:34[22m[39m
+    [90m 87| [39m
+    [90m 88| [39m    [90m// Open activity dropdown[39m
+    [90m 89| [39m    const selectTrigger = screen.getByTestId('activity-select'); // Ne…
+    [90m   | [39m                                 [31m^[39m
+    [90m 90| [39m    // Note: Since I can't easily click shadcn select in JSDOM, I'm ve…
+    [90m 91| [39m  })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[90m (27)[39m
+[2m   Start at [22m 14:57:08
+[2m   Duration [22m 4.10s[2m (transform 729ms, setup 2.13s, collect 3.43s, tests 1.28s, environment 5.66s, prepare 1.08s)[22m
+
