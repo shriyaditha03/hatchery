@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Trash2, ArrowUpRight, Calculator, CheckCircle2, AlertCircle, Camera, ClipboardList } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import ImageUpload from '@/components/ImageUpload';
+import ImageUpload from '@/modules/shared/components/ImageUpload';
 
 interface HarvestEntry {
   id: string;

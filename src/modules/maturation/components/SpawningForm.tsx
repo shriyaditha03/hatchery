@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import ImageUpload from '@/components/ImageUpload';
+import ImageUpload from '@/modules/shared/components/ImageUpload';
 
 interface SpawningFormProps {
   data: any;

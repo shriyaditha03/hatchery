@@ -1,202 +1,164 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import Breadcrumbs from '@/components/Breadcrumbs';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { 
-  Plus, Search, ClipboardList, Check, ArrowRightLeft, 
-  Droplet, Thermometer, Wind, Activity, Heart, Sparkles,
-  RefreshCcw, LogOut, ChevronRight, User, Settings, Info,
-  ExternalLink, Menu, X, Filter, BarChart3, TrendingDown,
-  Tractor, Scale, Trash2, Calendar, Utensils, Beaker, Eye, Layers, Waves, MapPin, ChevronDown, Clock, CheckCircle2, Pencil, Scissors, MoveRight, FileText, Database, ArrowUpRight, ShoppingCart
+    Utensils, Beaker, Waves, Search, Layers, Eye, Scissors, 
+    MoveRight, FileText, ChevronDown, LogOut, User, MapPin,
+    ClipboardList, Pencil, CheckCircle2, Clock, Trash2,
+    Heart, Sparkles, Database, ArrowUpRight, ShoppingCart,
+    Loader2, ArrowLeft, ChevronRight
 } from 'lucide-react';
-import logo from '@/assets/aqua-nexus-logo.png';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { 
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
+    DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
+} from '../../components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { getTodayStr } from '@/lib/date-utils';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-const ACTIVITY_ICONS: Record<string, any> = {
-  'Feed': Utensils,
-  'Treatment': Beaker,
-  'Water Quality': Waves,
-  'Animal Quality': Activity,
-  'Stocking': Plus,
-  'Observation': Eye,
-  'Artemia': Droplet,
-  'Algae': Wind,
-  'Harvest': Scissors,
-  'Tank Shifting': ArrowRightLeft,
-  'Sourcing & Mating': Heart,
-  'Spawning': Sparkles
-};
+import logo from '../../assets/aqua-nexus-logo.png';
 
 const UserDashboard = () => {
-    const { 
-        user, 
-        logout, 
-        activeFarmId, 
-        setActiveFarmId, 
-        activeSectionId, 
-        setActiveSectionId,
-        activeModule,
-        setActiveModule,
-        supervisorMode,
-        setSupervisorMode
-    } = useAuth();
     const navigate = useNavigate();
+    const { 
+        user, logout,
+        activeFarmId, setActiveFarmId,
+        activeSectionId, setActiveSectionId,
+        activeModule, setActiveModule,
+        supervisorMode, setSupervisorMode
+    } = useAuth();
+
+    const [loading, setLoading] = useState(true);
     const [instructions, setInstructions] = useState<any[]>([]);
     const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
 
-    if (!user) return null;
+    const availableFarms = useMemo(() => {
+        const farmMap: Record<string, any> = {};
+        (user?.access || []).forEach(a => {
+            if (!farmMap[a.farm_id]) {
+                farmMap[a.farm_id] = {
+                    id: a.farm_id,
+                    name: a.farm_name,
+                    category: a.farm_category
+                };
+            }
+        });
+        return Object.values(farmMap).sort((a: any, b: any) => a.name.localeCompare(b.name));
+    }, [user?.access]);
 
-    // Filter access records to find unique sections across all farms
-    const sections = useMemo(() => {
-        const allSections = (user.access || [])
+    const allMySections = useMemo(() => {
+        const sectionsList = (user?.access || [])
             .filter(a => a.section_id)
-            .map(a => ({ 
-                id: a.section_id as string, 
-                name: a.section_name as string,
+            .map(a => ({
+                id: a.section_id,
+                name: a.section_name,
                 farm_id: a.farm_id,
-                farm_name: a.farm_name,
                 farm_category: a.farm_category
             }));
         
-        // Remove duplicates (in case user has multiple tank-level records for same section)
-        return Array.from(new Set(allSections.map(s => s.id)))
-            .map(id => allSections.find(s => s.id === id)!);
-    }, [user.access]);
+        // De-duplicate
+        const seen = new Set();
+        return sectionsList.filter(s => {
+            const key = `${s.id}-${s.farm_id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [user?.access]);
 
-    // Current module's sections
     const filteredSections = useMemo(() => {
-        return sections.filter(s => (s.farm_category || 'LRT').toUpperCase() === activeModule.toUpperCase());
-    }, [sections, activeModule]);
+        return allMySections.filter(s => 
+            s.farm_id === activeFarmId && 
+            (s.farm_category || 'LRT').toUpperCase() === activeModule.toUpperCase()
+        );
+    }, [allMySections, activeFarmId, activeModule]);
 
-    const filteredInstructions = useMemo(() => {
-        return instructions.filter(instr => (instr.farms?.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
-    }, [instructions, activeModule]);
+    const getTodayStr = () => {
+        return new Date().toISOString().split('T')[0];
+    };
 
-    const filteredSupervisorInstructions = useMemo(() => {
-        return supervisorInstructions.filter(instr => (instr.farms?.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
-    }, [supervisorInstructions, activeModule]);
-
-    const groupedInstructions = useMemo(() => {
-        const groups: Record<string, Record<string, any[]>> = {};
-        filteredInstructions.forEach(instr => {
-            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
-            const activityName = instr.activity_type;
-            if (!groups[sectionName]) groups[sectionName] = {};
-            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
-            groups[sectionName][activityName].push(instr);
-        });
-        return groups;
-    }, [filteredInstructions]);
-
-    const groupedSupervisorInstructions = useMemo(() => {
-        const groups: Record<string, Record<string, any[]>> = {};
-        filteredSupervisorInstructions.forEach(instr => {
-            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
-            const activityName = instr.activity_type;
-            if (!groups[sectionName]) groups[sectionName] = {};
-            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
-            groups[sectionName][activityName].push(instr);
-        });
-        return groups;
-    }, [filteredSupervisorInstructions]);
-
-    // EFFECT: When tab is manually changed, if current section doesn't match the new module,
-    // auto-select the first section of that new module.
+    // State validation logic
     useEffect(() => {
-        if (sections.length > 0) {
-            const currentActiveInModule = filteredSections.find(s => s.id === activeSectionId);
-            if (!currentActiveInModule) {
-                const first = filteredSections[0];
-                if (first) {
-                    setActiveFarmId(first.farm_id);
-                    setActiveSectionId(first.id);
-                }
+        if (!loading && availableFarms.length > 0) {
+            const currentFarm = availableFarms.find(f => f.id === activeFarmId);
+            
+            // If active farm doesn't match current module, clear the selection
+            if (currentFarm && (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
+                setActiveFarmId(null);
+                setActiveSectionId(null);
+            }
+            
+            const currentSection = allMySections.find(s => s.id === activeSectionId);
+            const isWrongFarm = currentSection && currentSection.farm_id !== activeFarmId;
+            
+            if (activeSectionId && isWrongFarm) {
+                setActiveSectionId(null);
             }
         }
-    }, [activeModule, filteredSections, sections, activeSectionId]);
+    }, [availableFarms, allMySections, activeFarmId, activeSectionId, loading, activeModule]);
 
     useEffect(() => {
-        fetchInstructions();
-        if (user?.role === 'supervisor') {
-            fetchSupervisorInstructions();
-        }
-
-        // Refetch when window gains focus (e.g. after returning from recording an activity)
-        const handleFocus = () => {
+        if (user) {
             fetchInstructions();
-            if (user?.role === 'supervisor') fetchSupervisorInstructions();
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [user?.id, sections.length]);
+            if (user.role === 'supervisor') fetchSupervisorInstructions();
+        }
+    }, [user?.id, activeFarmId, activeSectionId]);
 
     const fetchInstructions = async () => {
+        if (!user || (!user.hatchery_id && !user.id)) return;
+        
+        // Don't load instructions until a farm is selected
+        if (!activeFarmId) {
+            setInstructions([]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        const today = getTodayStr();
+        
         try {
-            setLoading(true);
-            const today = getTodayStr();
-            // Removed 3-day limit to ensure incomplete tasks persist until handled
-            
-            // Get all section IDs the user has access to
-            const sectionIds = sections.map(s => s.id);
-            const farmIds = Array.from(new Set(sections.map(s => s.farm_id)));
-
-            if (sectionIds.length === 0 && farmIds.length === 0) {
-                setInstructions([]);
-                setLoading(false);
-                return;
-            }
-
-            // Fetch all instructions for all assigned sections + farm level instructions
+            // 1. Fetch raw instructions filtered by farm first, then optionally section
             let query = supabase
                 .from('activity_charts')
-                .select(`
-                    *,
-                    farms (name, category),
-                    sections (name),
-                    tanks (name)
-                `)
+                .select('*')
                 .eq('is_completed', false)
+                .eq('farm_id', activeFarmId)
                 .lte('scheduled_date', today);
 
-            // Construct the access filter
-            const sectionFilter = sectionIds.length > 0 ? `section_id.in.(${sectionIds.join(',')})` : '';
-            const farmFilter = farmIds.length > 0 ? `and(farm_id.in.(${farmIds.join(',')}),section_id.is.null,tank_id.is.null)` : '';
-            
-            let accessOr = '';
-            if (sectionFilter && farmFilter) accessOr = `${sectionFilter},${farmFilter}`;
-            else accessOr = sectionFilter || farmFilter;
-
-            if (accessOr) {
-                // If worker, combine access filter with assignment filter in a single .or()
-                // PostgREST doesn't support nested OR/AND cleanly without complex strings,
-                // but we can use multiple .or() calls as they are implicitly ANDed.
-                query = query.or(accessOr);
-            }
-
-            // Also check if assigned specifically to this user or unassigned
+            // Instructions always show for the whole farm - section is just for recording context
             if (user.role === 'worker') {
                 query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`);
             }
 
-            const { data, error } = await query.order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true });
+            const { data: chartData, error: chartError } = await query.order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true });
+            if (chartError) throw chartError;
 
-            if (error) throw error;
-            setInstructions(data || []);
-        } catch (error) {
+            // 2. Fetch farm names and categories separately to "manual join"
+            const farmIds = Array.from(new Set(chartData.map(c => c.farm_id).filter(id => !!id)));
+            const sectionIds = Array.from(new Set(chartData.map(c => c.section_id).filter(id => !!id)));
+            const tankIds = Array.from(new Set(chartData.map(c => c.tank_id).filter(id => !!id)));
+
+            const [{ data: farms }, { data: sections }, { data: tanks }] = await Promise.all([
+                supabase.from('farms').select('id, name, category').in('id', farmIds),
+                supabase.from('sections').select('id, name').in('id', sectionIds),
+                supabase.from('tanks').select('id, name').in('id', tankIds)
+            ]);
+
+            // 3. Combine them manually
+            const mappedInstructions = chartData.map((instr: any) => ({
+                ...instr,
+                farms: farms?.find(f => f.id === instr.farm_id) || null,
+                sections: sections?.find(s => s.id === instr.section_id) || null,
+                tanks: tanks?.find(t => t.id === instr.tank_id) || null
+            }));
+
+            setInstructions(mappedInstructions);
+            (window as any).TASK_DEBUG_ERROR = null; // Clear error
+        } catch (error: any) {
             console.error('Error fetching instructions:', error);
+            (window as any).TASK_DEBUG_ERROR = error.message || 'Unknown Error';
             toast.error('Failed to load pending tasks');
         } finally {
             setLoading(false);
@@ -220,6 +182,30 @@ const UserDashboard = () => {
         }
     };
 
+    const groupedInstructions = useMemo(() => {
+        const groups: Record<string, Record<string, any[]>> = {};
+        instructions.forEach(instr => {
+            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
+            const activityName = instr.activity_type;
+            if (!groups[sectionName]) groups[sectionName] = {};
+            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
+            groups[sectionName][activityName].push(instr);
+        });
+        return groups;
+    }, [instructions]);
+
+    const groupedSupervisorInstructions = useMemo(() => {
+        const groups: Record<string, Record<string, any[]>> = {};
+        supervisorInstructions.forEach(instr => {
+            const sectionName = instr.sections?.name || (instr.farms?.name ? `${instr.farms.name} (Farm Wide)` : 'Other');
+            const activityName = instr.activity_type;
+            if (!groups[sectionName]) groups[sectionName] = {};
+            if (!groups[sectionName][activityName]) groups[sectionName][activityName] = [];
+            groups[sectionName][activityName].push(instr);
+        });
+        return groups;
+    }, [supervisorInstructions]);
+
     const handleDeleteInstruction = async (id: string) => {
         try {
             const { error } = await supabase.from('activity_charts').delete().eq('id', id);
@@ -231,8 +217,29 @@ const UserDashboard = () => {
         }
     };
 
-    const activeSection = sections.find(s => s.id === activeSectionId);
-    const displayLabel = activeSection?.name || 'Select Section';
+    const activeFarm = availableFarms.find(f => f.id === activeFarmId);
+    const activeSection = allMySections.find(s => s.id === activeSectionId);
+    
+    const displaySectionLabel = activeSection?.name || 'Select Section';
+    const displayFarmLabel = activeFarm?.name || 'Select Farm';
+
+    const ACTIVITY_ICONS: Record<string, any> = {
+        'Feed': Utensils,
+        'Treatment': Beaker,
+        'Water Quality': Waves,
+        'Animal Quality': Search,
+        'Stocking': Layers,
+        'Observation': Eye,
+        'Artemia': Beaker,
+        'Algae': Waves,
+        'Harvest': Scissors,
+        'Tank Shifting': MoveRight,
+        'Sourcing & Mating': Heart,
+        'Spawning': Sparkles,
+        'Egg Count': Database,
+        'Nauplii Harvest': ArrowUpRight,
+        'Nauplii Sale': ShoppingCart
+    };
 
     const activities = useMemo(() => {
         const base = [
@@ -250,10 +257,7 @@ const UserDashboard = () => {
 
         if (activeModule.toUpperCase() === 'MATURATION') {
             const maturationBase = base.filter(a => 
-                a.name !== 'Artemia' && 
-                a.name !== 'Algae' && 
-                a.name !== 'Harvest' && 
-                a.name !== 'Tank Shifting'
+                a.name !== 'Artemia' && a.name !== 'Algae' && a.name !== 'Harvest' && a.name !== 'Tank Shifting'
             );
             return [
                 ...maturationBase,
@@ -267,199 +271,131 @@ const UserDashboard = () => {
         return base;
     }, [activeModule]);
 
-    const ACTIVITY_ICONS: Record<string, any> = {
-        'Feed': Utensils,
-        'Treatment': Beaker,
-        'Water Quality': Waves,
-        'Animal Quality': Search,
-        'Stocking': Layers,
-        'Observation': Eye,
-        'Artemia': Beaker,
-        'Algae': Waves,
-        'Harvest': Scissors,
-        'Tank Shifting': MoveRight,
-        'Nauplii Sale': ShoppingCart
-    };
-
     const handleLogout = async () => {
         await logout();
         navigate('/login');
-    };
-
-    const handleSectionSelect = (sectionId: string) => {
-        const section = sections.find(s => s.id === sectionId);
-        if (section) {
-            // We set both so the rest of the app knows the context
-            setActiveFarmId(section.farm_id);
-            setActiveSectionId(section.id);
-        }
     };
 
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
             <div className="ocean-gradient p-3 sm:p-4 pb-6 rounded-b-3xl shadow-lg">
-                <Breadcrumbs lightTheme className="mb-2" />
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between text-white">
                     <div className="flex items-center gap-2">
-                        <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200 grayscale-0 inverted" />
-                        <span className="text-white font-bold text-xl truncate max-w-[220px]">
-                            {user.hatchery_name || 'My Hatchery'}
-                        </span>
+                        {logo && <img src={logo} alt="Logo" className="w-8 h-8 rounded-lg brightness-200" />}
+                        <span className="font-bold text-xl">{user?.hatchery_name || 'AquaNexus'}</span>
                     </div>
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white">
+                            <Button variant="ghost" className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white p-0">
                                 <User className="w-6 h-6" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuContent align="end">
                             <DropdownMenuLabel>My Account</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => navigate('/user/profile')}>
-                                <User className="mr-2 h-4 w-4" /> Personal Info
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate('/user/profile')}>Profile</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                                <LogOut className="mr-2 h-4 w-4" /> Logout
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleLogout} className="text-red-600">Logout</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
 
-                <div className="mt-2 flex items-center justify-between">
-                    <div className="text-white/90">
-                        <p className="text-xs uppercase tracking-wider opacity-70">{user?.role === 'supervisor' ? 'Supervisor' : 'Worker'} Portal</p>
-                        <h2 className="text-lg font-bold">Welcome, {user.name}</h2>
-                    </div>
+                <div className="mt-4 text-white">
+                    <p className="text-xs opacity-70 uppercase tracking-widest">{user?.role} Portal</p>
+                    <h2 className="text-lg font-bold">Welcome, {user?.name || user?.username}</h2>
                 </div>
 
                 {/* Module Toggle */}
-                <div className="mt-3 flex justify-center">
-                    <Tabs value={activeModule} onValueChange={(val: any) => setActiveModule(val)} className="w-full max-w-[280px]">
-                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-8 p-0.5">
-                            <TabsTrigger 
-                                value="LRT" 
-                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
-                            >
-                                LRT
-                            </TabsTrigger>
-                            <TabsTrigger 
-                                value="MATURATION" 
-                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
-                            >
-                                MATURATION
-                            </TabsTrigger>
+                <div className="mt-4 flex justify-center">
+                    <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-[280px]">
+                        <TabsList className="grid grid-cols-2 bg-black/20 text-white rounded-xl h-8">
+                            <TabsTrigger value="LRT" className="text-[10px] font-bold">LRT</TabsTrigger>
+                            <TabsTrigger value="MATURATION" className="text-[10px] font-bold">MATURATION</TabsTrigger>
                         </TabsList>
                     </Tabs>
                 </div>
 
-                <div className="mt-3 flex flex-col gap-1">
-                    <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Section</span>
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                    {/* Select Farm */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-9 font-semibold text-sm">
-                                {displayLabel}
-                                <ChevronDown className="h-4 w-4 opacity-70" />
+                            <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                                <div className="flex items-center gap-2 truncate">
+                                    <MapPin className="w-4 h-4 opacity-70" />
+                                    <span>{displayFarmLabel}</span>
+                                </div>
+                                <ChevronDown className="w-4 h-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-full sm:w-64">
-                            <DropdownMenuLabel>Switch Section</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {sections.map((section) => (
-                                <DropdownMenuItem 
-                                    key={section.id} 
-                                    onClick={() => {
-                                        const secModule = (section.farm_category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION';
-                                        setActiveFarmId(section.farm_id);
-                                        setActiveSectionId(section.id);
-                                        // Manually switch module when explicitly picking a section
-                                        if (secModule !== activeModule) {
-                                            setActiveModule(secModule);
-                                        }
-                                    }}
-                                    className={section.id === activeSectionId ? "font-bold bg-muted" : ""}
-                                >
-                                    <div className="flex flex-col">
-                                        <span className="text-sm">{section.name} (Farm: {section.farm_name})</span>
-                                    </div>
+                        <DropdownMenuContent className="w-64">
+                            {availableFarms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase()).map(f => (
+                                <DropdownMenuItem key={f.id} onClick={() => {
+                                    setActiveFarmId(f.id);
+                                    const farmModule = (f.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION';
+                                    if (farmModule !== activeModule) setActiveModule(farmModule);
+                                }}>
+                                    {f.name} ({f.category})
                                 </DropdownMenuItem>
                             ))}
-                            {sections.length === 0 && (
-                                <DropdownMenuItem disabled>
-                                    No sections assigned to you
-                                </DropdownMenuItem>
-                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Select Section */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild disabled={!activeFarmId}>
+                            <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                                <div className="flex items-center gap-2 truncate">
+                                    <Layers className="w-4 h-4 opacity-70" />
+                                    <span>{displaySectionLabel}</span>
+                                </div>
+                                <ChevronDown className="w-4 h-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64">
+                            {filteredSections.map(s => (
+                                <DropdownMenuItem key={s.id} onClick={() => setActiveSectionId(s.id)}>{s.name}</DropdownMenuItem>
+                            ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             </div>
 
-            {/* Mode Toggle for Supervisors */}
-            {user.role === 'supervisor' && (
-                <div className="px-4 -mt-2 mb-4 animate-fade-in relative z-10">
-                    <div className="max-w-[340px] mx-auto flex bg-white/20 p-1 rounded-2xl gap-1 shadow-inner border border-white/20 backdrop-blur-md shadow-lg">
-                        <button
-                            onClick={() => setSupervisorMode('instruction')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'instruction' ? 'bg-white dark:bg-background shadow-md text-primary scale-[1.02]' : 'text-muted-foreground hover:text-foreground hover:bg-white/10'}`}
-                        >
-                            <ClipboardList className={`w-3.5 h-3.5 ${supervisorMode === 'instruction' ? 'animate-bounce-subtle' : ''}`} />
-                            Instruction Mode
-                        </button>
-                        <button
-                            onClick={() => setSupervisorMode('activity')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'activity' ? 'bg-white dark:bg-background shadow-md text-primary scale-[1.02]' : 'text-muted-foreground hover:text-foreground hover:bg-white/10'}`}
-                        >
+            {/* Supervisor Modes */}
+            {user?.role === 'supervisor' && (
+                <div className="px-4 mt-4 relative z-10">
+                    <div className="flex bg-muted p-1 rounded-2xl gap-1">
+                        <button onClick={() => setSupervisorMode('activity')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'activity' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}>
                             <Pencil className={`w-3.5 h-3.5 ${supervisorMode === 'activity' ? 'animate-pulse' : ''}`} />
                             Activity Mode
+                        </button>
+                        <button onClick={() => setSupervisorMode('instruction')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'instruction' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}>
+                            <ClipboardList className={`w-3.5 h-3.5 ${supervisorMode === 'instruction' ? 'animate-bounce-subtle' : ''}`} />
+                            Instruction Mode
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Main Grid */}
-            <div className={`px-4 ${user.role === 'supervisor' ? '-mt-2' : '-mt-6'}`}>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-
-                    {/* 6 Activity Icons */}
-                    {activities.map((act) => {
-                        const Icon = act.icon;
-                        return (
-                            <Button
-                                key={act.name}
-                                variant="outline"
-                                className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                                onClick={() => {
-                                    const sectionToUse = filteredSections.find(s => s.id === activeSectionId) || filteredSections[0];
-                                    const targetSectionId = sectionToUse?.id || activeSectionId;
-                                    navigate(`${act.route}?mode=${supervisorMode}&section=${targetSectionId}&category=${activeModule}`);
-                                }}
-                            >
-                                <div className={`p-1.5 rounded-lg ${act.color}`}>
-                                    <Icon className="w-5 h-5" />
-                                </div>
-                                <span className="font-semibold text-foreground text-xs text-left">
-                                    {act.name}
-                                </span>
-                            </Button>
-                        );
-                    })}
-
-                    {/* 7th Icon: Daily Report (Worker) OR Consolidated Reports (Supervisor) */}
-                    <Button
-                        variant="outline"
-                        className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                        onClick={() => navigate(user.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
-                    >
-                        <div className={`p-1.5 rounded-lg ${user.role === 'supervisor' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
-                            <FileText className="w-5 h-5" />
-                        </div>
-                        <span className="font-semibold text-foreground text-xs text-left">
-                            {user.role === 'supervisor' ? 'Reports' : 'Daily Report'}
-                        </span>
+            {/* Grid */}
+            <div className="px-4 mt-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {activities.map(act => (
+                        <Button 
+                            key={act.name} 
+                            variant="outline" 
+                            className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
+                            onClick={() => navigate(`${act.route}?mode=${supervisorMode}&section=${activeSectionId}&category=${activeModule}`)}
+                        >
+                            <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
+                            <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
+                        </Button>
+                    ))}
+                    <Button variant="outline" className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}>
+                        <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
+                        <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
                     </Button>
-
                 </div>
             </div>
 
@@ -470,9 +406,9 @@ const UserDashboard = () => {
                     <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.15em]">
                         {user.role === 'supervisor' ? 'Record Pending Activities' : 'Pending Instructions'}
                     </h3>
-                    {filteredInstructions.length > 0 && (
+                    {instructions.length > 0 && (
                         <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            {filteredInstructions.length} Pending
+                            {instructions.length} Pending
                         </span>
                     )}
                 </div>
@@ -483,8 +419,8 @@ const UserDashboard = () => {
                             <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
                         ))}
                     </div>
-                ) : filteredInstructions.length === 0 ? (
-                    <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+                ) : instructions.length === 0 ? (
+                    <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center mt-2">
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <CheckCircle2 className="w-6 h-6 text-muted-foreground opacity-50" />
                         </div>
@@ -570,13 +506,7 @@ const UserDashboard = () => {
                     </div>
                 </div>
 
-                {loading ? (
-                    <div className="space-y-3">
-                        {[1, 2].map(i => (
-                            <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
-                        ))}
-                    </div>
-                ) : filteredSupervisorInstructions.length === 0 ? (
+                {supervisorInstructions.length === 0 ? (
                     <div className="bg-muted/30 border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center">
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                             <ClipboardList className="w-6 h-6 text-muted-foreground opacity-50" />
@@ -613,7 +543,7 @@ const UserDashboard = () => {
                                                                             ✓ Done by {instr.worker?.full_name || 'worker'}
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full flex-shrink-0">⏳ Pending</span>
+                                                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full flex-shrink-0">⌛ Pending</span>
                                                                     )}
                                                                     <span className="text-xs font-bold text-foreground truncate">
                                                                         {instr.tanks?.name ? `Tank ${instr.tanks.name}` : 'Section Wide'}
@@ -622,7 +552,7 @@ const UserDashboard = () => {
                                                                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                                                     <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
                                                                         <Clock className="w-3 h-3" />
-                                                                        {instr.scheduled_time?.slice(0,5) || '—'}
+                                                                        {instr.scheduled_time?.slice(0,5) || '--:--'}
                                                                     </div>
                                                                     {instr.planned_data?.amount && (
                                                                         <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 font-medium">

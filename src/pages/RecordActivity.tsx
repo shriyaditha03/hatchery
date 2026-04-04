@@ -25,20 +25,21 @@ import {
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import RatingScale from '@/components/RatingScale';
-import StockingForm from '@/components/StockingForm';
-import ObservationForm from '@/components/ObservationForm';
-import ArtemiaForm from '@/components/ArtemiaForm';
-import AlgaeForm from '@/components/AlgaeForm';
-import HarvestForm from '@/components/HarvestForm';
-import TankShiftingForm from '@/components/TankShiftingForm';
-import SourcingMatingForm from '@/components/SourcingMatingForm';
-import SpawningForm from '@/components/SpawningForm';
-import EggCountForm from '@/components/EggCountForm';
-import NaupliiHarvestForm from '../components/NaupliiHarvestForm';
-import NaupliiSaleForm from '@/components/NaupliiSaleForm';
-import ImageUpload from '@/components/ImageUpload';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import RatingScale from '@/modules/shared/components/RatingScale';
+import StockingForm from '@/modules/shared/components/StockingForm';
+import ObservationForm from '@/modules/shared/components/ObservationForm';
+import ArtemiaForm from '@/modules/lrt/components/ArtemiaForm';
+import AlgaeForm from '@/modules/lrt/components/AlgaeForm';
+import HarvestForm from '@/modules/lrt/components/HarvestForm';
+import TankShiftingForm from '@/modules/lrt/components/TankShiftingForm';
+import SourcingMatingForm from '@/modules/maturation/components/SourcingMatingForm';
+import SpawningForm from '@/modules/maturation/components/SpawningForm';
+import EggCountForm from '@/modules/maturation/components/EggCountForm';
+import NaupliiHarvestForm from '@/modules/maturation/components/NaupliiHarvestForm';
+import NaupliiSaleForm from '@/modules/maturation/components/NaupliiSaleForm';
+import ImageUpload from '@/modules/shared/components/ImageUpload';
+import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
+import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
 import { toast } from 'sonner';
 import { formatDate, getNowLocal, getTodayStr } from '@/lib/date-utils';
 import { useActivities } from '@/hooks/useActivities';
@@ -61,47 +62,10 @@ const FEED_UNITS = ['kg', 'gms', 'L', 'ml'];
 const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
 
-export const ANIMAL_RATING_FIELDS = [
-  { key: 'swimmingActivity', label: 'Swimming Activity', required: true },
-  { key: 'homogenousStage', label: 'Homogenous Stage', required: true },
-  { key: 'hepatopancreas', label: 'Hepatopancreas', required: true },
-  { key: 'intestinalContent', label: 'Intestinal Content', required: true },
-  { key: 'fecalStrings', label: 'Fecal Strings', required: true },
-  { key: 'necrosis', label: 'Necrosis', required: true },
-  { key: 'deformities', label: 'Deformities', required: true },
-  { key: 'fouling', label: 'Fouling', required: true },
-  { key: 'epibionts', label: 'Epibionts', required: true },
-  { key: 'muscleGutRatio', label: 'Muscle Gut Ratio', required: true },
-  { key: 'size', label: 'Size', required: true },
-  { key: 'nextStageConversion', label: 'Time taken for Next Stage Conversion', required: true },
-];
 
-export const waterFields = [
-  'Salinity', 'pH', 'Dissolved Oxygen', 'Alkalinity', 'Chlorine Content',
-  'Iron Content', 'Turbidity', 'Temperature', 'Hardness', 'Ammonia',
-  'Nitrate [NO3]', 'Nitrite [NO2]', 'Vibrio Count', 'Yellow Green Bacteria',
-  'Luminescence',
-];
-
-export const WATER_QUALITY_RANGES: Record<string, string> = {
-  'Salinity': '[10 - 35 ppt]',
-  'pH': '[7.5 - 8.5]',
-  'Dissolved Oxygen': '[> 4.0 ppm]',
-  'Alkalinity': '[80 - 200 ppm]',
-  'Chlorine Content': '[< 0.1 ppm]',
-  'Iron Content': '[< 0.5 ppm]',
-  'Turbidity': '[30 - 45 cm]',
-  'Temperature': '[26 - 32 degC]',
-  'Hardness': '[> 1000 ppm]',
-  'Ammonia': '[< 0.1 ppm]',
-  'Nitrate [NO3]': '[< 20 ppm]',
-  'Nitrite [NO2]': '[< 0.25 ppm]',
-  'Vibrio Count': '[< 1x10^3 CFU/mL]',
-  'Yellow Green Bacteria': '[< 1x10^2 CFU/mL]',
-  'Luminescence': '[Nil]',
-};
 
 const RecordActivity = () => {
+
   const navigate = useNavigate();
   const { 
     user, 
@@ -266,66 +230,59 @@ const RecordActivity = () => {
     if (!user || !user.access) return;
     setLoading(true);
     try {
-      // Use the access info already provided by the AuthContext
       const accessData = user.access;
+      const farmIds = Array.from(new Set(accessData.map(a => a.farm_id).filter(Boolean)));
 
-      // Group tanks by section to avoid flat list & duplicates
-      const sectionsMap = new Map<string, any>();
-
-      // Collect all section IDs and farm IDs we need to fetch full data for
-      // (This handles cases where the user has whole-farm access)
-      const farmIdsWithWholeAccess = new Set(accessData.filter(a => !a.section_id).map(a => a.farm_id));
-      const specificSectionIds = new Set(accessData.filter(a => a.section_id).map(a => a.section_id));
-
-      // Fetch full details for these sections and their tanks
-      // We do one combined query for efficiency
-      let query = supabase.from('sections').select('id, name, farm_id, farms(name, category), tanks(id, name)');
-      
-      if (farmIdsWithWholeAccess.size > 0 && specificSectionIds.size > 0) {
-        query = query.or(`farm_id.in.(${Array.from(farmIdsWithWholeAccess).join(',')}),id.in.(${Array.from(specificSectionIds).join(',')})`);
-      } else if (farmIdsWithWholeAccess.size > 0) {
-        query = query.in('farm_id', Array.from(farmIdsWithWholeAccess));
-      } else if (specificSectionIds.size > 0) {
-        query = query.in('id', Array.from(specificSectionIds));
-      } else {
+      if (farmIds.length === 0) {
         setAvailableTanks([]);
+        setLoading(false);
         return;
       }
 
-      const { data: fullData, error: fullError } = await query;
-      if (fullError) throw fullError;
+      // 1. Fetch ALL Sections for these farms (Broad search)
+      const { data: sections, error: secError } = await supabase
+        .from('sections')
+        .select('id, name, farm_id, farms(name, category)')
+        .in('farm_id', farmIds);
+      
+      if (secError) throw secError;
 
-      fullData?.forEach((section: any) => {
-        const farm = section.farms;
-        if (!farm) return;
+      // 2. Fetch Tanks for these sections (Simple)
+      const allSecIds = sections.map(s => s.id);
+      const { data: tanks, error: tankError } = await supabase
+        .from('tanks')
+        .select('id, name, section_id')
+        .in('section_id', allSecIds);
+      if (tankError) throw tankError;
 
-        // Skip if this section is logically filtered away? 
-        // No, we fetch all and let the UI filter by module/category later if needed.
-        
-        sectionsMap.set(section.id, {
-          id: section.id,
-          name: section.name,
-          farm_name: farm.name,
-          farm_id: section.farm_id,
-          farm_category: farm.category || 'LRT',
-          tanks: section.tanks || []
-        });
+      // 3. Map them together
+      const finalSections = sections.map(sec => {
+        const farmObj = Array.isArray(sec.farms) ? sec.farms[0] : sec.farms;
+        return {
+          id: sec.id,
+          name: sec.name,
+          farm_name: (farmObj as any)?.name || 'Unknown Farm',
+          farm_id: sec.farm_id,
+          farm_category: (farmObj as any)?.category || 'LRT',
+          tanks: tanks?.filter(t => t.section_id === sec.id) || []
+        };
       });
 
-      const finalTanks = Array.from(sectionsMap.values());
-      setAvailableTanks(finalTanks);
+      console.log(`RecordActivity Debug: Fetched ${finalSections.length} sections and ${tanks?.length || 0} tanks total.`);
+      setAvailableTanks(finalSections);
 
-      // Fetch which of these tanks have an active population
-      const allTankIds = finalTanks.flatMap((s: any) => s.tanks.map((t: any) => t.id));
+      // 4. Check population status (Optional/Helper)
+      const allTankIds = tanks?.map(t => t.id) || [];
       if (allTankIds.length > 0) {
-        const { data: popData, error: popError } = await supabase.rpc('get_active_tank_populations', { p_tank_ids: allTankIds });
-        if (!popError && popData) {
+        const { data: popData } = await supabase.rpc('get_active_tank_populations', { p_tank_ids: allTankIds });
+        if (popData) {
            const stockedIds = popData.filter((d: any) => parseFloat(d.current_population) > 0).map((d: any) => d.tank_id);
            setStockedTankIds(stockedIds);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching tanks:', err);
+      (window as any).TANK_FETCH_ERROR = err.message || 'Unknown Error';
       toast.error('Failed to load tanks');
     } finally {
       setLoading(false);
@@ -412,12 +369,12 @@ const RecordActivity = () => {
     }
   }, [isPlanningMode, user, selectedFarmId, activeFarmId]);
 
-  // Handle instruction link from dashboard
+  // Handle instruction link from dashboard - load as soon as user is ready (don't wait for tanks)
   useEffect(() => {
-    if (instructionIdParam && availableTanks.length > 0) {
+    if (instructionIdParam && user) {
       handleInitialInstruction(instructionIdParam);
     }
-  }, [instructionIdParam, availableTanks]);
+  }, [instructionIdParam, user?.id]);
 
   // Handle edit instruction from supervisor dashboard
   useEffect(() => {
@@ -1150,12 +1107,24 @@ const RecordActivity = () => {
           return;
         }
 
+        // Derive hatchery_id: use user's hatchery, fallback to farm's hatchery
+        let hatcheryId = user?.hatchery_id || null;
+        if (!hatcheryId && farmId) {
+          const farmSection = availableTanks.find(s => s.farm_id === farmId);
+          if (farmSection?.hatchery_id) hatcheryId = farmSection.hatchery_id;
+        }
+
+        if (!hatcheryId) {
+          toast.error('Hatchery info missing. Please log out and log in again.');
+          return null;
+        }
+
         const record = {
-          hatchery_id: user?.hatchery_id || null,
+          hatchery_id: hatcheryId,
           farm_id: farmId,
           section_id: sectionId,
           tank_id: tId || null,
-          activity_type: activity.trim(), // Sanitize
+          activity_type: activity.trim(),
           scheduled_date: date,
           scheduled_time: time,
           planned_data: {
@@ -1170,13 +1139,17 @@ const RecordActivity = () => {
             algaeData: activity === 'Algae' ? algaeData : undefined,
             harvestData: activity === 'Harvest' ? harvestData : undefined,
             tankShiftingData: activity === 'Tank Shifting' ? tankShiftingData : undefined,
-            sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined
+            sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined,
+            spawningData: activity === 'Spawning' ? spawningData : undefined,
+            eggCountData: activity === 'Egg Count' ? eggCountData : undefined,
+            naupliiHarvestData: activity === 'Nauplii Harvest' ? naupliiHarvestData : undefined,
+            naupliiSaleData: activity === 'Nauplii Sale' ? naupliiSaleData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
           assigned_to: assignedTo || null
         };
-        
+
         console.log('DEBUG - Saving Instruction Record:', record);
         return record;
       }).filter(Boolean);
@@ -1866,7 +1839,12 @@ const RecordActivity = () => {
     : ACTIVITIES;
 
   return (
-    <div className="min-h-screen bg-background pb-12">
+    <div className="min-h-screen bg-background pb-10">
+      <div className="bg-red-50 p-2 border-b border-red-200 text-[10px] flex justify-between px-4 sticky top-0 z-50">
+        <span>SECTIONS: {availableTanks.length}</span>
+        <span>TANKS: {availableTanks.flatMap(s => s.tanks).length}</span>
+        <span>ERR: {(window as any).TANK_FETCH_ERROR || 'NONE'}</span>
+      </div>
       {/* Header */}
         <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative">
           <div className="mb-4">
@@ -2021,7 +1999,7 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {(activity || !type) && !isSpecialActivity && !(activeFarmCategory === 'MATURATION' && (activity === 'Stocking' || activity === 'Sourcing & Mating' || activity === 'Nauplii Sale')) && (
+        {(activity || !type) && !isSpecialActivity && !(activeFarmCategory === 'MATURATION' && (activity === 'Stocking' || activity === 'Sourcing & Mating')) && (
 
 
           <div className="glass-card rounded-2xl p-4 space-y-4">
@@ -2093,7 +2071,7 @@ const RecordActivity = () => {
                           </SelectTrigger>
                           <SelectContent>
                             {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
-                              .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+                              .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
                               .map((t: any) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
@@ -2119,7 +2097,7 @@ const RecordActivity = () => {
                     <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
                     <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
                       {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
-                        .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+                        .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
                         .map((t: any) => (
                         <div 
                           key={t.id}

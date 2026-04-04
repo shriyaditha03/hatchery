@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import RatingScale from '@/components/RatingScale';
-import ImageUpload from '@/components/ImageUpload';
+import RatingScale from './RatingScale';
+import ImageUpload from './ImageUpload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ClipboardList } from 'lucide-react';
-import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '../pages/RecordActivity';
+import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface StockingFormProps {

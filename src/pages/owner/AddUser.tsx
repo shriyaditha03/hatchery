@@ -38,6 +38,7 @@ const AddUser = () => {
             .select(`
                 id, 
                 name,
+                category,
                 sections (
                     id, 
                     name,
@@ -308,7 +309,7 @@ const AddUser = () => {
                                                 htmlFor={`farm-${farm.id}`} 
                                                 className="text-sm font-bold flex-1 cursor-pointer py-1"
                                             >
-                                                {farm.name} (Farm)
+                                                {farm.name} ({farm.category || 'Farm'})
                                             </Label>
                                         </div>
                                         

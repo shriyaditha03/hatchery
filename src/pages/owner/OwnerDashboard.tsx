@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
 import {
     DropdownMenu,
     DropdownMenuContent,

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
 import { ArrowLeft, Warehouse, Layers, Cylinder, Plus, MoreVertical, Pencil, Trash2, Settings, Utensils, Beaker, Waves } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {

@@ -76,6 +76,7 @@ const ManageUsers = () => {
                 .select(`
                     id, 
                     name,
+                    category,
                     sections (
                         id, 
                         name,
@@ -207,27 +208,26 @@ const ManageUsers = () => {
 
     const handleDelete = async (userId: string, username: string) => {
         try {
-            // 1. Delete associated activity logs first (to avoid foreign key constraint errors)
-            const { error: logsError } = await supabase
-                .from('activity_logs')
-                .delete()
-                .eq('user_id', userId);
+            setActionLoading(true);
 
-            if (logsError) throw logsError;
-
-            // 2. Delete the profile (farm_access is set to CASCADE in DB)
-            const { error } = await supabase
-                .from('profiles')
-                .delete()
-                .eq('id', userId);
+            // Call the database function to delete both the auth user and their profile
+            const { data: success, error } = await supabase.rpc('delete_staff_member', {
+                target_profile_id: userId
+            });
 
             if (error) throw error;
 
-            toast.success(`User "${username}" removed successfully`);
-            setUsers(users.filter(u => u.id !== userId));
+            if (success) {
+                toast.success(`User "${username}" removed successfully`);
+                setUsers(users.filter(u => u.id !== userId));
+            } else {
+                throw new Error("Failed to delete user. Please check if they exist or if you have permissions.");
+            }
         } catch (error: any) {
             console.error('Delete error:', error);
             toast.error(error.message || 'Failed to remove user');
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -360,7 +360,7 @@ const ManageUsers = () => {
                                                     htmlFor={`edit-farm-${farm.id}`} 
                                                     className="text-sm font-bold flex-1 cursor-pointer py-1"
                                                 >
-                                                    {farm.name} (Farm)
+                                                {farm.name} ({farm.category || 'Farm'})
                                                 </Label>
                                             </div>
                                             

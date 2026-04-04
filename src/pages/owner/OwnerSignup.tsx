@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { MapPicker } from '@/components/MapPicker';
+import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Waves, Loader2, MapPin, LocateFixed } from 'lucide-react';
 
@@ -198,7 +198,7 @@ const OwnerSignup = () => {
                 .from('hatcheries')
                 .insert([{
                     name: formData.hatcheryName,
-                    location: address.city || address.areaName || 'Unknown', // Fallback location string
+                    location: address.city || address.areaName || 'Unknown',
                     address: address.fullAddress,
                     plot_number: address.plotNumber,
                     area_name: address.areaName,

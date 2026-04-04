@@ -4,8 +4,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import RatingScale from '@/components/RatingScale';
-import ImageUpload from '@/components/ImageUpload';
+import RatingScale from '@/modules/shared/components/RatingScale';
+import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { formatDate, getNowLocal } from '@/lib/date-utils';
 
 const ARTEMIA_STAGES = [

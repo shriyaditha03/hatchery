@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, ArrowRightLeft, Heart, Search } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import ImageUpload from '@/components/ImageUpload';
+import ImageUpload from '@/modules/shared/components/ImageUpload';
 
 interface SourcingMatingFormProps {
   data: any;

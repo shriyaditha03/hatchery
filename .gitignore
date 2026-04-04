@@ -36,3 +36,8 @@ dist-ssr
 playwright-report/
 test-results/
 lint.txt
+# Temporary debug files
+tmp_*
+*.txt
+!lint.txt
+

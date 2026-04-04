@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp, Utensils, Waves } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp, Utensils, Waves, ArrowRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {

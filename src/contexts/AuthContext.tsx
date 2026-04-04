@@ -133,11 +133,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let fullAccess: any[] = [];
       
       if (profile.role === 'owner') {
-        // Owners get access to all farms in their hatchery
-        const { data: farms, error: farmsError } = await supabase
-          .from('farms')
-          .select('id, name, category')
-          .eq('hatchery_id', profile.hatchery_id);
+        // Owners get access to all farms
+        let query = supabase.from('farms').select('id, name, category');
+        
+        if (profile.hatchery_id) {
+          query = query.eq('hatchery_id', profile.hatchery_id);
+        }
+        
+        const { data: farms, error: farmsError } = await query;
         
         if (farms) {
           assignedFarms = farms.map(f => f.name);
@@ -151,50 +154,73 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }));
         }
       } else if (profile.role === 'worker' || profile.role === 'supervisor') {
+        // LOG: Attempting simplified fetch to avoid relationship errors
+        console.log(`AuthContext Debug: Fetching access for profile.id: ${profile.id} (${profile.username})`);
+        
         const { data: access, error: accessError } = await supabase
           .from('farm_access')
           .select(`
             farm_id,
-            section_id,
-            tank_id,
             farms (
+              id,
               name,
               category,
+              hatchery_id,
               sections (id, name)
-            ),
-            sections (name)
+            )
           `)
           .eq('user_id', profile.id);
-        
-        if (access) {
-          const farmNames = new Set(access.map((a: any) => a.farms?.name).filter(Boolean));
-          assignedFarms = Array.from(farmNames) as string[];
+
+        if (accessError) {
+          console.error("AuthContext DB Error:", accessError);
+          (window as any).AUTH_DEBUG_ERROR = accessError.message;
+        } else if (access) {
+          console.log(`AuthContext Debug: DB successfully returned ${access.length} rows.`);
+          (window as any).AUTH_DEBUG_ROWS = access.length;
+          (window as any).AUTH_DEBUG_ERROR = "None"; // Clear previous error
           
           access.forEach((a: any) => {
+            const farmObj = a.farms as any;
+            const farmName = (Array.isArray(farmObj) ? farmObj[0]?.name : farmObj?.name) || 'Unknown Farm';
+            const farmCategory = (Array.isArray(farmObj) ? (farmObj[0]?.category || 'LRT') : (farmObj?.category || 'LRT')).toUpperCase();
+            const farmSections = (Array.isArray(farmObj) ? farmObj[0]?.sections : farmObj?.sections) || [];
+
+            if (!a.farm_id && farmObj?.id) a.farm_id = farmObj.id;
+
             if (a.section_id) {
-              // Specific section access
+              // Find section name from the farm object sections
+              const sectionName = farmSections.find((s: any) => s.id === a.section_id)?.name || 'Assigned Section';
               fullAccess.push({
                 farm_id: a.farm_id,
-                farm_name: (Array.isArray(a.farms) ? a.farms[0]?.name : a.farms?.name) || 'Unknown Farm',
-                farm_category: ((Array.isArray(a.farms) ? a.farms[0]?.category : a.farms?.category) || 'LRT').toUpperCase(),
+                farm_name: farmName,
+                farm_category: farmCategory,
                 section_id: a.section_id,
-                section_name: a.sections?.name,
+                section_name: sectionName,
                 tank_id: a.tank_id
               });
-            } else if (a.farms?.sections) {
-              // Whole farm access - include all sections of this farm
-              a.farms.sections.forEach((s: any) => {
+            } else if (farmSections.length > 0) {
+              farmSections.forEach((s: any) => {
                 fullAccess.push({
                   farm_id: a.farm_id,
-                  farm_name: (Array.isArray(a.farms) ? a.farms[0]?.name : a.farms?.name),
-                  farm_category: ((Array.isArray(a.farms) ? a.farms[0]?.category : a.farms?.category) || 'LRT').toUpperCase(),
+                  farm_name: farmName,
+                  farm_category: farmCategory,
                   section_id: s.id,
                   section_name: s.name,
                   tank_id: null
                 });
               });
+            } else {
+              fullAccess.push({
+                farm_id: a.farm_id,
+                farm_name: farmName,
+                farm_category: farmCategory,
+                section_id: null,
+                section_name: null,
+                tank_id: null
+              });
             }
           });
+          assignedFarms = Array.from(new Set(fullAccess.map(f => f.farm_name)));
         }
       }
 
