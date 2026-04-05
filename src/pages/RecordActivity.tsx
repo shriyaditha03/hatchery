@@ -103,6 +103,7 @@ const RecordActivity = () => {
   const [selectedInstructionId, setSelectedInstructionId] = useState<string | null>(null);
   const [selectedInstructionData, setSelectedInstructionData] = useState<any | null>(null);
   const [isPlanningMode, setIsPlanningMode] = useState(() => {
+    if (user?.role === 'worker') return false;
     if (editInstructionId) return true;
     if (instructionIdParam) return false;
     if (modeParam === 'instruction') return true;
@@ -112,7 +113,9 @@ const RecordActivity = () => {
 
   // Sync isPlanningMode when user/params change
   useEffect(() => {
-    if (editInstructionId) {
+    if (user?.role === 'worker') {
+      setIsPlanningMode(false);
+    } else if (editInstructionId) {
       setIsPlanningMode(true);
     } else if (instructionIdParam) {
       setIsPlanningMode(false);
@@ -1840,11 +1843,7 @@ const RecordActivity = () => {
 
   return (
     <div className="min-h-screen bg-background pb-10">
-      <div className="bg-red-50 p-2 border-b border-red-200 text-[10px] flex justify-between px-4 sticky top-0 z-50">
-        <span>SECTIONS: {availableTanks.length}</span>
-        <span>TANKS: {availableTanks.flatMap(s => s.tanks).length}</span>
-        <span>ERR: {(window as any).TANK_FETCH_ERROR || 'NONE'}</span>
-      </div>
+
       {/* Header */}
         <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative">
           <div className="mb-4">

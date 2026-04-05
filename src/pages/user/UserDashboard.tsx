@@ -398,6 +398,20 @@ const UserDashboard = () => {
                         </div>
                     </div>
                 </div>
+            ) : !activeSectionId ? (
+                <div className="px-4 mt-8">
+                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
+                        <Layers className="w-10 h-10 text-primary opacity-80" />
+                        <div>
+                            <h3 className="font-bold text-lg">Select a Section</h3>
+                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                                {filteredSections.length > 0 
+                                    ? "Please choose a section from the dropdown above to continue working."
+                                    : "No sections are assigned to you in this farm. Please contact your manager."}
+                            </p>
+                        </div>
+                    </div>
+                </div>
             ) : (
                 <>
 
@@ -433,7 +447,7 @@ const UserDashboard = () => {
                             key={act.name} 
                             variant="outline" 
                             className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
-                            onClick={() => navigate(`${act.route}?mode=${supervisorMode}&section=${activeSectionId}&category=${activeModule}`)}
+                            onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId}&category=${activeModule}`)}
                         >
                             <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
                             <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
