@@ -41,33 +41,39 @@ const OwnerDashboard = () => {
                     const farmsData = data || [];
                     setFarms(farmsData);
                     
-                    if (farmsData.length > 0) {
-                        if (!activeFarmId) {
-                            const firstInModule = farmsData.find(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
-                            if (firstInModule) {
-                                setActiveFarmId(firstInModule.id);
-                            } else {
-                                const firstFarm = farmsData[0];
-                                setActiveModule((firstFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
-                                setActiveFarmId(firstFarm.id);
-                            }
+                    const farmsInModule = farmsData.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+                    
+                    // Do not auto-select if there is no activeFarmId, EXCEPT if there's exactly 1 farm
+                    // Just validate if the current activeFarmId still exists
+                    if (activeFarmId) {
+                        const currentFarm = farmsData.find(f => f.id === activeFarmId);
+                        if (!currentFarm) {
+                            setActiveFarmId(farmsInModule.length === 1 ? farmsInModule[0].id : null);
+                        } else if ((currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
+                            // If the cached farm belongs to a different module than the cached module, switch module
+                            setActiveModule((currentFarm.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION');
                         }
+                    } else if (farmsInModule.length === 1) {
+                        setActiveFarmId(farmsInModule[0].id);
                     }
                 });
         }
-    }, [user, activeFarmId, setActiveFarmId]);
+    }, [user, activeModule]); // Removed activeFarmId/setActiveFarmId from dependency map to avoid loops on auto-clear
+
 
     // Handle module switch
     const handleModuleChange = (module: string) => {
         const newModule = module as 'LRT' | 'MATURATION';
         setActiveModule(newModule);
         
-        // If current active farm project is not in the new module, switch to first farm of new module
+        // If current active farm project is not in the new module, clear selection or auto-select if exactly 1
         const currentFarm = farms.find(f => f.id === activeFarmId);
         if (!currentFarm || (currentFarm.category || 'LRT').toUpperCase() !== newModule.toUpperCase()) {
-            const firstInNewModule = farms.find(f => (f.category || 'LRT').toUpperCase() === newModule.toUpperCase());
-            if (firstInNewModule) {
-                setActiveFarmId(firstInNewModule.id);
+            const newModuleFarms = farms.filter(f => (f.category || 'LRT').toUpperCase() === newModule.toUpperCase());
+            if (newModuleFarms.length === 1) {
+                setActiveFarmId(newModuleFarms[0].id);
+            } else {
+                setActiveFarmId(null);
             }
         }
     };
@@ -226,29 +232,52 @@ const OwnerDashboard = () => {
 
             {/* Main Grid */}
             <div className="px-4 -mt-6 relative z-10">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-
-                    {/* 6 Activity Icons */}
-                    {activities.map((act) => {
-                        const Icon = act.icon;
-                        return (
-                            <Button
-                                key={act.name}
-                                variant="outline"
-                                className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
-                                onClick={() => navigate(act.route)}
-                            >
-                                <div className={`p-1.5 rounded-lg ${act.color}`}>
-                                    <Icon className="w-5 h-5" />
-                                </div>
-                                <span className="font-semibold text-foreground text-xs text-left">
-                                    {act.name}
-                                </span>
-                            </Button>
-                        );
-                    })}
-
-                </div>
+                {filteredFarms.length === 0 ? (
+                    <div className="bg-card p-8 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-4">
+                        <Warehouse className="w-12 h-12 text-muted-foreground opacity-50" />
+                        <div>
+                            <h3 className="font-bold text-lg">No {activeModule} Farms</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                You haven't created any {activeModule} farms yet.
+                            </p>
+                        </div>
+                        <Button onClick={() => navigate('/owner/create-farm')} className="mt-2 text-xs h-9">
+                            <PlusCircle className="w-4 h-4 mr-2"/> Create {activeModule} Farm
+                        </Button>
+                    </div>
+                ) : !activeFarm ? (
+                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
+                        <Warehouse className="w-10 h-10 text-primary opacity-80" />
+                        <div>
+                            <h3 className="font-bold text-lg">Select a Farm</h3>
+                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                                Please select a farm from the dropdown above to view its dashboard.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {/* 6 Activity Icons */}
+                        {activities.map((act) => {
+                            const Icon = act.icon;
+                            return (
+                                <Button
+                                    key={act.name}
+                                    variant="outline"
+                                    className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
+                                    onClick={() => navigate(act.route)}
+                                >
+                                    <div className={`p-1.5 rounded-lg ${act.color}`}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
+                                    <span className="font-semibold text-foreground text-xs text-left">
+                                        {act.name}
+                                    </span>
+                                </Button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* Quick Actions Footer */}

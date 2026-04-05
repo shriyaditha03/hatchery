@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [supervisorMode, setSupervisorModeState] = useState<'instruction' | 'activity'>(() => {
     const saved = localStorage.getItem('activeSupervisorMode');
     if (saved === 'instruction' || saved === 'activity') return saved;
-    return 'activity'; // Default based on role happens in dashboard or here
+    return 'instruction'; // Default based on role happens in dashboard or here
   });
 
   useEffect(() => {

@@ -47,6 +47,12 @@ const UserDashboard = () => {
         return Object.values(farmMap).sort((a: any, b: any) => a.name.localeCompare(b.name));
     }, [user?.access]);
 
+    const availableFarmsForModule = useMemo(() => {
+        return availableFarms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+    }, [availableFarms, activeModule]);
+
+    const hasAccessToModule = availableFarmsForModule.length > 0;
+
     const allMySections = useMemo(() => {
         const sectionsList = (user?.access || [])
             .filter(a => a.section_id)
@@ -83,10 +89,16 @@ const UserDashboard = () => {
         if (!loading && availableFarms.length > 0) {
             const currentFarm = availableFarms.find(f => f.id === activeFarmId);
             
-            // If active farm doesn't match current module, clear the selection
+            // If active farm doesn't match current module, clear the selection or auto-select if exactly 1
             if (currentFarm && (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
-                setActiveFarmId(null);
+                if (availableFarmsForModule.length === 1) {
+                    setActiveFarmId(availableFarmsForModule[0].id);
+                } else {
+                    setActiveFarmId(null);
+                }
                 setActiveSectionId(null);
+            } else if (!activeFarmId && availableFarmsForModule.length === 1) {
+                setActiveFarmId(availableFarmsForModule[0].id);
             }
             
             const currentSection = allMySections.find(s => s.id === activeSectionId);
@@ -96,7 +108,7 @@ const UserDashboard = () => {
                 setActiveSectionId(null);
             }
         }
-    }, [availableFarms, allMySections, activeFarmId, activeSectionId, loading, activeModule]);
+    }, [availableFarms, availableFarmsForModule, allMySections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId]);
 
     useEffect(() => {
         if (user) {
@@ -320,17 +332,17 @@ const UserDashboard = () => {
                 <div className="mt-4 flex flex-col sm:flex-row gap-2">
                     {/* Select Farm */}
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild disabled={!hasAccessToModule}>
                             <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                 <div className="flex items-center gap-2 truncate">
                                     <MapPin className="w-4 h-4 opacity-70" />
-                                    <span>{displayFarmLabel}</span>
+                                    <span>{hasAccessToModule ? displayFarmLabel : 'No Access'}</span>
                                 </div>
                                 <ChevronDown className="w-4 h-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-64">
-                            {availableFarms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase()).map(f => (
+                            {availableFarmsForModule.map(f => (
                                 <DropdownMenuItem key={f.id} onClick={() => {
                                     setActiveFarmId(f.id);
                                     const farmModule = (f.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION';
@@ -344,7 +356,7 @@ const UserDashboard = () => {
 
                     {/* Select Section */}
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild disabled={!activeFarmId}>
+                        <DropdownMenuTrigger asChild disabled={!activeFarmId || filteredSections.length === 0}>
                             <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                 <div className="flex items-center gap-2 truncate">
                                     <Layers className="w-4 h-4 opacity-70" />
@@ -362,19 +374,54 @@ const UserDashboard = () => {
                 </div>
             </div>
 
+            {!hasAccessToModule ? (
+                <div className="px-4 mt-8">
+                    <div className="bg-card p-8 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-4">
+                        <Database className="w-12 h-12 text-muted-foreground opacity-50" />
+                        <div>
+                            <h3 className="font-bold text-lg">No Access to {activeModule}</h3>
+                            <p className="text-sm text-muted-foreground mt-1 px-2">
+                                You haven't been assigned to any {activeModule} farms or sections. Please contact your owner to grant you access.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ) : !activeFarmId ? (
+                <div className="px-4 mt-8">
+                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
+                        <MapPin className="w-10 h-10 text-primary opacity-80" />
+                        <div>
+                            <h3 className="font-bold text-lg">Select an Assigned Farm</h3>
+                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                                Please choose a farm from the dropdown above to continue working.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <>
+
             {/* Supervisor Modes */}
             {user?.role === 'supervisor' && (
-                <div className="px-4 mt-4 relative z-10">
-                    <div className="flex bg-muted p-1 rounded-2xl gap-1">
-                        <button onClick={() => setSupervisorMode('activity')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'activity' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}>
-                            <Pencil className={`w-3.5 h-3.5 ${supervisorMode === 'activity' ? 'animate-pulse' : ''}`} />
-                            Activity Mode
-                        </button>
-                        <button onClick={() => setSupervisorMode('instruction')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${supervisorMode === 'instruction' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}>
-                            <ClipboardList className={`w-3.5 h-3.5 ${supervisorMode === 'instruction' ? 'animate-bounce-subtle' : ''}`} />
-                            Instruction Mode
-                        </button>
-                    </div>
+                <div className="px-4 mt-4 relative z-10 flex justify-center">
+                    <Tabs value={supervisorMode} onValueChange={(v: any) => setSupervisorMode(v)} className="w-[280px]">
+                        <TabsList className="grid w-full grid-cols-2 bg-slate-800 text-slate-300 rounded-xl h-8 p-0.5 shadow-sm">
+                            <TabsTrigger 
+                                value="instruction"
+                                className="text-[10px] font-bold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            >
+                                <ClipboardList className={`w-3 h-3 ${supervisorMode === 'instruction' ? 'animate-bounce-subtle' : ''}`} />
+                                Instruction
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="activity"
+                                className="text-[10px] font-bold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            >
+                                <Pencil className={`w-3 h-3 ${supervisorMode === 'activity' ? 'animate-pulse' : ''}`} />
+                                Activity
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
             )}
 
@@ -600,6 +647,8 @@ const UserDashboard = () => {
                     </div>
                 )}
             </div>
+            )}
+                </>
             )}
         </div>
     );
