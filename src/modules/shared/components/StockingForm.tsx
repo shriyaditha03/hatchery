@@ -416,34 +416,40 @@ const StockingForm = ({
                                 </p>
                               </div>
                               <div className="flex gap-2 items-center">
-                                <div className="relative group/input">
-                                  <Input 
-                                    type="number"
-                                    placeholder="M"
-                                    value={data.allocations?.[tank.id]?.m || ''}
-                                    onChange={e => {
-                                      const newAllocations = { ...(data.allocations || {}) };
-                                      newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
-                                      handleChange('allocations', newAllocations);
-                                    }}
-                                    className="w-20 h-11 text-center font-bold bg-background pr-2"
-                                  />
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">M</span>
-                                </div>
-                                <div className="relative group/input">
-                                  <Input 
-                                    type="number"
-                                    placeholder="F"
-                                    value={data.allocations?.[tank.id]?.f || ''}
-                                    onChange={e => {
-                                      const newAllocations = { ...(data.allocations || {}) };
-                                      newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
-                                      handleChange('allocations', newAllocations);
-                                    }}
-                                    className="w-20 h-11 text-center font-bold bg-background pr-2"
-                                  />
-                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">F</span>
-                                </div>
+                                {/* Show M input only for MALE or untagged tanks */}
+                                {(tank.gender === 'MALE' || !tank.gender) && (
+                                  <div className="relative group/input">
+                                    <Input 
+                                      type="number"
+                                      placeholder="0"
+                                      value={data.allocations?.[tank.id]?.m || ''}
+                                      onChange={e => {
+                                        const newAllocations = { ...(data.allocations || {}) };
+                                        newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
+                                        handleChange('allocations', newAllocations);
+                                      }}
+                                      className="w-20 h-11 text-center font-bold bg-background pr-2"
+                                    />
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400 opacity-70 pointer-events-none">M</span>
+                                  </div>
+                                )}
+                                {/* Show F input only for FEMALE or untagged tanks */}
+                                {(tank.gender === 'FEMALE' || !tank.gender) && (
+                                  <div className="relative group/input">
+                                    <Input 
+                                      type="number"
+                                      placeholder="0"
+                                      value={data.allocations?.[tank.id]?.f || ''}
+                                      onChange={e => {
+                                        const newAllocations = { ...(data.allocations || {}) };
+                                        newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
+                                        handleChange('allocations', newAllocations);
+                                      }}
+                                      className="w-20 h-11 text-center font-bold bg-background pr-2"
+                                    />
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-pink-400 opacity-70 pointer-events-none">F</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );

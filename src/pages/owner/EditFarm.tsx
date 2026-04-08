@@ -16,6 +16,7 @@ interface TankConfig {
     name: string;
     type: 'FRP' | 'CONCRETE';
     shape: 'CIRCLE' | 'RECTANGLE';
+    gender?: 'MALE' | 'FEMALE';
     length: number;
     width: number;
     height: number;
@@ -27,6 +28,7 @@ interface TankConfig {
 interface SectionConfig {
     id?: string;
     name: string;
+    type?: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT';
     tanks: TankConfig[];
 }
 
@@ -125,11 +127,13 @@ const EditFarm = () => {
             const mappedSections: SectionConfig[] = sectionsData.map(s => ({
                 id: s.id,
                 name: s.name,
+                type: s.section_type || (farm.category === 'MATURATION' ? 'ANIMAL' : 'LRT'),
                 tanks: tanksData
                     .filter(t => t.section_id === s.id)
                     .map(t => ({
                         id: t.id,
                         name: t.name,
+                        gender: t.gender || null,
                         type: t.type as 'FRP' | 'CONCRETE',
                         shape: t.shape as 'CIRCLE' | 'RECTANGLE',
                         length: t.length || 0,
@@ -183,10 +187,41 @@ const EditFarm = () => {
         });
     };
 
+    const getTankPrefix = (section: SectionConfig, sIdx: number) => {
+        const sNumMatch = section.name.match(/\d+/);
+        const sNum = sNumMatch ? sNumMatch[0] : (sIdx + 1);
+
+        if (section.type === 'ANIMAL') return `AS${sNum}`;
+        if (section.type === 'SPAWNING') return `SS${sNum}`;
+        if (section.type === 'NAUPLII') return `NS${sNum}`;
+        return `S${sNum}`;
+    };
+
+    const addSectionByType = (type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT') => {
+        const typeLabel = type === 'ANIMAL' ? 'Animal' : type === 'SPAWNING' ? 'Spawning' : type === 'NAUPLII' ? 'Nauplii' : 'Section';
+        
+        // Find the max number currently used for this type to avoid duplicates
+        const existingNumbers = sections
+            .filter(s => s.type === type)
+            .map(s => {
+                const match = s.name.match(/\d+/);
+                return match ? parseInt(match[0]) : 0;
+            });
+        const nextNum = Math.max(0, ...existingNumbers) + 1;
+        
+        const newSection: SectionConfig = {
+            name: `${typeLabel} Section ${nextNum}`,
+            type: type,
+            tanks: []
+        };
+        setSections(prev => [...prev, newSection]);
+        toast.success(`Added ${typeLabel} Section ${nextNum}`);
+    };
+
     const addSection = () => {
         setSections(prev => [
             ...prev,
-            { name: `New Section ${prev.length + 1}`, tanks: [] }
+            { name: `New Section ${prev.length + 1}`, type: 'LRT', tanks: [] }
         ]);
     };
 
@@ -194,11 +229,26 @@ const EditFarm = () => {
         setSections(prev => prev.filter((_, idx) => idx !== sIdx));
     };
 
-    const addTank = (sIdx: number) => {
+    const addTank = (sIdx: number, gender?: 'MALE' | 'FEMALE') => {
         setSections(prev => {
             const newSections = [...prev];
+            const currentSection = newSections[sIdx];
+            const currentTanks = currentSection.tanks;
+            
+            const prefix = getTankPrefix(currentSection, sIdx);
+            
+            let tankName = '';
+            if (currentSection.type === 'ANIMAL' && gender) {
+                const genderCode = gender === 'MALE' ? 'MT' : 'FT';
+                const genderTanks = currentTanks.filter(t => t.gender === gender);
+                tankName = `${prefix}_${genderCode}${genderTanks.length + 1}`;
+            } else {
+                tankName = `${prefix}_T${currentTanks.length + 1}`;
+            }
+
             newSections[sIdx].tanks.push({
-                name: `S${sIdx + 1}_T${newSections[sIdx].tanks.length + 1}`,
+                name: tankName,
+                gender: gender,
                 type: 'FRP',
                 shape: 'RECTANGLE',
                 length: 0,
@@ -226,15 +276,23 @@ const EditFarm = () => {
     const duplicateTank = (sIdx: number, tIdx: number, count: number) => {
         setSections(prev => {
             const newSections = [...prev];
-            const currentTanks = newSections[sIdx].tanks;
+            const currentSection = newSections[sIdx];
+            const currentTanks = currentSection.tanks;
             const tankToCopy = currentTanks[tIdx];
-            
-            const newTanks = Array.from({ length: count }).map((_, i) => ({
-                ...tankToCopy,
-                id: undefined, // Ensure duplicated tanks are created as new entities in DB
-                name: `S${sIdx + 1}_T${currentTanks.length + i + 1}`
-            }));
-            
+            const prefix = getTankPrefix(currentSection, sIdx);
+
+            const newTanks = Array.from({ length: count }).map((_, i) => {
+                let newName = '';
+                if (tankToCopy.gender) {
+                    const genderCode = tankToCopy.gender === 'MALE' ? 'MT' : 'FT';
+                    const existingGenderCount = currentTanks.filter(t => t.gender === tankToCopy.gender).length;
+                    newName = `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
+                } else {
+                    newName = `${prefix}_T${currentTanks.length + i + 1}`;
+                }
+                return { ...tankToCopy, id: undefined, name: newName };
+            });
+
             newSections[sIdx].tanks = [...currentTanks, ...newTanks];
             return newSections;
         });
@@ -248,6 +306,119 @@ const EditFarm = () => {
             prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
         );
     };
+
+    const renderTankCard = (tank: TankConfig, sIdx: number, tIdx: number) => (
+        <Card key={tank.id || `tank-${sIdx}-${tIdx}`} className="rounded-2xl border-none shadow-md overflow-hidden bg-card/50">
+            <CardContent className="p-4 space-y-3">
+                <div className="flex justify-between items-center mb-1">
+                    <div className="flex items-center gap-2 w-1/2">
+                        <div className={`w-2 h-2 rounded-full ${tank.gender === 'MALE' ? 'bg-blue-500' : tank.gender === 'FEMALE' ? 'bg-pink-500' : 'bg-muted'}`} />
+                        <Input
+                            className="font-bold border-none bg-transparent p-0 text-md focus-visible:ring-0"
+                            value={tank.name}
+                            onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
+                        />
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
+                        <Button variant="ghost" size="icon" onClick={() => removeTank(sIdx, tIdx)} className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-50">
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Type</Label>
+                        <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
+                            <SelectTrigger className="h-9 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="FRP">FRP</SelectItem>
+                                <SelectItem value="CONCRETE">Concrete</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Shape</Label>
+                        <Select value={tank.shape} onValueChange={(val: any) => updateTank(sIdx, tIdx, { shape: val })}>
+                            <SelectTrigger className="h-9 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="CIRCLE">Circular</SelectItem>
+                                <SelectItem value="RECTANGLE">Rectangular</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
+                        <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            className="h-9 text-xs"
+                            value={tank.height || ''}
+                            onChange={(e) => updateTank(sIdx, tIdx, { height: Number(e.target.value) })}
+                        />
+                    </div>
+                    {tank.shape === 'CIRCLE' ? (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Radius (m)</Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                className="h-9 text-xs"
+                                value={tank.radius || ''}
+                                onChange={(e) => updateTank(sIdx, tIdx, { radius: Number(e.target.value) })}
+                            />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] uppercase text-muted-foreground font-bold">Length (m)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    className="h-9 text-xs"
+                                    value={tank.length || ''}
+                                    onChange={(e) => updateTank(sIdx, tIdx, { length: Number(e.target.value) })}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] uppercase text-muted-foreground font-bold">Width (m)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    className="h-9 text-xs"
+                                    value={tank.width || ''}
+                                    onChange={(e) => updateTank(sIdx, tIdx, { width: Number(e.target.value) })}
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className={`pt-1 grid ${tank.shape === 'CIRCLE' ? 'grid-cols-2' : 'grid-cols-3'} gap-3 border-t border-dashed mt-1`}>
+                    <div>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase">Volume</p>
+                        <p className="font-bold text-primary text-sm">{tank.volume.toLocaleString()} L</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase">Area</p>
+                        <p className="font-bold text-primary text-sm">{tank.area.toLocaleString()} m²</p>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
 
     const handleSubmit = async () => {
         if (!user?.hatchery_id || !farmId) return;
@@ -326,7 +497,7 @@ const EditFarm = () => {
                     // Create new section
                     const { data: newSec, error: secErr } = await supabase
                         .from('sections')
-                        .insert([{ farm_id: farmId, name: section.name }])
+                        .insert([{ farm_id: farmId, name: section.name, section_type: (section.type === 'LRT') ? null : section.type }])
                         .select().single();
                     if (secErr) throw secErr;
                     currentSectionId = newSec.id;
@@ -334,7 +505,7 @@ const EditFarm = () => {
                     // Update existing section
                     const { error: secErr } = await supabase
                         .from('sections')
-                        .update({ name: section.name })
+                        .update({ name: section.name, section_type: (section.type === 'LRT') ? null : section.type })
                         .eq('id', currentSectionId);
                     if (secErr) throw secErr;
                 }
@@ -345,6 +516,7 @@ const EditFarm = () => {
                         farm_id: farmId,
                         section_id: currentSectionId,
                         name: tank.name,
+                        gender: tank.gender || null,
                         type: tank.type,
                         shape: tank.shape,
                         length: tank.shape === 'RECTANGLE' ? tank.length : null,
@@ -436,7 +608,7 @@ const EditFarm = () => {
                                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                                         <Layers className="w-4 h-4" />
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-3">
                                         <Input
                                             className="h-9 font-bold bg-transparent border-none text-lg p-0 focus-visible:ring-0 w-auto"
                                             value={section.name}
@@ -447,19 +619,37 @@ const EditFarm = () => {
                                                 setSections(newSections);
                                             }}
                                         />
-                                        {isCollapsed && (
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                                                    {section.tanks.length} TANKS
-                                                </span>
-                                                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                                    <Utensils className="w-3 h-3" /> {totalVolume.toLocaleString()} L
-                                                </span>
-                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                                    <Waves className="w-3 h-3" /> {totalArea.toLocaleString()} m²
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                            {section.type === 'ANIMAL' ? (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => addTank(sIdx, 'MALE')}
+                                                        className="h-8 px-2 border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] rounded-lg transition-all"
+                                                    >
+                                                        <Plus className="w-3 h-3 mr-1" /> MALE
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => addTank(sIdx, 'FEMALE')}
+                                                        className="h-8 px-2 border border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-[10px] rounded-lg transition-all"
+                                                    >
+                                                        <Plus className="w-3 h-3 mr-1" /> FEMALE
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => addTank(sIdx)}
+                                                    className="h-8 px-2 border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 font-bold text-[10px] rounded-lg transition-all"
+                                                >
+                                                    <Plus className="w-3 h-3 mr-1" /> TANK
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -476,118 +666,54 @@ const EditFarm = () => {
 
                             {!isCollapsed && (
                                 <div className="grid gap-4 animate-in slide-in-from-top-2 duration-300">
-                                    {section.tanks.map((tank, tIdx) => (
-                                        <Card key={tank.id || `new-tank-${tIdx}`} className="rounded-2xl border-none shadow-md overflow-hidden bg-card/50">
-                                        <CardContent className="p-4 space-y-3">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <Input
-                                                    className="font-bold border-none bg-transparent p-0 text-md focus-visible:ring-0 w-1/2"
-                                                    value={tank.name}
-                                                    onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
-                                                />
-                                                <div className="flex items-center gap-1">
-                                                    <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
-                                                    <Button variant="ghost" size="icon" onClick={() => removeTank(sIdx, tIdx)} className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-50">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
+                                    {section.type === 'ANIMAL' ? (
+                                        <div className="space-y-6">
+                                            {/* Male Subsection */}
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-2 px-1">
+                                                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-600">Male Tanks</h3>
+                                                    <div className="h-[1px] flex-1 bg-gradient-to-r from-blue-100 to-transparent" />
+                                                </div>
+                                                <div className="grid gap-4">
+                                                    {section.tanks.filter(t => t.gender === 'MALE').map((tank) => {
+                                                        const tIdx = section.tanks.findIndex(t => t === tank);
+                                                        return renderTankCard(tank, sIdx, tIdx);
+                                                    })}
+                                                    {section.tanks.filter(t => t.gender === 'MALE').length === 0 && (
+                                                        <p className="text-[10px] text-muted-foreground italic px-3 py-4 bg-muted/5 rounded-xl border border-dashed text-center">No male tanks added.</p>
+                                                    )}
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Type</Label>
-                                                    <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
-                                                        <SelectTrigger className="h-9 text-xs">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="FRP">FRP</SelectItem>
-                                                            <SelectItem value="CONCRETE">Concrete</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
+                                            {/* Female Subsection */}
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-2 px-1">
+                                                    <span className="w-2 h-2 rounded-full bg-pink-500" />
+                                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-pink-600">Female Tanks</h3>
+                                                    <div className="h-[1px] flex-1 bg-gradient-to-r from-pink-100 to-transparent" />
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Shape</Label>
-                                                    <Select value={tank.shape} onValueChange={(val: any) => updateTank(sIdx, tIdx, { shape: val })}>
-                                                        <SelectTrigger className="h-9 text-xs">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="CIRCLE">Circular</SelectItem>
-                                                            <SelectItem value="RECTANGLE">Rectangular</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
+                                                <div className="grid gap-4">
+                                                    {section.tanks.filter(t => t.gender === 'FEMALE').map((tank) => {
+                                                        const tIdx = section.tanks.findIndex(t => t === tank);
+                                                        return renderTankCard(tank, sIdx, tIdx);
+                                                    })}
+                                                    {section.tanks.filter(t => t.gender === 'FEMALE').length === 0 && (
+                                                        <p className="text-[10px] text-muted-foreground italic px-3 py-4 bg-muted/5 rounded-xl border border-dashed text-center">No female tanks added.</p>
+                                                    )}
                                                 </div>
                                             </div>
-
-                                            <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.1"
-                                                        className="h-9 text-xs"
-                                                        value={tank.height || ''}
-                                                        onChange={(e) => updateTank(sIdx, tIdx, { height: Number(e.target.value) })}
-                                                    />
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-4">
+                                            {section.tanks.map((tank, tIdx) => renderTankCard(tank, sIdx, tIdx))}
+                                            {section.tanks.length === 0 && (
+                                                <div className="py-8 bg-muted/20 border border-dashed rounded-2xl text-center">
+                                                    <p className="text-xs text-muted-foreground font-medium italic">No tanks added to this section yet.</p>
                                                 </div>
-                                                {tank.shape === 'CIRCLE' ? (
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Radius (m)</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.1"
-                                                            className="h-9 text-xs"
-                                                            value={tank.radius || ''}
-                                                            onChange={(e) => updateTank(sIdx, tIdx, { radius: Number(e.target.value) })}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Length (m)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.1"
-                                                                className="h-9 text-xs"
-                                                                value={tank.length || ''}
-                                                                onChange={(e) => updateTank(sIdx, tIdx, { length: Number(e.target.value) })}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Width (m)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.1"
-                                                                className="h-9 text-xs"
-                                                                value={tank.width || ''}
-                                                                onChange={(e) => updateTank(sIdx, tIdx, { width: Number(e.target.value) })}
-                                                            />
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-
-                                            <div className={`pt-1 grid ${tank.shape === 'CIRCLE' ? 'grid-cols-2' : 'grid-cols-3'} gap-3 border-t border-dashed mt-1`}>
-                                                <div>
-                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase">Volume</p>
-                                                    <p className="font-bold text-primary text-sm">{tank.volume.toLocaleString()} L</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase">Area</p>
-                                                    <p className="font-bold text-primary text-sm">{tank.area.toLocaleString()} m²</p>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                                    <Button variant="outline" onClick={() => addTank(sIdx)} className="border-dashed h-12 rounded-xl border-2 hover:bg-muted/50 w-full mb-2">
-                                        <Plus className="w-4 h-4 mr-2" /> Add Tank to {section.name}
-                                    </Button>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Section Capacity Summary Footer */}
                                     <div className="mt-2 bg-muted/20 rounded-xl p-3 border border-dashed border-muted flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -603,9 +729,40 @@ const EditFarm = () => {
                     );
                     })}
 
-                    <Button onClick={addSection} className="w-full h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
-                        <Plus className="w-5 h-5 mr-2" /> Add New Section
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                        {farmCategory === 'MATURATION' ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => addSectionByType('ANIMAL')}
+                                    className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                >
+                                    <Plus className="w-5 h-5 text-primary/40" />
+                                    <span className="font-bold text-[10px] uppercase tracking-wider">Add Animal Section</span>
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => addSectionByType('SPAWNING')}
+                                    className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                >
+                                    <Plus className="w-5 h-5 text-primary/40" />
+                                    <span className="font-bold text-[10px] uppercase tracking-wider">Add Spawning Section</span>
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => addSectionByType('NAUPLII')}
+                                    className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                >
+                                    <Plus className="w-5 h-5 text-primary/40" />
+                                    <span className="font-bold text-[10px] uppercase tracking-wider">Add Nauplii Section</span>
+                                </Button>
+                            </>
+                        ) : (
+                            <Button onClick={addSection} className="w-full h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
+                                <Plus className="w-5 h-5 mr-2" /> Add New Section
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="h-10" />

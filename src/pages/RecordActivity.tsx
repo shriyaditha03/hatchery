@@ -74,8 +74,12 @@ const RecordActivity = () => {
     setActiveFarmId,
     setActiveSectionId, 
     activeModule, 
-    setActiveModule 
+    setActiveModule,
+    logout,
+    fetchUserAccess 
   } = useAuth();
+
+  const hatcheryId = user?.hatchery_id;
   const [searchParams] = useSearchParams();
   const { type } = useParams();
   const editId = searchParams.get('edit');
@@ -196,8 +200,8 @@ const RecordActivity = () => {
     returnDestinations: []
   });
   const [eggCountData, setEggCountData] = useState<any>({
-    entries: [{ id: '1', tankId: '', tankName: '', spawnedCount: '', totalEggsMillions: '', fertilizationPercent: '' }],
-    summary: { totalEggs: 0, avgFertilization: 0, totalFertilized: 0, fertilizedPerAnimal: 0 }
+    entries: [],
+    summary: { totalEggs: 0, totalFertilized: 0, avgFertilization: 0, eggsPerAnimal: 0 }
   });
   const [naupliiHarvestData, setNaupliiHarvestData] = useState<any>({
     sources: [{ id: '1', tankId: '', tankName: '', population: '' }],
@@ -231,14 +235,14 @@ const RecordActivity = () => {
         const allowedTypes = getMaturationSectionFilter(activity);
         if (!allowedTypes) return availableTanks;
         return availableTanks.filter(s =>
-          s.farm_category !== 'MATURATION' || !s.section_type || allowedTypes.includes(s.section_type)
+          s.farm_category !== 'MATURATION' || (s.section_type && allowedTypes.includes(s.section_type))
         );
       })()
     : availableTanks;
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
-  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale';
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning';
 
   // Live Time Update Effect
   useEffect(() => {
@@ -696,6 +700,12 @@ const RecordActivity = () => {
           setSourcingMatingData(data.data);
         } else if (actType === 'Spawning') {
           setSpawningData(data.data);
+        } else if (actType === 'Egg Count') {
+          setEggCountData(data.data);
+        } else if (actType === 'Nauplii Harvest') {
+          setNaupliiHarvestData(data.data);
+        } else if (actType === 'Nauplii Sale') {
+          setNaupliiSaleData(data.data);
         }
       }
     } catch (err) {
@@ -2587,6 +2597,15 @@ const RecordActivity = () => {
             activeFarmCategory={activeFarmCategory}
             selectionScope={selectionScope}
             selectedTanks={(() => {
+              // For Maturation Stocking, always show ALL tanks from ALL animal sections for THE SELECTED FARM
+              if (activeFarmCategory === 'MATURATION' && activity === 'Stocking') {
+                const currentFarmId = selectedFarmId || activeFarmId;
+                const animalSections = availableTanks.filter(s => 
+                  s.section_type === 'ANIMAL' && 
+                  s.farm_id === currentFarmId
+                );
+                return animalSections.flatMap(s => s.tanks || []);
+              }
               if (selectionScope === 'all') {
                 const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
                 return activeSectionData?.tanks.filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id)) || [];
@@ -2615,6 +2634,7 @@ const RecordActivity = () => {
             activeTankId={tankId}
             tankPopulations={tankPopulations}
             isPlanningMode={isPlanningMode}
+            farmId={selectedFarmId || activeFarmId}
           />
         )}
 
@@ -2695,7 +2715,9 @@ const RecordActivity = () => {
             onPhotoUrlChange={setPhotoUrl}
             availableTanks={availableTanks}
             activeSectionId={selectedSectionId || activeSectionId}
+            tankPopulations={tankPopulations}
             isPlanningMode={isPlanningMode}
+            farmId={selectedFarmId || activeFarmId}
           />
         )}
 
@@ -2709,6 +2731,8 @@ const RecordActivity = () => {
             onPhotoUrlChange={setPhotoUrl}
             availableTanks={availableTanks}
             activeSectionId={selectedSectionId || activeSectionId}
+            farmId={selectedFarmId || activeFarmId}
+            hatcheryId={hatcheryId}
           />
         )}
 
@@ -2722,6 +2746,7 @@ const RecordActivity = () => {
             onPhotoUrlChange={setPhotoUrl}
             availableTanks={availableTanks}
             activeSectionId={selectedSectionId || activeSectionId}
+            farmId={selectedFarmId || activeFarmId || ''}
           />
         )}
 
@@ -2735,6 +2760,7 @@ const RecordActivity = () => {
             onPhotoUrlChange={setPhotoUrl}
             availableTanks={availableTanks}
             isPlanningMode={isPlanningMode}
+            farmId={selectedFarmId || activeFarmId || ''}
           />
         )}
 

@@ -4,16 +4,26 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowUpRight, Calculator, CheckCircle2, AlertCircle, Camera, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, ArrowUpRight, Calculator, CheckCircle2, AlertCircle, Camera, ClipboardList, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
+import { supabase } from '@/lib/supabase';
 
 interface HarvestEntry {
   id: string;
   tankId: string;
   tankName: string;
   population: string;
+}
+
+interface HarvestGroup {
+  id: string;
+  sourceTankId: string;
+  sourceTankName: string;
+  eggCountMillions?: number;
+  harvestedPopulation: string;
+  destinations: HarvestEntry[];
 }
 
 interface NaupliiHarvestFormProps {
@@ -25,6 +35,7 @@ interface NaupliiHarvestFormProps {
   onPhotoUrlChange: (val: string) => void;
   availableTanks: any[];
   activeSectionId?: string;
+  farmId?: string;
 }
 
 const NaupliiHarvestForm = ({
@@ -36,252 +47,472 @@ const NaupliiHarvestForm = ({
   onPhotoUrlChange,
   availableTanks,
   activeSectionId,
+  farmId,
 }: NaupliiHarvestFormProps) => {
-  const [sources, setSources] = useState<HarvestEntry[]>(data.sources || [
-    { id: '1', tankId: '', tankName: '', population: '' }
-  ]);
-  const [destinations, setDestinations] = useState<HarvestEntry[]>(data.destinations || [
-    { id: '1', tankId: '', tankName: '', population: '' }
-  ]);
+  // Use grouped state internally if possible, or derive from flat arrays on mount
+  const [groups, setGroups] = useState<HarvestGroup[]>(() => {
+    if (data.harvestGroups) return data.harvestGroups;
+    
+    // Fallback: derive from flat sources/destinations if they exist (for backwards compatibility/editing)
+    if (data.sources && data.sources.length > 0) {
+      return data.sources.map((s: any) => ({
+        id: s.id,
+        sourceTankId: s.tankId,
+        sourceTankName: s.tankName,
+        harvestedPopulation: s.population,
+        destinations: data.destinations.filter((d: any) => d.sourceId === s.id)
+      }));
+    }
+    return [];
+  });
 
-  const updateData = (updates: any) => {
-    onDataChange({ ...data, ...updates });
-  };
+  const [loading, setLoading] = useState(false);
 
-  // Perform Balancing Calculations
-  useEffect(() => {
-    const totalHarvested = sources.reduce((sum, s) => sum + (parseFloat(s.population) || 0), 0);
+  const updateData = (updatedGroups: HarvestGroup[]) => {
+    // Map back to flat arrays for RecordActivity compatibility
+    const sources = updatedGroups.map(g => ({
+      id: g.id,
+      tankId: g.sourceTankId,
+      tankName: g.sourceTankName,
+      population: g.harvestedPopulation
+    }));
+
+    const destinations = updatedGroups.flatMap(g => 
+      g.destinations.map(d => ({ ...d, sourceId: g.id }))
+    );
+
+    const totalHarvested = updatedGroups.reduce((sum, g) => sum + (parseFloat(g.harvestedPopulation) || 0), 0);
     const totalDistributed = destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
-    const balance = totalHarvested - totalDistributed;
-
+    
     const summary = {
       totalHarvested: Math.round(totalHarvested * 100) / 100,
       totalDistributed: Math.round(totalDistributed * 100) / 100,
-      balance: Math.round(balance * 100) / 100
+      balance: Math.round((totalHarvested - totalDistributed) * 100) / 100
     };
 
-    updateData({ sources, destinations, summary });
-  }, [sources, destinations]);
-
-  const addSource = () => {
-    setSources([...sources, { id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]);
+    onDataChange({
+      ...data,
+      harvestGroups: updatedGroups,
+      sources,
+      destinations,
+      summary
+    });
   };
 
-  const removeSource = (id: string) => {
-    if (sources.length > 1) setSources(sources.filter(s => s.id !== id));
-  };
+  // Sync from Egg Count
+  const fetchEggCountData = async (forceSync = false) => {
+    if (!farmId) return;
+    if (groups.length > 0 && !forceSync) return;
 
-  const updateSource = (id: string, updates: Partial<HarvestEntry>) => {
-    setSources(sources.map(s => {
-      if (s.id === id) {
-        if (updates.tankId) {
-          let foundName = '';
-          availableTanks.forEach(sec => {
-            const t = sec.tanks.find((t:any) => t.id === updates.tankId);
-            if (t) foundName = `${sec.name} - ${t.name}`;
-          });
-          return { ...s, ...updates, tankName: foundName };
+    setLoading(true);
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: logs, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('farm_id', farmId)
+        .eq('activity_type', 'Egg Count')
+        .gte('created_at', twentyFourHoursAgo)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (logs && logs.length > 0) {
+        // Flatten entries from all relevant logs
+        const allEntries: any[] = [];
+        const seenTanks = new Set();
+
+        logs.forEach(log => {
+          if (log.data?.entries) {
+            log.data.entries.forEach((entry: any) => {
+              if (entry.tankId && !seenTanks.has(entry.tankId)) {
+                allEntries.push(entry);
+                seenTanks.add(entry.tankId);
+              }
+            });
+          }
+        });
+
+        const initialGroups: HarvestGroup[] = allEntries.map(entry => {
+          const eggsVal = entry.totalEggsMillions || '0';
+          return {
+            id: Math.random().toString(36).substr(2, 9),
+            sourceTankId: entry.tankId,
+            sourceTankName: entry.tankName,
+            eggCountMillions: parseFloat(eggsVal) || 0,
+            harvestedPopulation: eggsVal, // Auto-populate with Egg Count as default
+            destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: eggsVal }]
+          };
+        });
+
+        if (initialGroups.length > 0) {
+          setGroups(initialGroups);
+          updateData(initialGroups);
         }
-        return { ...s, ...updates };
       }
-      return s;
-    }));
+    } catch (err) {
+      console.error('Error fetching egg count data:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addDestination = () => {
-    setDestinations([...destinations, { id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]);
+  useEffect(() => {
+    fetchEggCountData();
+  }, [farmId]);
+
+  const addGroup = () => {
+    const newGroup: HarvestGroup = {
+      id: Math.random().toString(36).substr(2, 9),
+      sourceTankId: '',
+      sourceTankName: '',
+      harvestedPopulation: '',
+      destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]
+    };
+    const newGroups = [...groups, newGroup];
+    setGroups(newGroups);
+    updateData(newGroups);
   };
 
-  const removeDestination = (id: string) => {
-    if (destinations.length > 1) setDestinations(destinations.filter(d => d.id !== id));
+  const removeGroup = (id: string) => {
+    const newGroups = groups.filter(g => g.id !== id);
+    setGroups(newGroups);
+    updateData(newGroups);
   };
 
-  const updateDestination = (id: string, updates: Partial<HarvestEntry>) => {
-    setDestinations(destinations.map(d => {
-      if (d.id === id) {
-        if (updates.tankId) {
+  const updateGroup = (id: string, updates: Partial<HarvestGroup>) => {
+    const newGroups = groups.map(g => {
+      if (g.id === id) {
+        if (updates.sourceTankId) {
           let foundName = '';
-          availableTanks.forEach(sec => {
-            const t = sec.tanks.find((t:any) => t.id === updates.tankId);
-            if (t) foundName = `${sec.name} - ${t.name}`;
-          });
-          return { ...d, ...updates, tankName: foundName };
+          availableTanks
+            .filter(sec => !farmId || sec.farm_id === farmId)
+            .forEach(sec => {
+              const t = sec.tanks.find((t:any) => t.id === updates.sourceTankId);
+              if (t) foundName = `${sec.name} - ${t.name}`;
+            });
+          return { ...g, ...updates, sourceTankName: foundName };
         }
-        return { ...d, ...updates };
+        return { ...g, ...updates };
       }
-      return d;
-    }));
+      return g;
+    });
+    setGroups(newGroups);
+    updateData(newGroups);
   };
 
-  const isBalanced = Math.abs(data.summary?.balance || 0) < 0.001 && (data.summary?.totalHarvested || 0) > 0;
+  const addDestination = (groupId: string) => {
+    const newGroups = groups.map(g => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          destinations: [...g.destinations, { id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]
+        };
+      }
+      return g;
+    });
+    setGroups(newGroups);
+    updateData(newGroups);
+  };
+
+  const updateDestination = (groupId: string, destId: string, updates: Partial<HarvestEntry>) => {
+    const newGroups = groups.map(g => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          destinations: g.destinations.map(d => {
+            if (d.id === destId) {
+              if (updates.tankId) {
+                let foundName = '';
+                availableTanks
+                  .filter(sec => !farmId || sec.farm_id === farmId)
+                  .forEach(sec => {
+                    const t = sec.tanks.find((t:any) => t.id === updates.tankId);
+                    if (t) foundName = `${sec.name} - ${t.name}`;
+                  });
+                return { ...d, ...updates, tankName: foundName };
+              }
+              return { ...d, ...updates };
+            }
+            return d;
+          })
+        };
+      }
+      return g;
+    });
+    setGroups(newGroups);
+    updateData(newGroups);
+  };
+
+  const removeDestination = (groupId: string, destId: string) => {
+    const newGroups = groups.map(g => {
+      if (g.id === groupId && g.destinations.length > 1) {
+        return { ...g, destinations: g.destinations.filter(d => d.id !== destId) };
+      }
+      return g;
+    });
+    setGroups(newGroups);
+    updateData(newGroups);
+  };
+
+  const isGroupBalanced = (group: HarvestGroup) => {
+    const harvested = parseFloat(group.harvestedPopulation) || 0;
+    const distributed = group.destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
+    return Math.abs(harvested - distributed) < 0.001;
+  };
+
+  const getGroupBalance = (group: HarvestGroup) => {
+    const harvested = parseFloat(group.harvestedPopulation) || 0;
+    const distributed = group.destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
+    return harvested - distributed;
+  };
+
+  const totalHarvested = data.summary?.totalHarvested || 0;
+  const isBalanced = Math.abs(data.summary?.balance || 0) < 0.001 && totalHarvested > 0;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
-        {/* Summary Section */}
-        <div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="p-4 bg-white border-emerald-100 flex flex-col justify-center shadow-sm">
-              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Total Harvested</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-emerald-900">{(data.summary?.totalHarvested || 0).toLocaleString()}</span>
-                <span className="text-xs font-bold text-emerald-600/60 uppercase">mil</span>
+        
+        {/* Consolidated Summary */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
+            <Card className="p-4 bg-emerald-50 border-emerald-100 flex flex-col justify-center shadow-sm relative overflow-hidden h-24">
+              <div className="absolute top-0 right-0 p-3 opacity-10">
+                <Calculator className="w-12 h-12 text-emerald-600" />
+              </div>
+              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Total Nauplii Harvested</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-emerald-950">{totalHarvested.toLocaleString()}</span>
+                <span className="text-sm font-bold text-emerald-600/60 uppercase">Millions</span>
               </div>
             </Card>
-
-            <Card className="p-4 bg-white border-blue-100 flex flex-col justify-center shadow-sm">
-              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Total Distributed</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-blue-900">{(data.summary?.totalDistributed || 0).toLocaleString()}</span>
-                <span className="text-xs font-bold text-blue-600/60 uppercase">mil</span>
-              </div>
-            </Card>
-
-            <Card className={cn(
-              "p-4 flex flex-col justify-center border transition-colors shadow-sm",
-              isBalanced ? "bg-white border-green-200" : (data.summary?.balance !== 0 ? "bg-white border-rose-200" : "bg-white border-muted-foreground/10")
+          </div>
+          
+          {totalHarvested > 0 && (
+            <div className={cn(
+              "p-4 rounded-2xl border flex flex-col items-center justify-center min-w-[140px] h-24 transition-all animate-in zoom-in-95",
+              isBalanced ? "bg-blue-50 border-blue-100" : "bg-rose-50 border-rose-100"
             )}>
               <p className={cn(
-                "text-[10px] font-bold uppercase tracking-widest mb-1",
-                isBalanced ? "text-green-600" : (data.summary?.balance !== 0 ? "text-rose-600" : "text-muted-foreground")
+                "text-[10px] font-black uppercase tracking-widest mb-1",
+                isBalanced ? "text-blue-700" : "text-rose-700"
               )}>
-                {isBalanced ? "Balanced" : "Balance"}
+                {isBalanced ? "Fully Distributed" : "Total Balance"}
               </p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-baseline gap-1">
-                  <span className={cn(
-                    "text-2xl font-black",
-                    isBalanced ? "text-green-900" : (data.summary?.balance !== 0 ? "text-rose-900" : "text-foreground/50")
-                  )}>
-                    {(data.summary?.balance || 0).toLocaleString()}
-                  </span>
-                  <span className="text-xs font-bold opacity-60">mil</span>
-                </div>
-                {isBalanced ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                ) : (
-                  data.summary?.balance !== 0 && <AlertCircle className="w-5 h-5 text-rose-500" />
-                )}
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-2xl font-black",
+                  isBalanced ? "text-blue-900" : "text-rose-900"
+                )}>
+                  {Math.abs(data.summary?.balance || 0).toLocaleString()}
+                </span>
+                {isBalanced ? <CheckCircle2 className="w-5 h-5 text-blue-500" /> : <AlertCircle className="w-5 h-5 text-rose-500" />}
               </div>
-            </Card>
-          </div>
+              {!isBalanced && (
+                 <p className="text-[8px] font-bold text-rose-600/60 uppercase mt-1">Pending Sync</p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Source Section */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-emerald-100 rounded-xl">
-                <Plus className="w-4 h-4 text-emerald-600" />
+              <div className="p-2 bg-primary/10 rounded-xl text-primary">
+                <ClipboardList className="w-4 h-4" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">1. Select Spawning Tank</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Harvest Groups</h3>
             </div>
-            <Button variant="ghost" size="sm" onClick={addSource} className="text-emerald-600 hover:bg-emerald-50 h-8 font-bold text-[10px] uppercase">
-              <Plus className="w-3 h-3 mr-1" /> Add Tanks
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            {sources.map((source) => (
-              <Card key={source.id} className="p-3 bg-muted/20 border-none rounded-2xl group transition-all hover:bg-muted/30 relative">
-                {sources.length > 1 && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => removeSource(source.id)}
-                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-rose-100 text-rose-600 opacity-0 group-hover:opacity-100 transition-all z-10"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Spawning Tank</Label>
-                    <Select value={source.tankId} onValueChange={val => updateSource(source.id, { tankId: val })}>
-                      <SelectTrigger className="h-9 rounded-xl border-emerald-100 bg-background/50 text-xs font-semibold">
-                        <SelectValue placeholder="Select Tank" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTanks.flatMap(s => s.tanks.map((t:any) => (
-                          <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
-                        )))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Population (mil) *</Label>
-                    <Input 
-                      type="number" 
-                      value={source.population} 
-                      onChange={e => updateSource(source.id, { population: e.target.value })} 
-                      className="h-9 rounded-xl font-bold bg-background/50 border-muted-foreground/10 text-xs text-emerald-600" 
-                      placeholder="0.0"
-                    />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Destination Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-blue-100 rounded-xl">
-                <ArrowUpRight className="w-4 h-4 text-blue-600" />
-              </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">2. Shifted To Nauplii Tank</h3>
+               <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => fetchEggCountData(true)} 
+                className="rounded-xl h-9 font-bold text-[10px] uppercase gap-1.5 text-primary hover:bg-primary/5"
+                disabled={loading}
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                Sync Eggs
+              </Button>
+              <Button variant="outline" size="sm" onClick={addGroup} className="rounded-xl border-dashed h-9 font-bold text-[10px] uppercase gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Add Manual Group
+              </Button>
             </div>
-            <Button variant="ghost" size="sm" onClick={addDestination} className="text-blue-600 hover:bg-blue-50 h-8 font-bold text-[10px] uppercase">
-              <Plus className="w-3 h-3 mr-1" /> Add Tanks
-            </Button>
           </div>
 
-          <div className="space-y-3">
-            {destinations.map((dest) => (
-              <Card key={dest.id} className="p-3 bg-muted/20 border-none rounded-2xl group transition-all hover:bg-muted/30 relative">
-                {destinations.length > 1 && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => removeDestination(dest.id)}
-                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-rose-100 text-rose-600 opacity-0 group-hover:opacity-100 transition-all z-10"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Nauplii Tank</Label>
-                    <Select value={dest.tankId} onValueChange={val => updateDestination(dest.id, { tankId: val })}>
-                      <SelectTrigger className="h-9 rounded-xl border-blue-100 bg-background/50 text-xs font-semibold">
-                        <SelectValue placeholder="Select Tank" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTanks.flatMap(s => s.tanks.map((t:any) => (
-                          <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
-                        )))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Population (mil) *</Label>
-                    <Input 
-                      type="number" 
-                      value={dest.population} 
-                      onChange={e => updateDestination(dest.id, { population: e.target.value })} 
-                      className="h-9 rounded-xl font-bold bg-background/50 border-muted-foreground/10 text-xs text-blue-600" 
-                      placeholder="0.0"
-                    />
-                  </div>
+          {loading && groups.length === 0 ? (
+             <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-50">Checking for egg count records...</p>
+             </div>
+          ) : groups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-4">
+                <div className="p-3 bg-muted/10 rounded-full">
+                   <AlertCircle className="w-5 h-5 opacity-40" />
                 </div>
-              </Card>
-            ))}
-          </div>
+                <div className="text-center">
+                   <p className="text-xs font-bold uppercase tracking-wider">No Egg Records Found</p>
+                   <p className="text-[10px] opacity-60 mt-1">Please record an Egg Count first or add a group manually.</p>
+                </div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {groups.map((group) => {
+                const balance = getGroupBalance(group);
+                const isOver = balance < -0.001;
+                
+                return (
+                  <Card key={group.id} className="p-0 bg-muted/5 border shadow-sm rounded-[2.5rem] overflow-hidden relative group/item">
+                    {/* Group Header: Field 1 & 2 */}
+                    <div className="p-6 bg-white border-b">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                        {/* Field 1: Source */}
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center gap-3">
+                             <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none">Spawning Tank Source</Label>
+                             {group.eggCountMillions !== undefined && (
+                                <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100">
+                                   Eggs Recorded: {group.eggCountMillions}M
+                                </span>
+                             )}
+                          </div>
+                          {group.sourceTankId && group.sourceTankName ? (
+                             <div className="flex items-center gap-4 pl-9">
+                                <p className="text-2xl font-black text-foreground">{group.sourceTankName}</p>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => removeGroup(group.id)}
+                                  className="h-8 w-8 rounded-full bg-rose-50 text-rose-600 opacity-0 group-hover/item:opacity-100 transition-all border border-rose-100 shadow-sm"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                             </div>
+                          ) : (
+                            <div className="flex items-center gap-2 pl-9">
+                              <Select value={group.sourceTankId} onValueChange={val => updateGroup(group.id, { sourceTankId: val })}>
+                                <SelectTrigger className="h-12 rounded-2xl border-emerald-100 bg-white text-base font-bold w-full sm:w-72 shadow-sm">
+                                  <SelectValue placeholder="Select Spawning Tank" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableTanks
+                                    .filter(s => !farmId || s.farm_id === farmId)
+                                    .flatMap(s => s.tanks.map((t:any) => (
+                                      <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
+                                    )))}
+                                </SelectContent>
+                              </Select>
+                              <Button variant="ghost" size="icon" onClick={() => removeGroup(group.id)} className="text-rose-600 hover:bg-rose-50 rounded-xl">
+                                <Trash2 className="w-5 h-5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Field 2: Output */}
+                        <div className="space-y-3 min-w-[240px]">
+                           <div className="flex items-center gap-3">
+                              <Label className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Nauplii Harvested from this Tank *</Label>
+                           </div>
+                           <div className="relative pl-9">
+                              <Input 
+                                type="number" 
+                                step="0.01"
+                                value={group.harvestedPopulation} 
+                                onChange={e => updateGroup(group.id, { harvestedPopulation: e.target.value })} 
+                                className="h-14 rounded-2xl font-black bg-blue-50/30 border-blue-100 text-xl text-blue-950 focus:border-blue-500 shadow-sm pr-14" 
+                                placeholder="0.0"
+                              />
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
+                                 <span className="text-[10px] font-black text-blue-900">MILL</span>
+                                 <span className="text-[8px] font-bold text-blue-600 uppercase tracking-tighter">Nauplii</span>
+                              </div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Destinations: Distribute to Nauplii Tanks */}
+                    <div className="p-6 space-y-4 bg-muted/5">
+                      <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2">
+                           <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />
+                           <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Distribute to Nauplii Tanks</h4>
+                        </div>
+                        {balance !== 0 && (
+                           <div className={cn(
+                              "text-[9px] font-black px-3 py-1 rounded-full border flex items-center gap-1.5 animate-pulse",
+                              isOver ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-blue-50 border-blue-200 text-blue-700"
+                           )}>
+                              {isOver ? <AlertCircle className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
+                              {isOver ? "Exceeds Harvested!" : `Unallocated: ${balance.toFixed(2)}M`}
+                           </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {group.destinations.map((dest) => (
+                          <Card key={dest.id} className="p-4 bg-white border-muted-foreground/10 rounded-2xl relative group/dest">
+                             <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => removeDestination(group.id, dest.id)}
+                              className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-rose-50 text-rose-600 opacity-0 group-dest:opacity-100 transition-all border border-rose-100 z-10"
+                             >
+                              <Trash2 className="w-2.5 h-2.5" />
+                             </Button>
+                             <div className="space-y-3">
+                                <div className="space-y-1">
+                                   <Label className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Nauplii Tank</Label>
+                                   <Select value={dest.tankId} onValueChange={val => updateDestination(group.id, dest.id, { tankId: val })}>
+                                      <SelectTrigger className="h-9 rounded-xl border-blue-50 bg-blue-50/20 text-xs font-bold">
+                                         <SelectValue placeholder="Select Destination" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                         {availableTanks
+                                          .filter(s => !farmId || s.farm_id === farmId)
+                                          .flatMap(s => s.tanks.map((t:any) => (
+                                            <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
+                                          )))}
+                                      </SelectContent>
+                                   </Select>
+                                </div>
+                                <div className="space-y-1">
+                                   <Label className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Population (mil)</Label>
+                                   <div className="relative">
+                                      <Input 
+                                         type="number" 
+                                         value={dest.population} 
+                                         onChange={e => updateDestination(group.id, dest.id, { population: e.target.value })} 
+                                         className="h-9 rounded-xl font-black bg-muted/20 border-hidden text-sm text-blue-900 pr-10" 
+                                         placeholder="0.0"
+                                      />
+                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-300">M</span>
+                                   </div>
+                                </div>
+                             </div>
+                          </Card>
+                        ))}
+                        
+                        <Button 
+                          variant="outline" 
+                          onClick={() => addDestination(group.id)}
+                          className="h-auto py-4 rounded-2xl border-dashed border-blue-200 bg-blue-50/10 hover:bg-blue-50 text-blue-600 hover:text-blue-700 font-bold text-[10px] uppercase flex flex-col gap-2"
+                        >
+                           <Plus className="w-5 h-5" />
+                           Add Nauplii Tank
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 pt-4 border-t border-dashed">
           <Label className="text-xs">Activity Photo (Optional)</Label>
           <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
         </div>

@@ -20,6 +20,7 @@ interface SourcingMatingFormProps {
   activeTankId?: string;
   tankPopulations?: Record<string, number>;
   isPlanningMode?: boolean;
+  farmId?: string;
 }
 
 const SourcingMatingForm = ({
@@ -34,6 +35,7 @@ const SourcingMatingForm = ({
   activeTankId,
   tankPopulations = {},
   isPlanningMode = false,
+  farmId,
 }: SourcingMatingFormProps) => {
   // Field 1: Source Tanks (Females)
   const [sourceTanks, setSourceTanks] = useState<any[]>(data.sourceTanks || []);
@@ -49,10 +51,10 @@ const SourcingMatingForm = ({
     onDataChange({ ...data, ...updates });
   };
 
-  // 1. Automatically populate Field 1 with all FEMALE tanks from all ANIMAL sections
+  // 1. Automatically populate Field 1 with all FEMALE tanks from all ANIMAL sections for the SELECTED FARM
   useEffect(() => {
     if (availableTanks.length > 0 && sourceTanks.length === 0) {
-      const animalSections = availableTanks.filter(s => s.section_type === 'ANIMAL');
+      const animalSections = availableTanks.filter(s => s.section_type === 'ANIMAL' && (!farmId || s.farm_id === farmId));
       
       const initialSources: any[] = [];
       animalSections.forEach(section => {
@@ -86,7 +88,7 @@ const SourcingMatingForm = ({
         setSourceTanks(updatedSources);
       }
     }
-  }, [availableTanks, tankPopulations]);
+  }, [availableTanks, tankPopulations, farmId]);
 
   const handleSourceChange = (id: string, sourcedCount: string) => {
     const tank = sourceTanks.find(s => s.id === id);
@@ -205,17 +207,19 @@ const SourcingMatingForm = ({
   }, [totalSourcedFromStep1, totalFemalesMatedAcrossTanks, totalBalanceNonMated, totalShifted]);
 
   // Options filtering
-  const matingTanksOptions = availableTanks.flatMap(s => 
-    s.tanks
-      .filter((t: any) => t.gender === 'MALE')
-      .map((t: any) => ({
-        id: t.id,
-        label: `${s.name} - ${t.name}`
-      }))
-  );
+  const matingTanksOptions = availableTanks
+    .filter(s => !farmId || s.farm_id === farmId)
+    .flatMap(s => 
+      s.tanks
+        .filter((t: any) => t.gender === 'MALE')
+        .map((t: any) => ({
+          id: t.id,
+          label: `${s.name} - ${t.name}`
+        }))
+    );
 
   const spawningTanksOptions = availableTanks
-    .filter(s => s.section_type === 'SPAWNING')
+    .filter(s => s.section_type === 'SPAWNING' && (!farmId || s.farm_id === farmId))
     .flatMap(s => s.tanks.map((t: any) => ({
       id: t.id,
       label: `${s.name} - ${t.name}`
