@@ -90,6 +90,7 @@ const RecordActivity = () => {
   const [stockedTankIds, setStockedTankIds] = useState<string[]>([]);
   const [dbFeedTypes, setDbFeedTypes] = useState<string[]>(FEED_TYPES);
   const [dbTreatmentTypes, setDbTreatmentTypes] = useState<string[]>(TREATMENT_TYPES);
+  const [tankPopulations, setTankPopulations] = useState<Record<string, number>>({});
   const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>(sectionParam || '');
 
@@ -207,6 +208,34 @@ const RecordActivity = () => {
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
 
+  // For Maturation farms, filter sections by type based on the selected activity
+  const getMaturationSectionFilter = (act: string): string[] | null => {
+    if (!act) return null; // no filter
+    switch (act) {
+      case 'Stocking':
+      case 'Sourcing & Mating':
+        return ['ANIMAL'];
+      case 'Spawning':
+      case 'Egg Count':
+        return ['SPAWNING'];
+      case 'Nauplii Harvest':
+      case 'Nauplii Sale':
+        return ['NAUPLII'];
+      default:
+        return null; // Feed, Treatment, Water Quality, Observation → all sections
+    }
+  };
+
+  const filteredSections = activeFarmCategory === 'MATURATION'
+    ? (() => {
+        const allowedTypes = getMaturationSectionFilter(activity);
+        if (!allowedTypes) return availableTanks;
+        return availableTanks.filter(s =>
+          s.farm_category !== 'MATURATION' || !s.section_type || allowedTypes.includes(s.section_type)
+        );
+      })()
+    : availableTanks;
+
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
   const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale';
@@ -242,19 +271,19 @@ const RecordActivity = () => {
         return;
       }
 
-      // 1. Fetch ALL Sections for these farms (Broad search)
+      // 1. Fetch ALL Sections for these farms (include section_type for Maturation filtering)
       const { data: sections, error: secError } = await supabase
         .from('sections')
-        .select('id, name, farm_id, farms(name, category)')
+        .select('id, name, farm_id, section_type, farms(name, category)')
         .in('farm_id', farmIds);
       
       if (secError) throw secError;
 
-      // 2. Fetch Tanks for these sections (Simple)
+      // 2. Fetch Tanks for these sections (include gender for Maturation ANIMAL sections)
       const allSecIds = sections.map(s => s.id);
       const { data: tanks, error: tankError } = await supabase
         .from('tanks')
-        .select('id, name, section_id')
+        .select('id, name, section_id, gender')
         .in('section_id', allSecIds);
       if (tankError) throw tankError;
 
@@ -267,7 +296,11 @@ const RecordActivity = () => {
           farm_name: (farmObj as any)?.name || 'Unknown Farm',
           farm_id: sec.farm_id,
           farm_category: (farmObj as any)?.category || 'LRT',
-          tanks: tanks?.filter(t => t.section_id === sec.id) || []
+          section_type: (sec as any).section_type || null,
+          tanks: (tanks?.filter(t => t.section_id === sec.id) || []).map(t => ({
+            ...t,
+            gender: (t as any).gender || null
+          }))
         };
       });
 
@@ -281,6 +314,12 @@ const RecordActivity = () => {
         if (popData) {
            const stockedIds = popData.filter((d: any) => parseFloat(d.current_population) > 0).map((d: any) => d.tank_id);
            setStockedTankIds(stockedIds);
+
+           const popMap: Record<string, number> = {};
+           popData.forEach((d: any) => {
+             popMap[d.tank_id] = parseFloat(d.current_population) || 0;
+           });
+           setTankPopulations(popMap);
         }
       }
     } catch (err: any) {
@@ -323,52 +362,91 @@ const RecordActivity = () => {
     }
   }, [user, activeModule]);
 
-  // Load available workers for assignment (only in planning mode, scoped to selected farm)
+  // Load available workers for assignment (only in planning mode)
   useEffect(() => {
+    if (!isPlanningMode || !user?.hatchery_id) {
+      setAvailableWorkers([]);
+      return;
+    }
+
     const currentFarmId = selectedFarmId || activeFarmId;
-    if (isPlanningMode && user?.hatchery_id && currentFarmId) {
-      // Query workers who have access to this specific farm via farm_access
+
+    // For owners: they can see all profiles via RLS, so the join works.
+    // For supervisors: profiles RLS blocks them from seeing other workers' profiles in joins.
+    // Solution: Owners use farm_access join; supervisors always use hatchery-level query.
+    if (user.role === 'owner' && currentFarmId) {
+      // Owner: get workers assigned to this specific farm
       supabase.from('farm_access')
         .select('user_id, profiles!inner(id, full_name, username, role)')
         .eq('farm_id', currentFarmId)
         .then(({ data, error }) => {
-          console.log('DEBUG farm_access query:', { currentFarmId, data, error, currentUserId: user?.id });
           if (!error && data) {
-            // Deduplicate by user_id, include workers & supervisors, exclude current user
             const seen = new Set<string>();
             const workers: {id: string, name: string}[] = [];
             data.forEach((row: any) => {
               const p = row.profiles;
-              console.log('DEBUG row:', { user_id: row.user_id, profile: p, excluded: p?.id === user?.id, roleMatch: p?.role === 'worker' || p?.role === 'supervisor' });
               if (p && !seen.has(p.id) && p.id !== user?.id && (p.role === 'worker' || p.role === 'supervisor')) {
                 seen.add(p.id);
                 workers.push({ id: p.id, name: p.full_name || p.username });
               }
             });
-            console.log('DEBUG filtered workers:', workers);
             setAvailableWorkers(workers);
-          } else {
-            console.error('DEBUG worker fetch error:', error);
-            setAvailableWorkers([]);
-          }
-        });
-    } else if (isPlanningMode && user?.hatchery_id && !currentFarmId) {
-      // Fallback: no farm selected yet — show all workers in the hatchery
-      supabase.from('profiles')
-        .select('id, full_name, username, role')
-        .eq('hatchery_id', user.hatchery_id)
-        .in('role', ['worker', 'supervisor'])
-        .neq('id', user.id)
-        .then(({ data, error }) => {
-          console.log('DEBUG fallback profiles query:', { data, error });
-          if (!error && data) {
-            setAvailableWorkers(data.map(p => ({ id: p.id, name: p.full_name || p.username })));
           } else {
             setAvailableWorkers([]);
           }
         });
     } else {
-      setAvailableWorkers([]);
+      // Supervisor or no farm selected: get all workers in the hatchery
+      // Supervisors can see profiles via the "Select Profiles" policy if they share a hatchery
+      // But the policy requires auth_user_id = auth.uid() OR is_hatchery_owner — so supervisors 
+      // can only see their own profile. We need a workaround.
+      
+      // Use farm_access to get user_ids first (supervisor can see their own farm_access rows),
+      // then get names from the access data we already have in AuthContext.
+      if (currentFarmId) {
+        // Get user_ids from farm_access for this farm (visible to supervisor via RLS)
+        supabase.from('farm_access')
+          .select('user_id')
+          .eq('farm_id', currentFarmId)
+          .then(async ({ data: accessData, error: accessError }) => {
+            if (accessError || !accessData) {
+              setAvailableWorkers([]);
+              return;
+            }
+            const userIds = accessData.map((a: any) => a.user_id).filter((id: string) => id !== user?.id);
+            if (userIds.length === 0) {
+              setAvailableWorkers([]);
+              return;
+            }
+            // Now try to get profile names — this may fail for supervisors due to RLS
+            const { data: profiles, error: profileError } = await supabase
+              .from('profiles')
+              .select('id, full_name, username, role')
+              .in('id', userIds)
+              .in('role', ['worker', 'supervisor']);
+            
+            if (!profileError && profiles && profiles.length > 0) {
+              setAvailableWorkers(profiles.map(p => ({ id: p.id, name: p.full_name || p.username })));
+            } else {
+              // RLS blocked profile access — use user_ids with generic names
+              setAvailableWorkers(userIds.map((id: string, i: number) => ({ id, name: `Worker ${i + 1}` })));
+            }
+          });
+      } else {
+        // No farm selected — try hatchery-level query
+        supabase.from('profiles')
+          .select('id, full_name, username, role')
+          .eq('hatchery_id', user.hatchery_id)
+          .in('role', ['worker', 'supervisor'])
+          .neq('id', user.id)
+          .then(({ data, error }) => {
+            if (!error && data) {
+              setAvailableWorkers(data.map(p => ({ id: p.id, name: p.full_name || p.username })));
+            } else {
+              setAvailableWorkers([]);
+            }
+          });
+      }
     }
   }, [isPlanningMode, user, selectedFarmId, activeFarmId]);
 
@@ -1998,9 +2076,7 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {(activity || !type) && !isSpecialActivity && !(activeFarmCategory === 'MATURATION' && (activity === 'Stocking' || activity === 'Sourcing & Mating')) && (
-
-
+        {(activity || !type) && !isSpecialActivity && (
           <div className="glass-card rounded-2xl p-4 space-y-4">
 
             {true && (
@@ -2010,7 +2086,7 @@ const RecordActivity = () => {
                     {type ? 'Location & Scope' : 'Location & Activity'}
                   </h2>
                   
-                  {!editId && !(activeFarmCategory === 'MATURATION' && activity === 'Stocking') && (
+                  {!editId && (
                     <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
                       <TabsList className="bg-muted/50 h-8 p-0.5">
                         <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
@@ -2037,11 +2113,11 @@ const RecordActivity = () => {
                           <SelectValue placeholder="Select section" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableTanks
+                          {filteredSections
                             .filter(s => activeFarmId ? s.farm_id === activeFarmId : true)
                             .map(section => (
                               <SelectItem key={section.id} value={section.id}>
-                                {section.farm_name} - {section.name}
+                                {section.farm_name} - {section.name}{section.section_type ? ` (${section.section_type})` : ''}
                               </SelectItem>
                             ))
                           }
@@ -2050,7 +2126,7 @@ const RecordActivity = () => {
                     </div>
                   )}
 
-                  {!isSpecialActivity && !(activeFarmCategory === 'MATURATION' && activity === 'Stocking') && (
+                  {!isSpecialActivity && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">
                         {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
@@ -2512,17 +2588,33 @@ const RecordActivity = () => {
             selectionScope={selectionScope}
             selectedTanks={(() => {
               if (selectionScope === 'all') {
-                const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-                return activeSection?.tanks.filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id)) || [];
+                const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+                return activeSectionData?.tanks.filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id)) || [];
               } else if (selectionScope === 'custom') {
-                const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-                return activeSection?.tanks.filter((t: any) => selectedTankIds.includes(t.id) && (activity === 'Stocking' || editId || stockedTankIds.includes(t.id))) || [];
+                const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
+                return activeSectionData?.tanks.filter((t: any) => selectedTankIds.includes(t.id) && (activity === 'Stocking' || editId || stockedTankIds.includes(t.id))) || [];
               } else {
-                const activeSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
-                const t = activeSection?.tanks.find((t: any) => t.id === tankId);
+                const activeSectionData = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
+                const t = activeSectionData?.tanks.find((t: any) => t.id === tankId);
                 return t ? [t] : [];
               }
             })()}
+          />
+        )}
+
+        {activity === 'Sourcing & Mating' && (
+          <SourcingMatingForm
+            data={sourcingMatingData}
+            onDataChange={setSourcingMatingData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            availableTanks={availableTanks}
+            activeSectionId={selectedSectionId || activeSectionId}
+            activeTankId={tankId}
+            tankPopulations={tankPopulations}
+            isPlanningMode={isPlanningMode}
           />
         )}
 
@@ -2591,19 +2683,7 @@ const RecordActivity = () => {
           />
         )}
 
-        {activity === 'Sourcing & Mating' && (
-          <SourcingMatingForm
-            data={sourcingMatingData}
-            onDataChange={setSourcingMatingData}
-            comments={comments}
-            onCommentsChange={setComments}
-            photoUrl={photoUrl}
-            onPhotoUrlChange={setPhotoUrl}
-            availableTanks={availableTanks}
-            activeSectionId={selectedSectionId || activeSectionId}
-            isPlanningMode={isPlanningMode}
-          />
-        )}
+
 
         {activity === 'Spawning' && (
           <SpawningForm

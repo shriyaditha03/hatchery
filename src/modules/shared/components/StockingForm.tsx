@@ -38,6 +38,7 @@ const StockingForm = ({
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
+  const [stockingStep, setStockingStep] = useState<1 | 2>(1); // For Maturation two-step flow
 
   const handleChange = (field: string, value: any) => {
     onDataChange((prev: any) => ({ ...prev, [field]: value }));
@@ -204,215 +205,305 @@ const StockingForm = ({
               </div>
             </>
           ) : (
-            /* Complex fields for Activity Mode */
+            /* Complex fields for Activity Mode — TWO-STEP FLOW */
             <>
-
-          {/* Population & Losses Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Row 6: TOTAL BS Received */}
-            <div className="glass-card bg-emerald-50/30 border-emerald-100/50 p-4 rounded-2xl space-y-3">
-              <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.1em]">6) TOTAL BS Received / Booked *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Male (M)</Label>
-                  <Input 
-                    type="number" value={data.totalMalesReceived || ''} 
-                    onChange={e => handleChange('totalMalesReceived', e.target.value)}
-                    className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Female (F)</Label>
-                  <Input 
-                    type="number" value={data.totalFemalesReceived || ''} 
-                    onChange={e => handleChange('totalFemalesReceived', e.target.value)}
-                    className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
-                  />
-                </div>
+              {/* Step Indicator */}
+              <div className="flex items-center gap-2 py-2">
+                <div className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${stockingStep >= 1 ? 'bg-blue-600' : 'bg-muted'}`} />
+                <div className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${stockingStep >= 2 ? 'bg-blue-600' : 'bg-muted'}`} />
               </div>
-            </div>
-
-            {/* Row 7: Air Transport Loss */}
-            <div className="glass-card bg-red-50/30 border-red-100/50 p-4 rounded-2xl space-y-3">
-              <Label className="text-[10px] font-black text-red-700 uppercase tracking-[0.1em]">7) BS Animals lost in Air transport</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-red-600/70 uppercase">Male (M)</Label>
-                  <Input 
-                    type="number" value={data.airLossM || ''} 
-                    onChange={e => handleChange('airLossM', e.target.value)}
-                    className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-red-600/70 uppercase">Female (F)</Label>
-                  <Input 
-                    type="number" value={data.airLossF || ''} 
-                    onChange={e => handleChange('airLossF', e.target.value)}
-                    className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
-                  />
-                </div>
+              <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-muted-foreground -mt-1 mb-2">
+                <span className={stockingStep === 1 ? 'text-blue-600' : ''}>Step 1: Received Broodstock</span>
+                <span className={stockingStep === 2 ? 'text-blue-600' : ''}>Step 2: Tank Allocation</span>
               </div>
-            </div>
 
-            {/* Row 8: AQF Loss */}
-            <div className="glass-card bg-orange-50/30 border-orange-100/50 p-4 rounded-2xl space-y-3">
-              <Label className="text-[10px] font-black text-orange-700 uppercase tracking-[0.1em]">8) BS Animals lost in AQF</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Male (M)</Label>
-                  <Input 
-                    type="number" value={data.aqfLossM || ''} 
-                    onChange={e => handleChange('aqfLossM', e.target.value)}
-                    className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Female (F)</Label>
-                  <Input 
-                    type="number" value={data.aqfLossF || ''} 
-                    onChange={e => handleChange('aqfLossF', e.target.value)}
-                    className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Row 9: Transport to Hatchery Loss */}
-            <div className="glass-card bg-amber-50/30 border-amber-100/50 p-4 rounded-2xl space-y-3">
-              <Label className="text-[10px] font-black text-amber-700 uppercase tracking-[0.1em]">9) BS Animals lost in Transit to Hatchery</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Male (M)</Label>
-                  <Input 
-                    type="number" value={data.hatcheryLossM || ''} 
-                    onChange={e => handleChange('hatcheryLossM', e.target.value)}
-                    className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Female (F)</Label>
-                  <Input 
-                    type="number" value={data.hatcheryLossF || ''} 
-                    onChange={e => handleChange('hatcheryLossF', e.target.value)}
-                    className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 10: Remaining Stocking Population */}
-          {(() => {
-            const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
-            const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
-            
-            // Sync with tankStockingNumber (Total) for compatibility
-            const total = remM + remF;
-            if (data.tankStockingNumber !== total.toString()) {
-               setTimeout(() => handleChange('tankStockingNumber', total.toString()), 0);
-            }
-
-            return (
-              <div className="p-4 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-200 space-y-3 border-none">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">10) Remaining Stocking Population</Label>
-                  <div className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold">LIVE CALCULATION</div>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="text-center border-r border-white/20">
-                    <p className="text-3xl font-black">{remM}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Males (M)</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-3xl font-black">{remF}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Females (F)</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Row 11: Select TANKS Allocation */}
-          {(selectionScope === 'all' || selectionScope === 'custom' || selectedTanks.length > 0) && (
-            <div className="space-y-4 pt-4 border-t border-dashed">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">11) Select TANKS & Allocation</Label>
-                <div className="text-[10px] font-bold bg-muted px-2 py-1 rounded-md text-muted-foreground uppercase">
-                  {selectedTanks.length} Tanks Selected
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                {selectedTanks.map((tank: any) => (
-                  <div key={tank.id} className="flex items-center gap-4 bg-muted/10 p-4 rounded-2xl border hover:border-primary/30 transition-all group">
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-foreground">{tank.name}</p>
-                      {activeFarmCategory !== 'MATURATION' && (
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Current: {tank.current_stock || 0}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <div className="relative group/input">
-                        <Input 
-                          type="number"
-                          placeholder="M"
-                          value={data.allocations?.[tank.id]?.m || ''}
-                          onChange={e => {
-                            const newAllocations = { ...(data.allocations || {}) };
-                            newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
-                            handleChange('allocations', newAllocations);
-                          }}
-                          className="w-20 h-11 text-center font-bold bg-background pr-2"
-                        />
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">M</span>
+              {/* STEP 1: Received Broodstock (Fields 6-10) */}
+              {stockingStep === 1 && (
+                <>
+                  {/* Population & Losses Section */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Row 6: TOTAL BS Received */}
+                    <div className="glass-card bg-emerald-50/30 border-emerald-100/50 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.1em]">6) TOTAL BS Received / Booked *</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Male (M)</Label>
+                          <Input 
+                            type="number" value={data.totalMalesReceived || ''} 
+                            onChange={e => handleChange('totalMalesReceived', e.target.value)}
+                            className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-emerald-600/70 uppercase">Female (F)</Label>
+                          <Input 
+                            type="number" value={data.totalFemalesReceived || ''} 
+                            onChange={e => handleChange('totalFemalesReceived', e.target.value)}
+                            className="h-10 border-emerald-200/50 focus:ring-emerald-500" placeholder="0"
+                          />
+                        </div>
                       </div>
-                      <div className="relative group/input">
-                        <Input 
-                          type="number"
-                          placeholder="F"
-                          value={data.allocations?.[tank.id]?.f || ''}
-                          onChange={e => {
-                            const newAllocations = { ...(data.allocations || {}) };
-                            newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
-                            handleChange('allocations', newAllocations);
-                          }}
-                          className="w-20 h-11 text-center font-bold bg-background pr-2"
-                        />
-                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">F</span>
+                    </div>
+
+                    {/* Row 7: Air Transport Loss */}
+                    <div className="glass-card bg-red-50/30 border-red-100/50 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black text-red-700 uppercase tracking-[0.1em]">7) BS Animals lost in Air transport</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-red-600/70 uppercase">Male (M)</Label>
+                          <Input 
+                            type="number" value={data.airLossM || ''} 
+                            onChange={e => handleChange('airLossM', e.target.value)}
+                            className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-red-600/70 uppercase">Female (F)</Label>
+                          <Input 
+                            type="number" value={data.airLossF || ''} 
+                            onChange={e => handleChange('airLossF', e.target.value)}
+                            className="h-10 border-red-200/50 focus:ring-red-500" placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 8: AQF Loss */}
+                    <div className="glass-card bg-orange-50/30 border-orange-100/50 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black text-orange-700 uppercase tracking-[0.1em]">8) BS Animals lost in AQF</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Male (M)</Label>
+                          <Input 
+                            type="number" value={data.aqfLossM || ''} 
+                            onChange={e => handleChange('aqfLossM', e.target.value)}
+                            className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-orange-600/70 uppercase">Female (F)</Label>
+                          <Input 
+                            type="number" value={data.aqfLossF || ''} 
+                            onChange={e => handleChange('aqfLossF', e.target.value)}
+                            className="h-10 border-orange-200/50 focus:ring-orange-500" placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 9: Transport to Hatchery Loss */}
+                    <div className="glass-card bg-amber-50/30 border-amber-100/50 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black text-amber-700 uppercase tracking-[0.1em]">9) BS Animals lost in Transit to Hatchery</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Male (M)</Label>
+                          <Input 
+                            type="number" value={data.hatcheryLossM || ''} 
+                            onChange={e => handleChange('hatcheryLossM', e.target.value)}
+                            className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold text-amber-600/70 uppercase">Female (F)</Label>
+                          <Input 
+                            type="number" value={data.hatcheryLossF || ''} 
+                            onChange={e => handleChange('hatcheryLossF', e.target.value)}
+                            className="h-10 border-amber-200/50 focus:ring-amber-500" placeholder="0"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Allocation Validation */}
-              {(() => {
-                const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
-                const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
-                
-                const allocatedM = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.m) || 0), 0);
-                const allocatedF = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.f) || 0), 0);
-                
-                const isValid = allocatedM === remM && allocatedF === remF;
-                
-                return (
-                  <div className={`p-3 rounded-xl border text-center transition-all duration-500 ${isValid ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                    <p className="text-[10px] font-black uppercase tracking-widest">
-                      {isValid ? '✅ Allocation Balanced' : '⚠️ Allocation Mismatch'}
-                    </p>
-                    <p className="text-[9px] font-bold opacity-70">
-                      Males: {String(allocatedM)} / {String(remM)} | Females: {String(allocatedF)} / {String(remF)}
-                    </p>
-                  </div>
-                );
-              })()}
-            </div>
+                  {/* Row 10: Remaining Stocking Population */}
+                  {(() => {
+                    const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
+                    const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
+                    
+                    // Sync with tankStockingNumber (Total) for compatibility
+                    const total = remM + remF;
+                    if (data.tankStockingNumber !== total.toString()) {
+                       setTimeout(() => handleChange('tankStockingNumber', total.toString()), 0);
+                    }
+
+                    return (
+                      <div className="p-4 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-200 space-y-3 border-none">
+                        <div className="flex justify-between items-center">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">10) Remaining Stocking Population</Label>
+                          <div className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold">LIVE CALCULATION</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="text-center border-r border-white/20">
+                            <p className="text-3xl font-black">{remM}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Males (M)</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-3xl font-black">{remF}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Females (F)</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Continue to Step 2 Button */}
+                  <Button
+                    type="button"
+                    onClick={() => setStockingStep(2)}
+                    className="w-full h-12 rounded-xl font-bold text-base ocean-gradient border-none shadow-lg shadow-primary/20 mt-2"
+                    disabled={!data.totalMalesReceived && !data.totalFemalesReceived}
+                  >
+                    Continue to Tank Allocation →
+                  </Button>
+                </>
+              )}
+
+              {/* STEP 2: Tank Allocation */}
+              {stockingStep === 2 && (
+                <>
+                  {/* Back Button */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setStockingStep(1)}
+                    className="text-xs font-bold text-muted-foreground hover:text-foreground -mt-2 mb-2"
+                  >
+                    ← Back to Broodstock Details
+                  </Button>
+
+                  {/* Remaining Population Summary (compact) */}
+                  {(() => {
+                    const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
+                    const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
+                    return (
+                      <div className="p-3 rounded-xl bg-blue-600 text-white flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Available BS</span>
+                        <div className="flex gap-4 text-sm font-black">
+                          <span>♂ {remM}</span>
+                          <span>♀ {remF}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Row 11: Select TANKS Allocation */}
+                  {(selectionScope === 'all' || selectionScope === 'custom' || selectedTanks.length > 0) && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">11) Select TANKS & Allocation</Label>
+                        <div className="text-[10px] font-bold bg-muted px-2 py-1 rounded-md text-muted-foreground uppercase">
+                          {selectedTanks.length} Tanks Selected
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {/* Group tanks by gender for easier allocation */}
+                        {(() => {
+                          const maleTanks = selectedTanks.filter((t: any) => t.gender === 'MALE');
+                          const femaleTanks = selectedTanks.filter((t: any) => t.gender === 'FEMALE');
+                          const untaggedTanks = selectedTanks.filter((t: any) => !t.gender);
+                          
+                          const renderTankRow = (tank: any) => (
+                            <div key={tank.id} className="flex items-center gap-4 bg-muted/10 p-4 rounded-2xl border hover:border-primary/30 transition-all group">
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-foreground">
+                                  {tank.name}
+                                  {tank.gender && (
+                                    <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                                      tank.gender === 'MALE' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'
+                                    }`}>{tank.gender === 'MALE' ? '♂' : '♀'}</span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="flex gap-2 items-center">
+                                <div className="relative group/input">
+                                  <Input 
+                                    type="number"
+                                    placeholder="M"
+                                    value={data.allocations?.[tank.id]?.m || ''}
+                                    onChange={e => {
+                                      const newAllocations = { ...(data.allocations || {}) };
+                                      newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
+                                      handleChange('allocations', newAllocations);
+                                    }}
+                                    className="w-20 h-11 text-center font-bold bg-background pr-2"
+                                  />
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">M</span>
+                                </div>
+                                <div className="relative group/input">
+                                  <Input 
+                                    type="number"
+                                    placeholder="F"
+                                    value={data.allocations?.[tank.id]?.f || ''}
+                                    onChange={e => {
+                                      const newAllocations = { ...(data.allocations || {}) };
+                                      newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
+                                      handleChange('allocations', newAllocations);
+                                    }}
+                                    className="w-20 h-11 text-center font-bold bg-background pr-2"
+                                  />
+                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-muted-foreground opacity-50 pointer-events-none">F</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                          
+                          return (
+                            <>
+                              {maleTanks.length > 0 && (
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">♂ Male Tanks ({maleTanks.length})</p>
+                                  {maleTanks.map(renderTankRow)}
+                                </div>
+                              )}
+                              {femaleTanks.length > 0 && (
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-bold text-pink-600 uppercase tracking-wider flex items-center gap-1">♀ Female Tanks ({femaleTanks.length})</p>
+                                  {femaleTanks.map(renderTankRow)}
+                                </div>
+                              )}
+                              {untaggedTanks.length > 0 && (
+                                <div className="space-y-2">
+                                  {(maleTanks.length > 0 || femaleTanks.length > 0) && (
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Other Tanks ({untaggedTanks.length})</p>
+                                  )}
+                                  {untaggedTanks.map(renderTankRow)}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Allocation Validation */}
+                      {(() => {
+                        const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
+                        const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
+                        
+                        const allocatedM = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.m) || 0), 0);
+                        const allocatedF = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.f) || 0), 0);
+                        
+                        const isValid = allocatedM === remM && allocatedF === remF;
+                        
+                        return (
+                          <div className={`p-3 rounded-xl border text-center transition-all duration-500 ${isValid ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                            <p className="text-[10px] font-black uppercase tracking-widest">
+                              {isValid ? '✅ Allocation Balanced' : '⚠️ Allocation Mismatch'}
+                            </p>
+                            <p className="text-[9px] font-bold opacity-70">
+                              Males: {String(allocatedM)} / {String(remM)} | Females: {String(allocatedF)} / {String(remF)}
+                            </p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
-        </>
+        </div>
       )}
-    </div>
-  )}
 
   {activeFarmCategory !== 'MATURATION' && (
         <>
@@ -473,7 +564,7 @@ const StockingForm = ({
         </>
       )}
 
-      {isPlanningMode === false && (
+      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-2 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
             Animal Condition Quality
@@ -553,7 +644,7 @@ const StockingForm = ({
         </div>
       )}
 
-      {isPlanningMode === false && (
+      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-4 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
             Water Condition Quality
@@ -646,7 +737,7 @@ const StockingForm = ({
 
 
 
-      {isPlanningMode === false && (
+      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-1.5 pt-2 border-t border-dashed">
           <Label className="text-xs">Activity Photo (Optional)</Label>
           <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
