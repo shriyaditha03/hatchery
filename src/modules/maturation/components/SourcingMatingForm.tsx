@@ -4,9 +4,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowRightLeft, Heart, Search } from 'lucide-react';
+import { Plus, Trash2, ArrowRightLeft, Heart, Search, Database, RefreshCw, Wand2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
+import { getTodayStr } from '@/lib/date-utils';
 
 interface SourcingMatingFormProps {
   data: any;
@@ -46,9 +48,30 @@ const SourcingMatingForm = ({
   // Field 3: Animals Shifted to
   const [matedDestinations, setMatedDestinations] = useState<any[]>(data.matedDestinations || []);
   const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
+  const [batchNumber, setBatchNumber] = useState<string>(data.batchNumber || '');
+  const [isBatchIdManuallyEdited, setIsBatchIdManuallyEdited] = useState(data.batchNumber ? true : false);
+
+  // Auto-fill tracking state
+  const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
+
+  const generateBatchId = () => {
+    const dateStr = getTodayStr().replace(/-/g, '').slice(2); // YYMMDD
+    const farmPrefix = farmId ? farmId.slice(0, 4).toUpperCase() : 'BN';
+    const serial = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    return `BATCH-${farmPrefix}-${dateStr}-${serial}`;
+  };
+
+  // Auto-generate Batch ID if not present
+  useEffect(() => {
+    if (!batchNumber && !isBatchIdManuallyEdited) {
+      const newId = generateBatchId();
+      setBatchNumber(newId);
+      onDataChange({ ...data, batchNumber: newId });
+    }
+  }, [batchNumber, farmId]);
 
   const updateData = (updates: any) => {
-    onDataChange({ ...data, ...updates });
+    onDataChange({ ...data, ...updates, batchNumber: updates.batchNumber !== undefined ? updates.batchNumber : batchNumber });
   };
 
   // 1. Automatically populate Field 1 with all FEMALE tanks from all ANIMAL sections for the SELECTED FARM
@@ -128,7 +151,7 @@ const SourcingMatingForm = ({
     updateData({ matingTanks: newList });
   };
 
-  const handleMatingTankChange = (id: string, updates: any) => {
+  const handleMatingTankChange = (id: string, updates: any, isManual = false) => {
     const newList = matingTanks.map(t => {
       if (t.id === id) {
         const updated = { ...t, ...updates };
@@ -144,8 +167,13 @@ const SourcingMatingForm = ({
       }
       return t;
     });
+    
+    if (isManual) {
+       if (updates.femalesAdded !== undefined) setEditedFields(prev => ({ ...prev, [`mating_${id}_added`]: true }));
+    }
+
     setMatingTanks(newList);
-    updateData({ matingTanks: newList });
+    updateData({ matingTanks: newList, editedFields: { ...editedFields, ...(isManual && updates.femalesAdded !== undefined ? { [`mating_${id}_added`]: true } : {}) } });
   };
 
   // 3. Animals Shifted To (Field 3)
@@ -161,10 +189,13 @@ const SourcingMatingForm = ({
     updateData({ matedDestinations: newList });
   };
 
-  const handleMatedDestinationChange = (id: string, updates: any) => {
+  const handleMatedDestinationChange = (id: string, updates: any, isManual = false) => {
     const newList = matedDestinations.map(d => d.id === id ? { ...d, ...updates } : d);
+    if (isManual && updates.count !== undefined) {
+      setEditedFields(prev => ({ ...prev, [`mated_dest_${id}`]: true }));
+    }
     setMatedDestinations(newList);
-    updateData({ matedDestinations: newList });
+    updateData({ matedDestinations: newList, editedFields: { ...editedFields, ...(isManual && updates.count !== undefined ? { [`mated_dest_${id}`]: true } : {}) } });
   };
 
   const addReturnDestination = () => {
@@ -179,10 +210,13 @@ const SourcingMatingForm = ({
     updateData({ returnDestinations: newList });
   };
 
-  const handleReturnDestinationChange = (id: string, updates: any) => {
+  const handleReturnDestinationChange = (id: string, updates: any, isManual = false) => {
     const newList = returnDestinations.map(d => d.id === id ? { ...d, ...updates } : d);
+    if (isManual && updates.count !== undefined) {
+      setEditedFields(prev => ({ ...prev, [`return_dest_${id}`]: true }));
+    }
     setReturnDestinations(newList);
-    updateData({ returnDestinations: newList });
+    updateData({ returnDestinations: newList, editedFields: { ...editedFields, ...(isManual && updates.count !== undefined ? { [`return_dest_${id}`]: true } : {}) } });
   };
 
   const totalSourcedFromStep1 = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
@@ -193,7 +227,49 @@ const SourcingMatingForm = ({
   const totalReturned = returnDestinations.reduce((sum, d) => sum + (parseFloat(d.count) || 0), 0);
   const totalShifted = totalInSpawning + totalReturned;
 
-  // Sync summary data
+  // AUTO-ALLOCATION EFFECTS
+  // 1. Field 1 (Sourced) -> Field 2 (Mating)
+  useEffect(() => {
+    if (matingTanks.length === 1 && totalSourcedFromStep1 > 0) {
+      const tank = matingTanks[0];
+      const fieldKey = `mating_${tank.id}_added`;
+      if (!editedFields[fieldKey] && tank.femalesAdded !== totalSourcedFromStep1.toString()) {
+        const newList = matingTanks.map(t => t.id === tank.id ? { 
+          ...t, 
+          femalesAdded: totalSourcedFromStep1.toString(),
+          balance: Math.max(0, totalSourcedFromStep1 - (parseFloat(t.femalesMated) || 0))
+        } : t);
+        setMatingTanks(newList);
+        onDataChange({ ...data, matingTanks: newList });
+      }
+    }
+  }, [totalSourcedFromStep1, matingTanks.length]);
+
+  // 2. Field 2 (Mated/Balance) -> Field 3 (Destinations)
+  useEffect(() => {
+    // a) Mated -> Spawning
+    if (matedDestinations.length === 1 && totalFemalesMatedAcrossTanks > 0) {
+      const dest = matedDestinations[0];
+      const fieldKey = `mated_dest_${dest.id}`;
+      if (!editedFields[fieldKey] && dest.count !== totalFemalesMatedAcrossTanks.toString()) {
+        const newList = matedDestinations.map(d => d.id === dest.id ? { ...d, count: totalFemalesMatedAcrossTanks.toString() } : d);
+        setMatedDestinations(newList);
+        onDataChange({ ...data, matedDestinations: newList });
+      }
+    }
+    // b) Balance -> Return
+    if (returnDestinations.length === 1 && totalBalanceNonMated > 0) {
+      const dest = returnDestinations[0];
+      const fieldKey = `return_dest_${dest.id}`;
+      if (!editedFields[fieldKey] && dest.count !== totalBalanceNonMated.toString()) {
+        const newList = returnDestinations.map(d => d.id === dest.id ? { ...d, count: totalBalanceNonMated.toString() } : d);
+        setReturnDestinations(newList);
+        onDataChange({ ...data, returnDestinations: newList });
+      }
+    }
+  }, [totalFemalesMatedAcrossTanks, totalBalanceNonMated, matedDestinations.length, returnDestinations.length]);
+
+  // Original summary sync
   useEffect(() => {
     const updates: any = {};
     if (data.totalSourced !== totalSourcedFromStep1) updates.totalSourced = totalSourcedFromStep1;
@@ -236,6 +312,48 @@ const SourcingMatingForm = ({
     <div className="space-y-6 animate-fade-in-up">
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
+        {/* Batch Information */}
+        <div className="p-5 bg-primary/5 rounded-[2rem] border border-dashed border-primary/20 space-y-4">
+           <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-primary">
+                 <Database className="w-4 h-4" />
+                 <h3 className="text-[10px] font-black uppercase tracking-widest">Sourcing Batch ID</h3>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  const newId = generateBatchId();
+                  setBatchNumber(newId);
+                  setIsBatchIdManuallyEdited(true);
+                  updateData({ batchNumber: newId });
+                }}
+                className="h-8 text-[9px] font-black uppercase text-primary/60 hover:text-primary gap-1"
+              >
+                <RefreshCw className="w-3 h-3" /> Regenerate
+              </Button>
+           </div>
+           
+           <div className="relative group">
+              <Input 
+                value={batchNumber}
+                onChange={(e) => {
+                  setBatchNumber(e.target.value);
+                  setIsBatchIdManuallyEdited(true);
+                  updateData({ batchNumber: e.target.value });
+                }}
+                className="h-14 rounded-2xl font-black bg-white/50 border-primary/10 text-xl text-primary tracking-tight shadow-sm text-center uppercase"
+                placeholder="BATCH-ID"
+              />
+              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none opacity-20">
+                 <RefreshCw className="w-5 h-5" />
+              </div>
+           </div>
+           <p className="text-[9px] text-muted-foreground italic text-center px-4">
+             Unique identifier used to track this batch lifecycle.
+           </p>
+        </div>
+
         {/* FIELD 1: Ripe Females Sourced */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -361,11 +479,19 @@ const SourcingMatingForm = ({
                       <Input 
                         type="number" 
                         value={mating.femalesAdded} 
-                        onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value })} 
-                        className="h-10 rounded-xl font-bold bg-white" 
+                        onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
+                        className={cn(
+                          "h-10 rounded-xl font-bold bg-white pr-8",
+                          !editedFields[`mating_${mating.id}_added`] && mating.femalesAdded && "border-primary/20 bg-primary/5 text-primary"
+                        )} 
                         placeholder="0"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-pink-400">F</span>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {!editedFields[`mating_${mating.id}_added`] && mating.femalesAdded && (
+                          <Wand2 className="w-2.5 h-2.5 text-primary opacity-60" />
+                        )}
+                        <span className="text-[9px] font-black text-pink-400">F</span>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -446,15 +572,23 @@ const SourcingMatingForm = ({
                       </Select>
                     </div>
                     <div className="w-20">
-                      <div className="relative">
+                      <div className="relative group/input">
                         <Input 
                           type="number" 
                           value={dest.count} 
-                          onChange={e => handleMatedDestinationChange(dest.id, { count: e.target.value })} 
-                          className="h-10 rounded-xl font-bold bg-white"
+                          onChange={e => handleMatedDestinationChange(dest.id, { count: e.target.value }, true)} 
+                          className={cn(
+                            "h-10 rounded-xl font-bold bg-white pr-8",
+                            !editedFields[`mated_dest_${dest.id}`] && dest.count && "border-blue-400/30 bg-blue-50/50 text-blue-700"
+                          )}
                           placeholder="0"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-bold text-blue-400">F</span>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {!editedFields[`mated_dest_${dest.id}`] && dest.count && (
+                            <Wand2 className="w-2 h-2 text-blue-400 opacity-60" />
+                          )}
+                          <span className="text-[8px] font-bold text-blue-400">F</span>
+                        </div>
                       </div>
                     </div>
                     <Button 
@@ -496,15 +630,23 @@ const SourcingMatingForm = ({
                       </Select>
                     </div>
                     <div className="w-20">
-                      <div className="relative">
+                      <div className="relative group/input">
                         <Input 
                           type="number" 
                           value={dest.count} 
-                          onChange={e => handleReturnDestinationChange(dest.id, { count: e.target.value })} 
-                          className="h-10 rounded-xl font-bold bg-white"
+                          onChange={e => handleReturnDestinationChange(dest.id, { count: e.target.value }, true)} 
+                          className={cn(
+                            "h-10 rounded-xl font-bold bg-white pr-8",
+                            !editedFields[`return_dest_${dest.id}`] && dest.count && "border-slate-400/30 bg-slate-50/50 text-slate-700"
+                          )}
                           placeholder="0"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-bold text-slate-400">F</span>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {!editedFields[`return_dest_${dest.id}`] && dest.count && (
+                            <Wand2 className="w-2 h-2 text-slate-400 opacity-60" />
+                          )}
+                          <span className="text-[8px] font-bold text-slate-400">F</span>
+                        </div>
                       </div>
                     </div>
                     <Button 

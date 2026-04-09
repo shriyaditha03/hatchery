@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowUpRight, Calculator, CheckCircle2, AlertCircle, Camera, ClipboardList, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ArrowUpRight, Calculator, CheckCircle2, AlertCircle, Camera, ClipboardList, Loader2, Database } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
@@ -22,6 +22,7 @@ interface HarvestGroup {
   sourceTankId: string;
   sourceTankName: string;
   eggCountMillions?: number;
+  batchNumber?: string;
   harvestedPopulation: string;
   destinations: HarvestEntry[];
 }
@@ -66,6 +67,7 @@ const NaupliiHarvestForm = ({
     return [];
   });
 
+  const [eggCountRecords, setEggCountRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const updateData = (updatedGroups: HarvestGroup[]) => {
@@ -140,11 +142,14 @@ const NaupliiHarvestForm = ({
             sourceTankId: entry.tankId,
             sourceTankName: entry.tankName,
             eggCountMillions: parseFloat(eggsVal) || 0,
+            batchNumber: entry.batchNumber || '',
             harvestedPopulation: eggsVal, // Auto-populate with Egg Count as default
             destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: eggsVal }]
           };
         });
 
+        setEggCountRecords(allEntries);
+        
         if (initialGroups.length > 0) {
           setGroups(initialGroups);
           updateData(initialGroups);
@@ -166,6 +171,7 @@ const NaupliiHarvestForm = ({
       id: Math.random().toString(36).substr(2, 9),
       sourceTankId: '',
       sourceTankName: '',
+      batchNumber: '',
       harvestedPopulation: '',
       destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]
     };
@@ -185,13 +191,24 @@ const NaupliiHarvestForm = ({
       if (g.id === id) {
         if (updates.sourceTankId) {
           let foundName = '';
-          availableTanks
-            .filter(sec => !farmId || sec.farm_id === farmId)
-            .forEach(sec => {
-              const t = sec.tanks.find((t:any) => t.id === updates.sourceTankId);
-              if (t) foundName = `${sec.name} - ${t.name}`;
-            });
-          return { ...g, ...updates, sourceTankName: foundName };
+          let foundBatch = '';
+          let foundEggs = 0;
+          
+          // Check Egg Count records first
+          const record = eggCountRecords.find(r => r.tankId === updates.sourceTankId);
+          if (record) {
+             foundName = record.tankName;
+             foundBatch = record.batchNumber || '';
+             foundEggs = parseFloat(record.totalEggsMillions) || 0;
+          } else {
+            availableTanks
+              .filter(sec => !farmId || sec.farm_id === farmId)
+              .forEach(sec => {
+                const t = sec.tanks.find((t:any) => t.id === updates.sourceTankId);
+                if (t) foundName = `${sec.name} - ${t.name}`;
+              });
+          }
+          return { ...g, ...updates, sourceTankName: foundName, batchNumber: foundBatch, eggCountMillions: foundEggs };
         }
         return { ...g, ...updates };
       }
@@ -225,7 +242,7 @@ const NaupliiHarvestForm = ({
               if (updates.tankId) {
                 let foundName = '';
                 availableTanks
-                  .filter(sec => !farmId || sec.farm_id === farmId)
+                  .filter(sec => sec.section_type === 'NAUPLII' && (!farmId || sec.farm_id === farmId))
                   .forEach(sec => {
                     const t = sec.tanks.find((t:any) => t.id === updates.tankId);
                     if (t) foundName = `${sec.name} - ${t.name}`;
@@ -376,6 +393,12 @@ const NaupliiHarvestForm = ({
                                    Eggs Recorded: {group.eggCountMillions}M
                                 </span>
                              )}
+                             {group.batchNumber && (
+                                <span className="text-[9px] font-black bg-primary/5 text-primary px-2 py-0.5 rounded-full border border-primary/10 flex items-center gap-1">
+                                   <Database className="w-2.5 h-2.5" />
+                                   Batch: {group.batchNumber}
+                                </span>
+                             )}
                           </div>
                           {group.sourceTankId && group.sourceTankName ? (
                              <div className="flex items-center gap-4 pl-9">
@@ -396,11 +419,18 @@ const NaupliiHarvestForm = ({
                                   <SelectValue placeholder="Select Spawning Tank" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {availableTanks
-                                    .filter(s => !farmId || s.farm_id === farmId)
-                                    .flatMap(s => s.tanks.map((t:any) => (
-                                      <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
-                                    )))}
+                                  {eggCountRecords.length === 0 ? (
+                                     <div className="p-4 text-center text-[10px] text-muted-foreground italic">No egg records available</div>
+                                  ) : (
+                                    eggCountRecords.map(r => (
+                                      <SelectItem key={r.tankId} value={r.tankId}>
+                                        <div className="flex items-center justify-between w-full gap-8">
+                                           <span>{r.tankName}</span>
+                                           <span className="text-[9px] font-black opacity-40">({r.totalEggsMillions}M eggs)</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))
+                                  )}
                                 </SelectContent>
                               </Select>
                               <Button variant="ghost" size="icon" onClick={() => removeGroup(group.id)} className="text-rose-600 hover:bg-rose-50 rounded-xl">
@@ -471,7 +501,7 @@ const NaupliiHarvestForm = ({
                                       </SelectTrigger>
                                       <SelectContent>
                                          {availableTanks
-                                          .filter(s => !farmId || s.farm_id === farmId)
+                                          .filter(s => s.section_type === 'NAUPLII' && (!farmId || s.farm_id === farmId))
                                           .flatMap(s => s.tanks.map((t:any) => (
                                             <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
                                           )))}

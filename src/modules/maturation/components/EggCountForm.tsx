@@ -16,6 +16,7 @@ interface EggCountEntry {
   spawnedCount: string;
   totalEggsMillions: string;
   fertilizationPercent: string;
+  batchNumber?: string;
   isAutoPopulated?: boolean;
 }
 
@@ -99,6 +100,7 @@ const EggCountForm = ({
               spawnedCount: log.data?.spawnedCount || '0',
               totalEggsMillions: '',
               fertilizationPercent: '',
+              batchNumber: log.data?.batchNumber || '',
               isAutoPopulated: true
             };
           });
@@ -160,6 +162,7 @@ const EggCountForm = ({
       spawnedCount: '', 
       totalEggsMillions: '', 
       fertilizationPercent: '',
+      batchNumber: '',
       isAutoPopulated: false
     }]);
   };
@@ -313,7 +316,7 @@ const EggCountForm = ({
                             </SelectTrigger>
                             <SelectContent>
                               {availableTanks
-                                .filter(s => !farmId || s.farm_id === farmId)
+                                .filter(s => s.section_type === 'SPAWNING' && (!farmId || s.farm_id === farmId))
                                 .flatMap(s => s.tanks.map((t:any) => (
                                   <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
                                 )))}
@@ -322,21 +325,27 @@ const EggCountForm = ({
                         )}
                       </div>
 
-                      <div className="bg-white/50 px-4 py-2 rounded-2xl border flex flex-col items-center justify-center min-w-[120px]">
-                         <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter mb-0.5">Animals Spawned</span>
-                         <div className="flex items-center gap-1.5">
-                            {entry.isAutoPopulated ? (
-                               <span className="text-xl font-black text-foreground">{entry.spawnedCount}</span>
-                            ) : (
-                               <Input 
-                                  type="number" 
-                                  value={entry.spawnedCount} 
-                                  onChange={e => updateEntry(entry.id, { spawnedCount: e.target.value })} 
-                                  className="h-8 w-16 text-center font-black bg-transparent border-none p-0 focus-visible:ring-0" 
-                                  placeholder="0"
-                               />
-                            )}
-                            <span className="text-[10px] font-bold text-muted-foreground opacity-40 uppercase">Females</span>
+                      <div className="flex flex-col items-center gap-1">
+                         <div className="bg-primary/5 px-3 py-1 rounded-xl border border-primary/10 flex items-center gap-2">
+                            <Database className="w-3 h-3 text-primary" />
+                            <span className="text-[9px] font-black text-primary uppercase">{entry.batchNumber || 'NO BATCH'}</span>
+                         </div>
+                         <div className="bg-white/50 px-4 py-2 rounded-2xl border flex flex-col items-center justify-center min-w-[120px]">
+                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter mb-0.5">Animals Spawned</span>
+                            <div className="flex items-center gap-1.5">
+                               {entry.isAutoPopulated ? (
+                                  <span className="text-xl font-black text-foreground">{entry.spawnedCount}</span>
+                               ) : (
+                                  <Input 
+                                     type="number" 
+                                     value={entry.spawnedCount} 
+                                     onChange={e => updateEntry(entry.id, { spawnedCount: e.target.value })} 
+                                     className="h-8 w-16 text-center font-black bg-transparent border-none p-0 focus-visible:ring-0" 
+                                     placeholder="0"
+                                  />
+                               )}
+                               <span className="text-[10px] font-bold text-muted-foreground opacity-40 uppercase">Females</span>
+                            </div>
                          </div>
                       </div>
                     </div>

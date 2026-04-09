@@ -4,9 +4,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2, AlertCircle, CheckCircle, Database, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
+import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 
 interface SpawningFormProps {
   data: any;
@@ -34,10 +36,49 @@ const SpawningForm = ({
   farmId,
 }: SpawningFormProps) => {
   const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
+  const [batchNumber, setBatchNumber] = useState<string>(data.batchNumber || '');
+  const [loadingBatch, setLoadingBatch] = useState(false);
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates });
   };
+
+  // Fetch Batch ID from the latest Sourcing & Mating activity for this tank
+  useEffect(() => {
+    const fetchBatchId = async () => {
+      if (!data.tankId || !farmId) return;
+      setLoadingBatch(true);
+      try {
+        const { data: logs, error } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Sourcing & Mating')
+          .order('created_at', { ascending: false })
+          .limit(20); // Search last 20 matings
+
+        if (error) throw error;
+
+        // Find the log where this tank was a destination
+        const matingLog = logs?.find(log => 
+          log.data?.matedDestinations?.some((d: any) => d.tankId === data.tankId)
+        );
+
+        if (matingLog?.data?.batchNumber) {
+          setBatchNumber(matingLog.data.batchNumber);
+          updateData({ batchNumber: matingLog.data.batchNumber });
+        }
+      } catch (err) {
+        console.error('Error fetching batch ID:', err);
+      } finally {
+        setLoadingBatch(false);
+      }
+    };
+
+    if (data.tankId && !data.batchNumber) {
+      fetchBatchId();
+    }
+  }, [data.tankId, farmId]);
 
   const spawnedCount = parseFloat(data.spawnedCount) || 0;
   const balanceCount = parseFloat(data.balanceCount) || 0;
@@ -80,7 +121,7 @@ const SpawningForm = ({
 
   // Options filtering: ONLY show tanks with population > 0 from CURRENT FARM
   const spawningTanksOptions = availableTanks
-    .filter(s => !farmId || s.farm_id === farmId)
+    .filter(s => s.section_type === 'SPAWNING' && (!farmId || s.farm_id === farmId))
     .flatMap(s => 
       s.tanks
         .filter((t: any) => (tankPopulations[t.id] || 0) > 0 || t.id === data.tankId) // Include current if selected
@@ -136,6 +177,33 @@ const SpawningForm = ({
               <p className="text-[9px] text-muted-foreground ml-2 italic">Only showing tanks that have received animals from mating activity.</p>
             )}
           </div>
+
+          {/* Batch Information Display */}
+          {(batchNumber || loadingBatch) && (
+            <div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-primary">
+                  <Database className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Linked Batch ID</span>
+                </div>
+                {loadingBatch && <Loader2 className="w-3 h-3 animate-spin text-primary/40" />}
+              </div>
+              <div className="mt-2 flex items-center justify-center">
+                <Input 
+                   value={batchNumber}
+                   onChange={(e) => {
+                     setBatchNumber(e.target.value);
+                     updateData({ batchNumber: e.target.value });
+                   }}
+                   placeholder="NO BATCH ID FOUND"
+                   className="h-9 rounded-xl font-black text-center bg-white/50 border-none text-primary uppercase text-xs"
+                />
+              </div>
+              <p className="text-[8px] text-muted-foreground text-center mt-2 italic px-4">
+                {batchNumber ? "Automatically carried from Sourcing & Mating." : "Batch ID not found. You can enter one manually."}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="h-px bg-muted-foreground/10 mx-4" />

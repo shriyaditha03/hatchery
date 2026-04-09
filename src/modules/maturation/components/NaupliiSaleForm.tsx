@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,7 @@ interface TankEntry {
   tankId: string;
   tankName: string;
   population: string;
+  batchNumber?: string;
 }
 
 interface NaupliiSaleFormProps {
@@ -46,6 +47,7 @@ const NaupliiSaleForm = ({
   const [bonusPercentage, setBonusPercentage] = useState<string>(data.bonusPercentage || '0');
   const [packsPacked, setPacksPacked] = useState<string>(data.packsPacked || '');
   const [inventory, setInventory] = useState<Record<string, number>>({});
+  const [tankBatches, setTankBatches] = useState<Record<string, string>>({});
   const [totalInventoryLoad, setTotalInventoryLoad] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -71,13 +73,17 @@ const NaupliiSaleForm = ({
       if (harvestError || saleError) throw (harvestError || saleError);
 
       const popMap: Record<string, number> = {};
+      const batchMap: Record<string, string> = {};
 
       // Add Populations from Harvests
       harvestLogs?.forEach(log => {
         const destinations = log.data?.destinations || [];
+        const logBatch = log.data?.batchNumber || '';
+        
         destinations.forEach((d: any) => {
           if (d.tankId) {
             popMap[d.tankId] = (popMap[d.tankId] || 0) + (parseFloat(d.population) || 0);
+            if (logBatch) batchMap[d.tankId] = logBatch; // Latest harvest batch wins
           }
         });
       });
@@ -93,6 +99,7 @@ const NaupliiSaleForm = ({
       });
 
       setInventory(popMap);
+      setTankBatches(batchMap);
       const total = Object.values(popMap).reduce((sum, val) => sum + val, 0);
       setTotalInventoryLoad(Math.round(total * 100) / 100);
     } catch (err) {
@@ -139,12 +146,12 @@ const NaupliiSaleForm = ({
         if (updates.tankId) {
           let foundName = '';
           availableTanks
-            .filter(sec => !farmId || sec.farm_id === farmId)
+            .filter(sec => sec.section_type === 'NAUPLII' && (!farmId || sec.farm_id === farmId))
             .forEach(sec => {
               const tank = sec.tanks.find((tk: any) => tk.id === updates.tankId);
               if (tank) foundName = `${sec.name} - ${tank.name}`;
             });
-          return { ...t, ...updates, tankName: foundName };
+          return { ...t, ...updates, tankName: foundName, batchNumber: tankBatches[updates.tankId] || '' };
         }
         return { ...t, ...updates };
       }
@@ -252,7 +259,7 @@ const NaupliiSaleForm = ({
                       </SelectTrigger>
                        <SelectContent>
                         {availableTanks
-                          .filter(s => !farmId || s.farm_id === farmId)
+                          .filter(s => s.section_type === 'NAUPLII' && (!farmId || s.farm_id === farmId))
                           .flatMap(s => s.tanks.map((t: any) => {
                             const avail = inventory[t.id] || 0;
                             return (
@@ -285,6 +292,14 @@ const NaupliiSaleForm = ({
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary/30 uppercase">MIL</span>
                     </div>
                   </div>
+
+                  {/* Batch Display */}
+                  {entry.batchNumber && (
+                    <div className="absolute top-3 left-6 flex items-center gap-1.5 px-2 py-0.5 bg-primary/5 border border-primary/10 rounded-full animate-fade-in">
+                       <Database className="w-2.5 h-2.5 text-primary" />
+                       <span className="text-[8px] font-black text-primary uppercase tracking-wider">Batch: {entry.batchNumber}</span>
+                    </div>
+                  )}
                 </div>
               </Card>
             ))}

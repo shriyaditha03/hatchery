@@ -603,63 +603,65 @@ const EditFarm = () => {
                         
                         return (
                         <div key={sectionId} className="space-y-4">
-                            <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md" onClick={() => toggleSection(sectionId)}>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                                        <Layers className="w-4 h-4" />
+                            <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col sm:flex-row sm:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sectionId)}>
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 flex-shrink-0 flex items-center justify-center text-primary">
+                                        <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <Input
-                                            className="h-9 font-bold bg-transparent border-none text-lg p-0 focus-visible:ring-0 w-auto"
-                                            value={section.name}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => {
-                                                const newSections = [...sections];
-                                                newSections[sIdx].name = e.target.value;
-                                                setSections(newSections);
-                                            }}
-                                        />
-                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                            {section.type === 'ANIMAL' ? (
-                                                <>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                className="h-7 sm:h-9 font-bold bg-transparent border-none text-base sm:text-lg p-0 focus-visible:ring-0 w-full max-w-[150px] sm:max-w-64 truncate"
+                                                value={section.name}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onChange={(e) => {
+                                                    const newSections = [...sections];
+                                                    newSections[sIdx].name = e.target.value;
+                                                    setSections(newSections);
+                                                }}
+                                            />
+                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                {section.type === 'ANIMAL' ? (
+                                                    <div className="flex gap-1.5 sm:gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => addTank(sIdx, 'MALE')}
+                                                            className="h-7 sm:h-8 px-2 border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[9px] sm:text-[10px] rounded-lg transition-all"
+                                                        >
+                                                            <Plus className="w-3 h-3 mr-1" /> MALE
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => addTank(sIdx, 'FEMALE')}
+                                                            className="h-7 sm:h-8 px-2 border border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-[9px] sm:text-[10px] rounded-lg transition-all"
+                                                        >
+                                                            <Plus className="w-3 h-3 mr-1" /> FEMALE
+                                                        </Button>
+                                                    </div>
+                                                ) : (
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        onClick={() => addTank(sIdx, 'MALE')}
-                                                        className="h-8 px-2 border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] rounded-lg transition-all"
+                                                        onClick={() => addTank(sIdx)}
+                                                        className="h-7 sm:h-8 px-2 border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 font-bold text-[9px] sm:text-[10px] rounded-lg transition-all"
                                                     >
-                                                        <Plus className="w-3 h-3 mr-1" /> MALE
+                                                        <Plus className="w-3 h-3 mr-1" /> TANK
                                                     </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => addTank(sIdx, 'FEMALE')}
-                                                        className="h-8 px-2 border border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-[10px] rounded-lg transition-all"
-                                                    >
-                                                        <Plus className="w-3 h-3 mr-1" /> FEMALE
-                                                    </Button>
-                                                </>
-                                            ) : (
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => addTank(sIdx)}
-                                                    className="h-8 px-2 border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 font-bold text-[10px] rounded-lg transition-all"
-                                                >
-                                                    <Plus className="w-3 h-3 mr-1" /> TANK
-                                                </Button>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto mt-1 sm:mt-0">
                                     <div onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2">
-                                            <Trash2 className="w-4 h-4 mr-1" /> Remove
+                                        <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2 text-[10px] sm:text-xs">
+                                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
                                         </Button>
                                     </div>
-                                    <div className="ml-1 text-muted-foreground">
-                                        {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                                    <div className="ml-1 text-muted-foreground flex-shrink-0">
+                                        {isCollapsed ? <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" /> : <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />}
                                     </div>
                                 </div>
                             </div>

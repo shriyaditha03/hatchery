@@ -721,15 +721,15 @@ const CreateFarm = () => {
                             
                             return (
                             <div key={sIdx} className="space-y-4">
-                                <div className="glass-card p-4 rounded-2xl border-l-4 border-l-primary flex items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md" onClick={() => toggleSection(sIdx)}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                                            <Layers className="w-5 h-5" />
+                                <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col sm:flex-row sm:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sIdx)}>
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 flex-shrink-0 flex items-center justify-center text-primary">
+                                            <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
                                         </div>
-                                        <div>
+                                        <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <Input
-                                                    className="h-6 font-bold border-none bg-transparent p-0 text-lg focus-visible:ring-0 w-64"
+                                                    className="h-7 sm:h-8 font-bold border-none bg-transparent p-0 text-base sm:text-lg focus-visible:ring-0 w-full max-w-[150px] sm:max-w-64 truncate"
                                                     value={section.name}
                                                     onClick={(e) => e.stopPropagation()}
                                                     onChange={(e) => {
@@ -739,62 +739,59 @@ const CreateFarm = () => {
                                                     }}
                                                 />
                                                 {collapsedSections.includes(sIdx) && (
-                                                    <div className="flex items-center gap-1.5 ml-2">
-                                                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                                                            {section.tanks.length} TANKS
+                                                    <div className="flex items-center gap-1.5 ml-1 flex-wrap">
+                                                        <span className="text-[9px] sm:text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
+                                                            {section.tanks.length}T
                                                         </span>
-                                                        <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                                            <Utensils className="w-3 h-3" /> {totalVolume.toLocaleString()} L
-                                                        </span>
-                                                        <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                                            <Waves className="w-3 h-3" /> {totalArea.toLocaleString()} m²
+                                                        <span className="text-[9px] sm:text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                            <Utensils className="w-2.5 h-2.5" /> {totalVolume.toLocaleString()}L
                                                         </span>
                                                     </div>
                                                 )}
                                             </div>
-                                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure {section.type === 'LRT' ? 'LRT' : section.type} Section</p>
+                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure {section.type === 'LRT' ? 'LRT' : section.type} Section</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div onClick={(e) => e.stopPropagation()} className="flex gap-2">
+                                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+                                        <div onClick={(e) => e.stopPropagation()} className="flex gap-2 items-center">
                                             {section.type === 'ANIMAL' ? (
-                                                <>
+                                                <div className="flex gap-1.5 sm:gap-2">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => addTank(sIdx, 'MALE')}
-                                                        className="h-9 px-3 border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-xs rounded-xl transition-all"
+                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
                                                     >
-                                                        <Plus className="w-4 h-4 mr-1" /> Add Male
+                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Male
                                                     </Button>
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => addTank(sIdx, 'FEMALE')}
-                                                        className="h-9 px-3 border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-600 hover:text-white font-bold text-xs rounded-xl transition-all"
+                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
                                                     >
-                                                        <Plus className="w-4 h-4 mr-1" /> Add Female
+                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Female
                                                     </Button>
-                                                </>
+                                                </div>
                                             ) : (
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
                                                     onClick={() => addTank(sIdx)}
-                                                    className="h-9 px-3 border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-xs rounded-xl transition-all"
+                                                    className="h-8 sm:h-9 px-3 border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-[10px] sm:text-xs rounded-xl transition-all"
                                                 >
-                                                    <Plus className="w-4 h-4 mr-1" /> Add Tank
+                                                    <Plus className="w-3.5 h-3.5 mr-1" /> Tank
                                                 </Button>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex items-center gap-1 bg-muted/40 p-0.5 sm:p-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
                                             <TankCountInput
                                                 count={section.tanks.length}
                                                 onChange={(val) => updateTankCount(sIdx, val)}
                                             />
                                         </div>
-                                        <div className="ml-1 text-muted-foreground">
-                                            {collapsedSections.includes(sIdx) ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                                        <div className="ml-1 text-muted-foreground flex-shrink-0">
+                                            {collapsedSections.includes(sIdx) ? <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" /> : <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />}
                                         </div>
                                     </div>
                                 </div>
