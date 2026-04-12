@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -38,6 +38,8 @@ interface AuthContextType {
   setActiveSectionId: (id: string | null) => void;
   activeModule: 'LRT' | 'MATURATION';
   setActiveModule: (module: 'LRT' | 'MATURATION') => void;
+  activeBroodstockBatchId: string | null;
+  setActiveBroodstockBatchId: (id: string | null) => void;
   supervisorMode: 'instruction' | 'activity';
   setSupervisorMode: (mode: 'instruction' | 'activity') => void;
 }
@@ -58,6 +60,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const saved = localStorage.getItem('activeDashboardModule');
     if (saved === 'LRT' || saved === 'MATURATION') return saved;
     return 'LRT';
+  });
+  const [activeBroodstockBatchId, setActiveBroodstockBatchIdState] = useState<string | null>(() => {
+    return localStorage.getItem('activeBroodstockBatchId');
   });
   const [supervisorMode, setSupervisorModeState] = useState<'instruction' | 'activity'>(() => {
     const saved = localStorage.getItem('activeSupervisorMode');
@@ -92,6 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setActiveFarmId(null);
         setActiveSectionId(null);
+        setActiveBroodstockBatchId(null);
         setLoading(false);
       }
     });
@@ -109,7 +115,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .maybeSingle(); // Use maybeSingle to avoid throw on empty
 
       if (profileError) throw profileError;
-      if (!profile) throw new Error("Profile row not found for this user.");
+      if (!profile) {
+        console.warn("AuthContext: Profile row not found for userId:", userId);
+        return { data: null }; // Return null data instead of throwing to avoid crash
+      }
 
       let hatcheryName = '';
       let location = '';
@@ -341,35 +350,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSession(null);
     setActiveFarmId(null);
     setActiveSectionIdState(null);
+    setActiveBroodstockBatchId(null);
   };
 
-  const setActiveFarmId = (id: string | null) => {
+  const setActiveFarmId = useCallback((id: string | null) => {
     setActiveFarmIdState(id);
     if (id) {
       localStorage.setItem('activeFarmId', id);
     } else {
       localStorage.removeItem('activeFarmId');
     }
-  };
+  }, []);
 
-  const setActiveSectionId = (id: string | null) => {
+  const setActiveSectionId = useCallback((id: string | null) => {
     setActiveSectionIdState(id);
     if (id) {
       localStorage.setItem('activeSectionId', id);
     } else {
       localStorage.removeItem('activeSectionId');
     }
-  };
+  }, []);
 
-  const setActiveModule = (module: 'LRT' | 'MATURATION') => {
+  const setActiveModule = useCallback((module: 'LRT' | 'MATURATION') => {
     setActiveModuleState(module);
     localStorage.setItem('activeDashboardModule', module);
-  };
+  }, []);
 
-  const setSupervisorMode = (mode: 'instruction' | 'activity') => {
+  const setActiveBroodstockBatchId = useCallback((id: string | null) => {
+    setActiveBroodstockBatchIdState(id);
+    if (id) {
+      localStorage.setItem('activeBroodstockBatchId', id);
+    } else {
+      localStorage.removeItem('activeBroodstockBatchId');
+    }
+  }, []);
+
+  const setSupervisorMode = useCallback((mode: 'instruction' | 'activity') => {
     setSupervisorModeState(mode);
     localStorage.setItem('activeSupervisorMode', mode);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ 
@@ -385,6 +404,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setActiveSectionId,
       activeModule,
       setActiveModule,
+      activeBroodstockBatchId,
+      setActiveBroodstockBatchId,
       supervisorMode,
       setSupervisorMode
     }}>

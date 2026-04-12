@@ -10,21 +10,19 @@ import { cn } from '@/lib/utils';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 
-interface HarvestEntry {
+interface HarvestTankEntry {
   id: string;
   tankId: string;
   tankName: string;
-  population: string;
+  spawnedCount: string;
+  harvestedMil: string;
 }
 
-interface HarvestGroup {
+interface NaupliiDestEntry {
   id: string;
-  sourceTankId: string;
-  sourceTankName: string;
-  eggCountMillions?: number;
-  batchNumber?: string;
-  harvestedPopulation: string;
-  destinations: HarvestEntry[];
+  tankId: string;
+  tankName: string;
+  shiftedMil: string;
 }
 
 interface NaupliiHarvestFormProps {
@@ -37,6 +35,7 @@ interface NaupliiHarvestFormProps {
   availableTanks: any[];
   activeSectionId?: string;
   farmId?: string;
+  activeBroodstockBatchId?: string | null;
 }
 
 const NaupliiHarvestForm = ({
@@ -49,497 +48,313 @@ const NaupliiHarvestForm = ({
   availableTanks,
   activeSectionId,
   farmId,
+  activeBroodstockBatchId,
 }: NaupliiHarvestFormProps) => {
   // Use grouped state internally if possible, or derive from flat arrays on mount
-  const [groups, setGroups] = useState<HarvestGroup[]>(() => {
-    if (data.harvestGroups) return data.harvestGroups;
-    
-    // Fallback: derive from flat sources/destinations if they exist (for backwards compatibility/editing)
-    if (data.sources && data.sources.length > 0) {
-      return data.sources.map((s: any) => ({
-        id: s.id,
-        sourceTankId: s.tankId,
-        sourceTankName: s.tankName,
-        harvestedPopulation: s.population,
-        destinations: data.destinations.filter((d: any) => d.sourceId === s.id)
-      }));
-    }
-    return [];
-  });
+  const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
+  const [harvestTanks, setHarvestTanks] = useState<HarvestTankEntry[]>(data.harvestTanks || []);
+  const [naupliiDestinations, setNaupliiDestinations] = useState<NaupliiDestEntry[]>(data.naupliiDestinations || []);
+  const [loadingBatches, setLoadingBatches] = useState(false);
 
-  const [eggCountRecords, setEggCountRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const updateData = (updatedGroups: HarvestGroup[]) => {
-    // Map back to flat arrays for RecordActivity compatibility
-    const sources = updatedGroups.map(g => ({
-      id: g.id,
-      tankId: g.sourceTankId,
-      tankName: g.sourceTankName,
-      population: g.harvestedPopulation
-    }));
-
-    const destinations = updatedGroups.flatMap(g => 
-      g.destinations.map(d => ({ ...d, sourceId: g.id }))
-    );
-
-    const totalHarvested = updatedGroups.reduce((sum, g) => sum + (parseFloat(g.harvestedPopulation) || 0), 0);
-    const totalDistributed = destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
-    
-    const summary = {
-      totalHarvested: Math.round(totalHarvested * 100) / 100,
-      totalDistributed: Math.round(totalDistributed * 100) / 100,
-      balance: Math.round((totalHarvested - totalDistributed) * 100) / 100
-    };
-
-    onDataChange({
-      ...data,
-      harvestGroups: updatedGroups,
-      sources,
-      destinations,
-      summary
-    });
+  const updateData = (updates: any) => {
+    onDataChange({ ...data, ...updates });
   };
 
-  // Sync from Egg Count
-  const fetchEggCountData = async (forceSync = false) => {
-    if (!farmId) return;
-    if (groups.length > 0 && !forceSync) return;
-
-    setLoading(true);
-    try {
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: logs, error } = await supabase
-        .from('activity_logs')
-        .select('*')
-        .eq('farm_id', farmId)
-        .eq('activity_type', 'Egg Count')
-        .gte('created_at', twentyFourHoursAgo)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (logs && logs.length > 0) {
-        // Flatten entries from all relevant logs
-        const allEntries: any[] = [];
-        const seenTanks = new Set();
-
-        logs.forEach(log => {
-          if (log.data?.entries) {
-            log.data.entries.forEach((entry: any) => {
-              if (entry.tankId && !seenTanks.has(entry.tankId)) {
-                allEntries.push(entry);
-                seenTanks.add(entry.tankId);
-              }
-            });
-          }
-        });
-
-        const initialGroups: HarvestGroup[] = allEntries.map(entry => {
-          const eggsVal = entry.totalEggsMillions || '0';
-          return {
-            id: Math.random().toString(36).substr(2, 9),
-            sourceTankId: entry.tankId,
-            sourceTankName: entry.tankName,
-            eggCountMillions: parseFloat(eggsVal) || 0,
-            batchNumber: entry.batchNumber || '',
-            harvestedPopulation: eggsVal, // Auto-populate with Egg Count as default
-            destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: eggsVal }]
-          };
-        });
-
-        setEggCountRecords(allEntries);
-        
-        if (initialGroups.length > 0) {
-          setGroups(initialGroups);
-          updateData(initialGroups);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching egg count data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Fetch Recent Egg Count Batches for this farm
   useEffect(() => {
-    fetchEggCountData();
+    const fetchBatches = async () => {
+      if (!farmId) return;
+      setLoadingBatches(true);
+      try {
+        const { data: logs, error } = await supabase
+          .from('activity_logs')
+          .select('*')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Egg Count')
+          .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (error) throw error;
+        setBatchLogs(logs || []);
+      } catch (err) {
+        console.error('Error fetching egg count batches:', err);
+      } finally {
+        setLoadingBatches(false);
+      }
+    };
+    fetchBatches();
   }, [farmId]);
 
-  const addGroup = () => {
-    const newGroup: HarvestGroup = {
-      id: Math.random().toString(36).substr(2, 9),
-      sourceTankId: '',
-      sourceTankName: '',
-      batchNumber: '',
-      harvestedPopulation: '',
-      destinations: [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]
-    };
-    const newGroups = [...groups, newGroup];
-    setGroups(newGroups);
-    updateData(newGroups);
+  // When selectedBatchId changes, populate tank lists from the Egg Count log
+  const handleBatchSelect = (batchId: string) => {
+    setSelectedBatchId(batchId);
+    const log = batchLogs.find(l => l.data?.selectedBatchId === batchId);
+    if (log && log.data) {
+      // 1. Harvest Tanks (Tanks from Egg Count)
+      const eggEntries = log.data.entries || [];
+      const newHarvestTanks = eggEntries.map((e: any) => ({
+        id: e.id,
+        tankId: e.tankId,
+        tankName: e.tankName,
+        spawnedCount: e.spawnedCount,
+        harvestedMil: ''
+      }));
+      setHarvestTanks(newHarvestTanks);
+
+      // 2. Initial Destination (Add one empty row)
+      const initialDests = [{ id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', shiftedMil: '' }];
+      setNaupliiDestinations(initialDests);
+      
+      updateData({ 
+        selectedBatchId: batchId,
+        harvestTanks: newHarvestTanks,
+        naupliiDestinations: initialDests
+      });
+    }
   };
 
-  const removeGroup = (id: string) => {
-    const newGroups = groups.filter(g => g.id !== id);
-    setGroups(newGroups);
-    updateData(newGroups);
+  const handleHarvestChange = (id: string, updates: any) => {
+    const newList = harvestTanks.map(t => t.id === id ? { ...t, ...updates } : t);
+    setHarvestTanks(newList);
+    updateData({ harvestTanks: newList });
   };
 
-  const updateGroup = (id: string, updates: Partial<HarvestGroup>) => {
-    const newGroups = groups.map(g => {
-      if (g.id === id) {
-        if (updates.sourceTankId) {
-          let foundName = '';
-          let foundBatch = '';
-          let foundEggs = 0;
-          
-          // Check Egg Count records first
-          const record = eggCountRecords.find(r => r.tankId === updates.sourceTankId);
-          if (record) {
-             foundName = record.tankName;
-             foundBatch = record.batchNumber || '';
-             foundEggs = parseFloat(record.totalEggsMillions) || 0;
-          } else {
-            availableTanks
-              .filter(sec => !farmId || sec.farm_id === farmId)
-              .forEach(sec => {
-                const t = sec.tanks.find((t:any) => t.id === updates.sourceTankId);
-                if (t) foundName = `${sec.name} - ${t.name}`;
-              });
+  const handleDestChange = (id: string, updates: any) => {
+    const newList = naupliiDestinations.map(d => {
+       if (d.id === id) {
+          if (updates.tankId) {
+             let tName = 'Unknown Tank';
+             availableTanks.forEach(s => {
+                const t = s.tanks.find((tk: any) => tk.id === updates.tankId);
+                if (t) tName = `${s.name} - ${t.name}`;
+             });
+             return { ...d, ...updates, tankName: tName };
           }
-          return { ...g, ...updates, sourceTankName: foundName, batchNumber: foundBatch, eggCountMillions: foundEggs };
-        }
-        return { ...g, ...updates };
-      }
-      return g;
+          return { ...d, ...updates };
+       }
+       return d;
     });
-    setGroups(newGroups);
-    updateData(newGroups);
+    setNaupliiDestinations(newList);
+    updateData({ naupliiDestinations: newList });
   };
 
-  const addDestination = (groupId: string) => {
-    const newGroups = groups.map(g => {
-      if (g.id === groupId) {
-        return {
-          ...g,
-          destinations: [...g.destinations, { id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', population: '' }]
-        };
-      }
-      return g;
-    });
-    setGroups(newGroups);
-    updateData(newGroups);
+  const addDestination = () => {
+    const newDest = { id: Math.random().toString(36).substr(2, 9), tankId: '', tankName: '', shiftedMil: '' };
+    const newList = [...naupliiDestinations, newDest];
+    setNaupliiDestinations(newList);
+    updateData({ naupliiDestinations: newList });
   };
 
-  const updateDestination = (groupId: string, destId: string, updates: Partial<HarvestEntry>) => {
-    const newGroups = groups.map(g => {
-      if (g.id === groupId) {
-        return {
-          ...g,
-          destinations: g.destinations.map(d => {
-            if (d.id === destId) {
-              if (updates.tankId) {
-                let foundName = '';
-                availableTanks
-                  .filter(sec => sec.section_type === 'NAUPLII' && (!farmId || sec.farm_id === farmId))
-                  .forEach(sec => {
-                    const t = sec.tanks.find((t:any) => t.id === updates.tankId);
-                    if (t) foundName = `${sec.name} - ${t.name}`;
-                  });
-                return { ...d, ...updates, tankName: foundName };
-              }
-              return { ...d, ...updates };
-            }
-            return d;
-          })
-        };
-      }
-      return g;
-    });
-    setGroups(newGroups);
-    updateData(newGroups);
+  const removeDestination = (id: string) => {
+    const newList = naupliiDestinations.filter(d => d.id !== id);
+    setNaupliiDestinations(newList);
+    updateData({ naupliiDestinations: newList });
   };
 
-  const removeDestination = (groupId: string, destId: string) => {
-    const newGroups = groups.map(g => {
-      if (g.id === groupId && g.destinations.length > 1) {
-        return { ...g, destinations: g.destinations.filter(d => d.id !== destId) };
-      }
-      return g;
-    });
-    setGroups(newGroups);
-    updateData(newGroups);
-  };
-
-  const isGroupBalanced = (group: HarvestGroup) => {
-    const harvested = parseFloat(group.harvestedPopulation) || 0;
-    const distributed = group.destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
-    return Math.abs(harvested - distributed) < 0.001;
-  };
-
-  const getGroupBalance = (group: HarvestGroup) => {
-    const harvested = parseFloat(group.harvestedPopulation) || 0;
-    const distributed = group.destinations.reduce((sum, d) => sum + (parseFloat(d.population) || 0), 0);
-    return harvested - distributed;
-  };
-
-  const totalHarvested = data.summary?.totalHarvested || 0;
-  const isBalanced = Math.abs(data.summary?.balance || 0) < 0.001 && totalHarvested > 0;
+  const totalHarvestedMil = harvestTanks.reduce((sum, t) => sum + (parseFloat(t.harvestedMil) || 0), 0);
+  const totalShiftedMil = naupliiDestinations.reduce((sum, d) => sum + (parseFloat(d.shiftedMil) || 0), 0);
+  const totalSpawnedFemale = harvestTanks.reduce((sum, t) => sum + (parseFloat(t.spawnedCount) || 0), 0);
+  const isBalanced = Math.abs(totalHarvestedMil - totalShiftedMil) < 0.001 && totalHarvestedMil > 0;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
+      {activeBroodstockBatchId && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
+           <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-2 rounded-xl text-red-600">
+                 <Database className="w-5 h-5" />
+              </div>
+              <div>
+                 <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Active Broodstock Batch</p>
+                 <p className="text-sm font-black text-red-900">{activeBroodstockBatchId}</p>
+              </div>
+           </div>
+           <div className="text-right">
+              <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Context</p>
+              <p className="text-[10px] font-bold text-red-600 italic">Maturation Module</p>
+           </div>
+        </div>
+      )}
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
-        {/* Consolidated Summary */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1">
-            <Card className="p-4 bg-emerald-50 border-emerald-100 flex flex-col justify-center shadow-sm relative overflow-hidden h-24">
-              <div className="absolute top-0 right-0 p-3 opacity-10">
-                <Calculator className="w-12 h-12 text-emerald-600" />
-              </div>
-              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Total Nauplii Harvested</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-emerald-950">{totalHarvested.toLocaleString()}</span>
-                <span className="text-sm font-bold text-emerald-600/60 uppercase">Millions</span>
-              </div>
-            </Card>
+        {/* Batch Selection */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 bg-indigo-100 rounded-xl">
+              <Database className="w-4 h-4 text-indigo-600" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Select Batch from Egg Count</h3>
           </div>
           
-          {totalHarvested > 0 && (
-            <div className={cn(
-              "p-4 rounded-2xl border flex flex-col items-center justify-center min-w-[140px] h-24 transition-all animate-in zoom-in-95",
-              isBalanced ? "bg-blue-50 border-blue-100" : "bg-rose-50 border-rose-100"
-            )}>
-              <p className={cn(
-                "text-[10px] font-black uppercase tracking-widest mb-1",
-                isBalanced ? "text-blue-700" : "text-rose-700"
-              )}>
-                {isBalanced ? "Fully Distributed" : "Total Balance"}
-              </p>
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-2xl font-black",
-                  isBalanced ? "text-blue-900" : "text-rose-900"
-                )}>
-                  {Math.abs(data.summary?.balance || 0).toLocaleString()}
-                </span>
-                {isBalanced ? <CheckCircle2 className="w-5 h-5 text-blue-500" /> : <AlertCircle className="w-5 h-5 text-rose-500" />}
-              </div>
-              {!isBalanced && (
-                 <p className="text-[8px] font-bold text-rose-600/60 uppercase mt-1">Pending Sync</p>
-              )}
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
+            <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+               <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900">
+                 <SelectValue placeholder="Search Batch ID" />
+               </SelectTrigger>
+               <SelectContent>
+                 {loadingBatches ? (
+                   <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                 ) : batchLogs.length === 0 ? (
+                   <div className="p-4 text-center text-xs text-muted-foreground">No recent Egg Count batches found</div>
+                 ) : (
+                   batchLogs.map(log => (
+                     <SelectItem key={log.id} value={log.data?.selectedBatchId}>
+                       <span className="font-bold">{log.data?.selectedBatchId}</span>
+                       <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
+                     </SelectItem>
+                   ))
+                 )}
+               </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will load Spawning tanks recorded in Egg Count.</p>
+          </div>
         </div>
 
+        <div className="h-px bg-muted-foreground/10 mx-4" />
+
+        {/* Step 1: Nauplii Harvested */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-primary/10 rounded-xl text-primary">
-                <ClipboardList className="w-4 h-4" />
-              </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Harvest Groups</h3>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 bg-emerald-100 rounded-xl">
+              <ClipboardList className="w-4 h-4 text-emerald-600" />
             </div>
-            <div className="flex items-center gap-2">
-               <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => fetchEggCountData(true)} 
-                className="rounded-xl h-9 font-bold text-[10px] uppercase gap-1.5 text-primary hover:bg-primary/5"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Sync Eggs
-              </Button>
-              <Button variant="outline" size="sm" onClick={addGroup} className="rounded-xl border-dashed h-9 font-bold text-[10px] uppercase gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Add Manual Group
-              </Button>
-            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider">1. Nauplii Harvested</h3>
+          </div>
+          
+          <div className="space-y-3">
+             {harvestTanks.map((tank) => (
+               <Card key={tank.id} className="p-4 bg-muted/5 border-none rounded-2xl overflow-hidden group">
+                  <div className="flex items-center justify-between gap-4">
+                     <div className="flex-1">
+                        <p className="text-xs font-black text-foreground">{tank.tankName}</p>
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Spawning Tank ({tank.spawnedCount} F)</p>
+                     </div>
+                     <div className="w-44">
+                        <Label className="text-[8px] font-black uppercase text-emerald-600 block mb-1 ml-1 text-center">Harvested (mil) *</Label>
+                        <div className="relative">
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            value={tank.harvestedMil} 
+                            onChange={e => handleHarvestChange(tank.id, { harvestedMil: e.target.value })} 
+                            className="h-10 rounded-xl font-black bg-white border-none shadow-sm text-center pr-8 text-emerald-950" 
+                            placeholder="0.0"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-emerald-400">MIL</span>
+                        </div>
+                     </div>
+                  </div>
+               </Card>
+             ))}
+             {harvestTanks.length === 0 && (
+               <div className="p-12 text-center bg-muted/5 border border-dashed rounded-[2rem] text-muted-foreground text-xs font-bold uppercase tracking-widest opacity-40">
+                  Select a batch to load harvest tanks
+               </div>
+             )}
           </div>
 
-          {loading && groups.length === 0 ? (
-             <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-50">Checking for egg count records...</p>
+          <Card className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center justify-between">
+              <div>
+                 <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest block leading-tight">Total Nauplii Harvested</span>
+                 <span className="text-[8px] font-bold text-muted-foreground italic">(Millions)</span>
+              </div>
+              <span className="text-3xl font-black text-emerald-950 leading-none">{totalHarvestedMil.toLocaleString()}</span>
+          </Card>
+        </div>
+
+        <div className="h-px bg-muted-foreground/10 mx-4" />
+
+        {/* Step 2: Shifted To */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 bg-blue-100 rounded-xl">
+              <ArrowUpRight className="w-4 h-4 text-blue-600" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider">2. Shifted To (Nauplii Tanks)</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             {naupliiDestinations.map((dest) => (
+               <Card key={dest.id} className="p-5 bg-blue-50/30 border-blue-100/50 rounded-[2rem] space-y-4 relative group">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => removeDestination(dest.id)}
+                    className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-rose-50 text-rose-600 opacity-0 group-hover:opacity-100 transition-all border border-rose-100 shadow-sm z-10"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                  
+                  <div className="space-y-1.5">
+                     <Label className="text-[9px] font-black uppercase text-blue-700 ml-1 leading-none tracking-widest">Nauplii Tank ID</Label>
+                     <Select value={dest.tankId} onValueChange={val => handleDestChange(dest.id, { tankId: val })}>
+                        <SelectTrigger className="h-10 rounded-xl border-blue-50 bg-white font-bold text-blue-950 text-xs">
+                           <SelectValue placeholder="Select Tank" />
+                        </SelectTrigger>
+                        <SelectContent>
+                           {availableTanks
+                            .filter(s => s.section_type === 'NAUPLII' && (!farmId || s.farm_id === farmId))
+                            .flatMap(s => s.tanks.map((t:any) => (
+                              <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
+                            )))}
+                        </SelectContent>
+                     </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                     <Label className="text-[9px] font-black uppercase text-blue-700 ml-1 leading-none tracking-widest">Amount Shifted (mil)</Label>
+                     <div className="relative">
+                        <Input 
+                           type="number" 
+                           step="0.01"
+                           value={dest.shiftedMil} 
+                           onChange={e => handleDestChange(dest.id, { shiftedMil: e.target.value })} 
+                           className="h-11 rounded-xl font-black bg-white border-blue-50 text-lg text-blue-950 pr-12 focus:border-blue-500 shadow-sm" 
+                           placeholder="0.0"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400 opacity-60">MIL</span>
+                     </div>
+                  </div>
+               </Card>
+             ))}
+             
+             <Button 
+                variant="outline" 
+                onClick={addDestination}
+                className="h-auto py-8 rounded-[2rem] border-dashed border-blue-200 bg-blue-50/10 hover:bg-blue-50 text-blue-600 hover:text-blue-700 font-bold text-xs uppercase flex flex-col gap-3 transition-all"
+             >
+                <Plus className="w-6 h-6" />
+                Add Nauplii Tank
+             </Button>
+          </div>
+
+          <div className={cn(
+             "p-6 rounded-[2.5rem] border-2 transition-all duration-500 shadow-lg",
+             isBalanced ? "bg-blue-600 border-blue-400 text-white" : "bg-rose-50 border-rose-100 text-rose-900"
+          )}>
+             <div className="flex items-center justify-between">
+                <div>
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Total Allocation Status</p>
+                   <p className="text-3xl font-black mt-1">{totalShiftedMil.toLocaleString()}<span className="text-sm font-bold opacity-50 ml-2">MIL SHIFTED</span></p>
+                </div>
+                {isBalanced ? (
+                   <div className="flex flex-col items-end gap-1">
+                      <div className="p-3 bg-white/20 rounded-full animate-pulse">
+                         <CheckCircle2 className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-widest">Fully Distributed</span>
+                   </div>
+                ) : (
+                   <div className="flex flex-col items-end gap-1">
+                      <p className="text-xl font-black text-rose-600">-{Math.abs(totalHarvestedMil - totalShiftedMil).toFixed(2)}M</p>
+                      <span className="text-[9px] font-black uppercase text-rose-400 tracking-widest">Pending Allocation</span>
+                   </div>
+                )}
              </div>
-          ) : groups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-4">
-                <div className="p-3 bg-muted/10 rounded-full">
-                   <AlertCircle className="w-5 h-5 opacity-40" />
-                </div>
-                <div className="text-center">
-                   <p className="text-xs font-bold uppercase tracking-wider">No Egg Records Found</p>
-                   <p className="text-[10px] opacity-60 mt-1">Please record an Egg Count first or add a group manually.</p>
-                </div>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {groups.map((group) => {
-                const balance = getGroupBalance(group);
-                const isOver = balance < -0.001;
-                
-                return (
-                  <Card key={group.id} className="p-0 bg-muted/5 border shadow-sm rounded-[2.5rem] overflow-hidden relative group/item">
-                    {/* Group Header: Field 1 & 2 */}
-                    <div className="p-6 bg-white border-b">
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                        {/* Field 1: Source */}
-                        <div className="flex-1 space-y-3">
-                          <div className="flex items-center gap-3">
-                             <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none">Spawning Tank Source</Label>
-                             {group.eggCountMillions !== undefined && (
-                                <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100">
-                                   Eggs Recorded: {group.eggCountMillions}M
-                                </span>
-                             )}
-                             {group.batchNumber && (
-                                <span className="text-[9px] font-black bg-primary/5 text-primary px-2 py-0.5 rounded-full border border-primary/10 flex items-center gap-1">
-                                   <Database className="w-2.5 h-2.5" />
-                                   Batch: {group.batchNumber}
-                                </span>
-                             )}
-                          </div>
-                          {group.sourceTankId && group.sourceTankName ? (
-                             <div className="flex items-center gap-4 pl-9">
-                                <p className="text-2xl font-black text-foreground">{group.sourceTankName}</p>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  onClick={() => removeGroup(group.id)}
-                                  className="h-8 w-8 rounded-full bg-rose-50 text-rose-600 opacity-0 group-hover/item:opacity-100 transition-all border border-rose-100 shadow-sm"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                             </div>
-                          ) : (
-                            <div className="flex items-center gap-2 pl-9">
-                              <Select value={group.sourceTankId} onValueChange={val => updateGroup(group.id, { sourceTankId: val })}>
-                                <SelectTrigger className="h-12 rounded-2xl border-emerald-100 bg-white text-base font-bold w-full sm:w-72 shadow-sm">
-                                  <SelectValue placeholder="Select Spawning Tank" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {eggCountRecords.length === 0 ? (
-                                     <div className="p-4 text-center text-[10px] text-muted-foreground italic">No egg records available</div>
-                                  ) : (
-                                    eggCountRecords.map(r => (
-                                      <SelectItem key={r.tankId} value={r.tankId}>
-                                        <div className="flex items-center justify-between w-full gap-8">
-                                           <span>{r.tankName}</span>
-                                           <span className="text-[9px] font-black opacity-40">({r.totalEggsMillions}M eggs)</span>
-                                        </div>
-                                      </SelectItem>
-                                    ))
-                                  )}
-                                </SelectContent>
-                              </Select>
-                              <Button variant="ghost" size="icon" onClick={() => removeGroup(group.id)} className="text-rose-600 hover:bg-rose-50 rounded-xl">
-                                <Trash2 className="w-5 h-5" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Field 2: Output */}
-                        <div className="space-y-3 min-w-[240px]">
-                           <div className="flex items-center gap-3">
-                              <Label className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Nauplii Harvested from this Tank *</Label>
-                           </div>
-                           <div className="relative pl-9">
-                              <Input 
-                                type="number" 
-                                step="0.01"
-                                value={group.harvestedPopulation} 
-                                onChange={e => updateGroup(group.id, { harvestedPopulation: e.target.value })} 
-                                className="h-14 rounded-2xl font-black bg-blue-50/30 border-blue-100 text-xl text-blue-950 focus:border-blue-500 shadow-sm pr-14" 
-                                placeholder="0.0"
-                              />
-                              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
-                                 <span className="text-[10px] font-black text-blue-900">MILL</span>
-                                 <span className="text-[8px] font-bold text-blue-600 uppercase tracking-tighter">Nauplii</span>
-                              </div>
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Destinations: Distribute to Nauplii Tanks */}
-                    <div className="p-6 space-y-4 bg-muted/5">
-                      <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2">
-                           <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />
-                           <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Distribute to Nauplii Tanks</h4>
-                        </div>
-                        {balance !== 0 && (
-                           <div className={cn(
-                              "text-[9px] font-black px-3 py-1 rounded-full border flex items-center gap-1.5 animate-pulse",
-                              isOver ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-blue-50 border-blue-200 text-blue-700"
-                           )}>
-                              {isOver ? <AlertCircle className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
-                              {isOver ? "Exceeds Harvested!" : `Unallocated: ${balance.toFixed(2)}M`}
-                           </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {group.destinations.map((dest) => (
-                          <Card key={dest.id} className="p-4 bg-white border-muted-foreground/10 rounded-2xl relative group/dest">
-                             <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => removeDestination(group.id, dest.id)}
-                              className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-rose-50 text-rose-600 opacity-0 group-dest:opacity-100 transition-all border border-rose-100 z-10"
-                             >
-                              <Trash2 className="w-2.5 h-2.5" />
-                             </Button>
-                             <div className="space-y-3">
-                                <div className="space-y-1">
-                                   <Label className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Nauplii Tank</Label>
-                                   <Select value={dest.tankId} onValueChange={val => updateDestination(group.id, dest.id, { tankId: val })}>
-                                      <SelectTrigger className="h-9 rounded-xl border-blue-50 bg-blue-50/20 text-xs font-bold">
-                                         <SelectValue placeholder="Select Destination" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                         {availableTanks
-                                          .filter(s => s.section_type === 'NAUPLII' && (!farmId || s.farm_id === farmId))
-                                          .flatMap(s => s.tanks.map((t:any) => (
-                                            <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
-                                          )))}
-                                      </SelectContent>
-                                   </Select>
-                                </div>
-                                <div className="space-y-1">
-                                   <Label className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Population (mil)</Label>
-                                   <div className="relative">
-                                      <Input 
-                                         type="number" 
-                                         value={dest.population} 
-                                         onChange={e => updateDestination(group.id, dest.id, { population: e.target.value })} 
-                                         className="h-9 rounded-xl font-black bg-muted/20 border-hidden text-sm text-blue-900 pr-10" 
-                                         placeholder="0.0"
-                                      />
-                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-300">M</span>
-                                   </div>
-                                </div>
-                             </div>
-                          </Card>
-                        ))}
-                        
-                        <Button 
-                          variant="outline" 
-                          onClick={() => addDestination(group.id)}
-                          className="h-auto py-4 rounded-2xl border-dashed border-blue-200 bg-blue-50/10 hover:bg-blue-50 text-blue-600 hover:text-blue-700 font-bold text-[10px] uppercase flex flex-col gap-2"
-                        >
-                           <Plus className="w-5 h-5" />
-                           Add Nauplii Tank
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
 
         <div className="space-y-1.5 pt-4 border-t border-dashed">

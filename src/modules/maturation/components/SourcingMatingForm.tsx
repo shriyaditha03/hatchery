@@ -23,6 +23,7 @@ interface SourcingMatingFormProps {
   tankPopulations?: Record<string, number>;
   isPlanningMode?: boolean;
   farmId?: string;
+  activeBroodstockBatchId?: string | null;
 }
 
 const SourcingMatingForm = ({
@@ -38,6 +39,7 @@ const SourcingMatingForm = ({
   tankPopulations = {},
   isPlanningMode = false,
   farmId,
+  activeBroodstockBatchId,
 }: SourcingMatingFormProps) => {
   // Field 1: Source Tanks (Females)
   const [sourceTanks, setSourceTanks] = useState<any[]>(data.sourceTanks || []);
@@ -54,35 +56,58 @@ const SourcingMatingForm = ({
   // Auto-fill tracking state
   const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
 
-  const generateBatchId = () => {
+  const generateBatchId = (totalSourcedCount: number = 0) => {
     const dateStr = getTodayStr().replace(/-/g, '').slice(2); // YYMMDD
-    const farmPrefix = farmId ? farmId.slice(0, 4).toUpperCase() : 'BN';
+    const countStr = totalSourcedCount.toString().padStart(2, '0');
     const serial = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-    return `BATCH-${farmPrefix}-${dateStr}-${serial}`;
+    return `${dateStr}-${countStr}-${serial}`;
   };
 
-  // Auto-generate Batch ID if not present
+  // Auto-generate Batch ID if not present or if totalSourced changes significantly
   useEffect(() => {
-    if (!batchNumber && !isBatchIdManuallyEdited) {
-      const newId = generateBatchId();
-      setBatchNumber(newId);
-      onDataChange({ ...data, batchNumber: newId });
+    const totalSourced = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
+    if (!isBatchIdManuallyEdited) {
+      const newId = generateBatchId(totalSourced);
+      if (newId !== batchNumber) {
+        setBatchNumber(newId);
+        updateData({ batchNumber: newId });
+      }
     }
-  }, [batchNumber, farmId]);
+  }, [sourceTanks, farmId]);
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates, batchNumber: updates.batchNumber !== undefined ? updates.batchNumber : batchNumber });
   };
 
-  // 1. Automatically populate Field 1 with all FEMALE tanks from all ANIMAL sections for the SELECTED FARM
+  // 1. Automatically populate Field 1 with female tanks from the active Broodstock Batch
   useEffect(() => {
-    if (availableTanks.length > 0 && sourceTanks.length === 0) {
-      const animalSections = availableTanks.filter(s => s.section_type === 'ANIMAL' && (!farmId || s.farm_id === farmId));
-      
+    if (availableTanks.length > 0 && sourceTanks.length === 0 && activeBroodstockBatchId) {
+      fetchSourceTanksFromBatch();
+    }
+  }, [availableTanks, activeBroodstockBatchId, farmId]);
+
+  const fetchSourceTanksFromBatch = async () => {
+    try {
+      // Find the Stocking log for this batch
+      const { data: logs, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('activity_type', 'Stocking')
+        .eq('farm_id', farmId)
+        .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
+        .single();
+
+      if (error) throw error;
+
+      // The stocking record contains 'allocations' (tankId -> count)
+      const allocations = logs.data?.allocations || {};
+      const stockedTankIds = Object.keys(allocations);
+
       const initialSources: any[] = [];
-      animalSections.forEach(section => {
+      
+      availableTanks.forEach(section => {
         section.tanks
-          .filter((t: any) => t.gender === 'FEMALE')
+          .filter((t: any) => t.gender === 'FEMALE' && stockedTankIds.includes(t.id))
           .forEach((t: any) => {
             const availableCount = tankPopulations[t.id] || 0;
             initialSources.push({
@@ -91,17 +116,22 @@ const SourcingMatingForm = ({
               tankName: t.name,
               sectionName: section.name,
               available: availableCount,
-              femaleCount: t.id === activeTankId ? (availableCount > 0 ? availableCount.toString() : '0') : ''
+              femaleCount: '' // User will enter how many are RIPE
             });
           });
       });
 
       if (initialSources.length > 0) {
         setSourceTanks(initialSources);
-        const initialTotal = initialSources.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
-        updateData({ sourceTanks: initialSources, totalSourced: initialTotal });
+        updateData({ sourceTanks: initialSources });
       }
-    } else if (sourceTanks.length > 0) {
+    } catch (err) {
+      console.error('Error fetching source tanks from batch:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (sourceTanks.length > 0) {
       // Sync available counts if they change
       const updatedSources = sourceTanks.map(s => ({
         ...s,
@@ -111,7 +141,7 @@ const SourcingMatingForm = ({
         setSourceTanks(updatedSources);
       }
     }
-  }, [availableTanks, tankPopulations, farmId]);
+  }, [tankPopulations]);
 
   const handleSourceChange = (id: string, sourcedCount: string) => {
     const tank = sourceTanks.find(s => s.id === id);
@@ -258,7 +288,15 @@ const SourcingMatingForm = ({
       }
     }
     // b) Balance -> Return
-    if (returnDestinations.length === 1 && totalBalanceNonMated > 0) {
+    if (returnDestinations.length === 0 && totalBalanceNonMated > 0) {
+      // Find the primary source tank to return to
+      const mainSource = sourceTanks.find(s => (parseFloat(s.femaleCount) || 0) > 0);
+      if (mainSource) {
+        const newList = [{ id: Date.now().toString(), tankId: mainSource.tankId, count: totalBalanceNonMated.toString() }];
+        setReturnDestinations(newList);
+        onDataChange({ ...data, returnDestinations: newList });
+      }
+    } else if (returnDestinations.length === 1 && totalBalanceNonMated > 0) {
       const dest = returnDestinations[0];
       const fieldKey = `return_dest_${dest.id}`;
       if (!editedFields[fieldKey] && dest.count !== totalBalanceNonMated.toString()) {
@@ -267,7 +305,7 @@ const SourcingMatingForm = ({
         onDataChange({ ...data, returnDestinations: newList });
       }
     }
-  }, [totalFemalesMatedAcrossTanks, totalBalanceNonMated, matedDestinations.length, returnDestinations.length]);
+  }, [totalFemalesMatedAcrossTanks, totalBalanceNonMated, matedDestinations.length, returnDestinations.length, sourceTanks]);
 
   // Original summary sync
   useEffect(() => {
@@ -310,6 +348,23 @@ const SourcingMatingForm = ({
 
   return (
     <div className="space-y-6 animate-fade-in-up">
+      {activeBroodstockBatchId && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
+           <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-2 rounded-xl text-red-600">
+                 <Database className="w-5 h-5" />
+              </div>
+              <div>
+                 <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Active Broodstock Batch</p>
+                 <p className="text-sm font-black text-red-900">{activeBroodstockBatchId}</p>
+              </div>
+           </div>
+           <div className="text-right">
+              <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Context</p>
+              <p className="text-[10px] font-bold text-red-600 italic">Maturation Module</p>
+           </div>
+        </div>
+      )}
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
         {/* Batch Information */}
@@ -317,13 +372,14 @@ const SourcingMatingForm = ({
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-primary">
                  <Database className="w-4 h-4" />
-                 <h3 className="text-[10px] font-black uppercase tracking-widest">Sourcing Batch ID</h3>
+                 <h3 className="text-[10px] font-black uppercase tracking-widest">Sourcing Batch ID (YYMMDD-Count-Sequence)</h3>
               </div>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={() => {
-                  const newId = generateBatchId();
+                  const totalSourced = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
+                  const newId = generateBatchId(totalSourced);
                   setBatchNumber(newId);
                   setIsBatchIdManuallyEdited(true);
                   updateData({ batchNumber: newId });
@@ -389,18 +445,26 @@ const SourcingMatingForm = ({
                       <span className="text-[10px] font-black text-emerald-600">{source.available} F</span>
                     </div>
                   </div>
-                  <div className="w-32">
-                    <Label className="text-[9px] font-bold uppercase text-muted-foreground mb-1 block ml-1">Sourced (F) *</Label>
-                    <div className="relative group/input">
-                      <Input 
-                        type="number" 
-                        value={source.femaleCount} 
-                        onChange={e => handleSourceChange(source.id, e.target.value)} 
-                        className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-emerald-500/20" 
-                        placeholder="0"
-                        max={source.available}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-emerald-600/40 pointer-events-none">F</span>
+                  <div className="w-48 flex items-center gap-3">
+                    <div className="flex-1">
+                      <Label className="text-[9px] font-bold uppercase text-muted-foreground mb-1 block ml-1">Sourced (F) *</Label>
+                      <div className="relative group/input">
+                        <Input 
+                          type="number" 
+                          value={source.femaleCount} 
+                          onChange={e => handleSourceChange(source.id, e.target.value)} 
+                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-emerald-500/20" 
+                          placeholder="0"
+                          max={source.available}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-emerald-600/40 pointer-events-none">F</span>
+                      </div>
+                    </div>
+                    <div className="w-16 flex flex-col items-center justify-center pt-4">
+                       <Label className="text-[8px] font-bold uppercase text-muted-foreground mb-1 block">Balance</Label>
+                       <span className="text-sm font-black text-emerald-700/60">
+                         {Math.max(0, (source.available || 0) - (parseFloat(source.femaleCount) || 0))}
+                       </span>
                     </div>
                   </div>
                 </div>
@@ -425,12 +489,13 @@ const SourcingMatingForm = ({
               <div className="p-2 bg-pink-100 rounded-xl">
                 <Heart className="w-4 h-4 text-pink-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">2. Mating Details (Female added to Male Tanks)</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Mating Details</h3>
             </div>
             <Button type="button" variant="ghost" size="sm" onClick={addMatingTank} className="h-8 text-xs font-bold text-pink-600 hover:bg-pink-50">
               <Plus className="w-4 h-4 mr-1" /> Add Mating tank
             </Button>
           </div>
+          <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">List all male tanks and record female additions.</div>
 
           <div className="space-y-6">
             {matingTanks.length === 0 && (
@@ -474,7 +539,7 @@ const SourcingMatingForm = ({
 
                 <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 p-4 bg-white/40 rounded-2xl border border-pink-100">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">a) Females Added *</Label>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Female Added *</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
@@ -495,7 +560,7 @@ const SourcingMatingForm = ({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">b) Females Mated *</Label>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">(F) Mated *</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
@@ -544,28 +609,32 @@ const SourcingMatingForm = ({
             <div className="p-2 bg-blue-100 rounded-xl">
               <ArrowRightLeft className="w-4 h-4 text-blue-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">3. Animals Shifted To</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Animal Movement After Mating</h3>
           </div>
+          <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">Record where mated and non-mated animals are shifted to.</div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 3a: Spawning Tanks */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-blue-700 ml-1">a) Allocation to Spawning Tanks *</Label>
+                <Label className="text-[10px] font-black uppercase text-blue-700 ml-1">Mated (F) To Spawning Tanks *</Label>
                 <Button type="button" variant="ghost" size="sm" onClick={addMatedDestination} className="h-7 text-[10px] font-bold text-blue-600 hover:bg-blue-50">
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
               </div>
+              <div className="px-1 text-[8px] text-blue-400 font-bold mb-2">FILTER: Showing only Empty Spawning Tanks</div>
               <div className="space-y-3">
                 {matedDestinations.map(dest => (
                   <div key={dest.id} className="flex gap-2 items-start group">
                     <div className="flex-1">
                       <Select value={dest.tankId} onValueChange={val => handleMatedDestinationChange(dest.id, { tankId: val })}>
                         <SelectTrigger className="h-10 rounded-xl bg-blue-50/50 border-blue-100 text-xs shadow-none">
-                          <SelectValue placeholder="Select Spawning Tank" />
+                          <SelectValue placeholder="Select Empty Spawning Tank" />
                         </SelectTrigger>
                         <SelectContent>
-                          {spawningTanksOptions.map(opt => (
+                          {spawningTanksOptions
+                             .filter(opt => (tankPopulations[opt.id] || 0) === 0 || matedDestinations.some(d => d.tankId === opt.id))
+                             .map(opt => (
                             <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
                           ))}
                         </SelectContent>
@@ -609,11 +678,12 @@ const SourcingMatingForm = ({
             {/* 3b: Return to Source */}
             <div className="space-y-4 pt-6 md:pt-0 border-t md:border-t-0 md:border-l md:pl-6 border-dashed border-blue-100">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-slate-700 ml-1">b) Return to Source Tanks *</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-700 ml-1">Non-Mated (F) Return to Source *</Label>
                 <Button type="button" variant="ghost" size="sm" onClick={addReturnDestination} className="h-7 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
               </div>
+              <div className="px-1 text-[8px] text-slate-400 font-bold mb-2">FILTER: Showing only used Source Tanks</div>
               <div className="space-y-3">
                 {returnDestinations.map(dest => (
                   <div key={dest.id} className="flex gap-2 items-start group">
@@ -648,6 +718,14 @@ const SourcingMatingForm = ({
                           <span className="text-[8px] font-bold text-slate-400">F</span>
                         </div>
                       </div>
+                      {dest.tankId && (
+                         <div className="mt-1 px-1 flex justify-between items-center text-[8px] font-bold">
+                            <span className="text-muted-foreground uppercase">New Pop:</span>
+                            <span className="text-slate-700">
+                               {Math.max(0, (tankPopulations[dest.tankId] || 0) + (parseFloat(dest.count) || 0))} F
+                            </span>
+                         </div>
+                      )}
                     </div>
                     <Button 
                       variant="ghost" size="icon" 

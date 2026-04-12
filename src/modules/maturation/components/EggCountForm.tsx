@@ -31,6 +31,7 @@ interface EggCountFormProps {
   activeSectionId?: string;
   farmId?: string;
   hatcheryId?: string;
+  activeBroodstockBatchId?: string | null;
 }
 
 const EggCountForm = ({
@@ -44,83 +45,66 @@ const EggCountForm = ({
   activeSectionId,
   farmId,
   hatcheryId,
+  activeBroodstockBatchId,
 }: EggCountFormProps) => {
   const [entries, setEntries] = useState<EggCountEntry[]>(data.entries || []);
-  const [loading, setLoading] = useState(false);
+  const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
+  const [loadingBatches, setLoadingBatches] = useState(false);
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates });
   };
 
-  // Fetch recent Spawning activity to auto-populate
-  const fetchSpawningData = async (forceSync = false) => {
-    if (!farmId) return;
-    if (entries.length > 0 && !forceSync) return;
-    
-    setLoading(true);
-    try {
-      // Fetch Spawning activities from the last 24 hours for this farm
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      
-      const { data: logs, error } = await supabase
-        .from('activity_logs')
-        .select('*')
-        .eq('farm_id', farmId)
-        .eq('activity_type', 'Spawning')
-        .gte('created_at', twentyFourHoursAgo)
-        .order('created_at', { ascending: false });
+  // Fetch Recent Spawning Batches for this farm
+  useEffect(() => {
+    const fetchBatches = async () => {
+      if (!farmId) return;
+      setLoadingBatches(true);
+      try {
+        const { data: logs, error } = await supabase
+          .from('activity_logs')
+          .select('*')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Spawning')
+          .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
+          .order('created_at', { ascending: false })
+          .limit(30);
 
-      if (error) throw error;
-
-      if (logs && logs.length > 0) {
-        // Group by tank_id to get only the LATEST spawning for each tank
-        const latestByTank: Record<string, any> = {};
-        logs.forEach(log => {
-          if (!latestByTank[log.tank_id]) {
-            latestByTank[log.tank_id] = log;
-          }
-        });
-
-        const initialEntries: EggCountEntry[] = Object.values(latestByTank)
-          .filter(log => (parseFloat(log.data?.spawnedCount) || 0) > 0)
-          .map(log => {
-            // Find tank name from availableTanks - ONLY FOR CURRENT FARM
-            let tName = 'Unknown Tank';
-            availableTanks
-              .filter(s => !farmId || s.farm_id === farmId)
-              .forEach(s => {
-                const t = s.tanks.find((t: any) => t.id === log.tank_id);
-                if (t) tName = `${s.name} - ${t.name}`;
-              });
-
-            return {
-              id: Math.random().toString(36).substr(2, 9),
-              tankId: log.tank_id,
-              tankName: tName,
-              spawnedCount: log.data?.spawnedCount || '0',
-              totalEggsMillions: '',
-              fertilizationPercent: '',
-              batchNumber: log.data?.batchNumber || '',
-              isAutoPopulated: true
-            };
-          });
-
-        if (initialEntries.length > 0) {
-          setEntries(initialEntries);
-          updateData({ entries: initialEntries });
-        }
+        if (error) throw error;
+        setBatchLogs(logs || []);
+      } catch (err) {
+        console.error('Error fetching spawning batches:', err);
+      } finally {
+        setLoadingBatches(false);
       }
-    } catch (err) {
-      console.error('Error fetching spawning data:', err);
-    } finally {
-      setLoading(false);
+    };
+    fetchBatches();
+  }, [farmId]);
+
+  // When selectedBatchId changes, populate entries from the Spawning log
+  const handleBatchSelect = (batchId: string) => {
+    setSelectedBatchId(batchId);
+    const log = batchLogs.find(l => l.data?.batchId === batchId);
+    if (log && log.data) {
+      const spawners = log.data.spawningTanks || [];
+      const newEntries: EggCountEntry[] = spawners
+        .filter((s: any) => (parseFloat(s.spawnedCount) || 0) > 0)
+        .map((s: any) => ({
+          id: Math.random().toString(36).substr(2, 9),
+          tankId: s.tankId,
+          tankName: s.tankName,
+          spawnedCount: s.spawnedCount,
+          totalEggsMillions: '',
+          fertilizationPercent: '',
+          batchNumber: batchId,
+          isAutoPopulated: true
+        }));
+
+      setEntries(newEntries);
+      onDataChange({ ...data, selectedBatchId: batchId, entries: newEntries });
     }
   };
-
-  // Initial fetch
-  useEffect(() => {
-    fetchSpawningData();
-  }, [farmId]);
 
   // Perform Refined Auto-Calculations
   useEffect(() => {
@@ -139,11 +123,11 @@ const EggCountForm = ({
     });
 
     const avgFertilization = totalEggsValue > 0 ? (totalFertilizedValue / totalEggsValue) * 100 : 0;
-    const eggsPerAnimal = totalAnimalsValue > 0 ? (totalEggsValue * 1000000 / totalAnimalsValue) : 0;
+    const eggsPerAnimal = totalAnimalsValue > 0 ? (totalFertilizedValue * 1000000 / totalAnimalsValue) : 0;
 
     const summary = {
       totalEggs: Math.round(totalEggsValue * 100) / 100,
-      totalFertilized: Math.round(totalFertilizedValue * 100) / 100,
+      totalFertilized: Math.round(totalFertilizedValue * 10000) / 10000,
       avgFertilization: Math.round(avgFertilization * 100) / 100,
       eggsPerAnimal: Math.round(eggsPerAnimal)
     };
@@ -193,6 +177,23 @@ const EggCountForm = ({
 
   return (
     <div className="space-y-6 animate-fade-in-up">
+      {activeBroodstockBatchId && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
+           <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-2 rounded-xl text-red-600">
+                 <Database className="w-5 h-5" />
+              </div>
+              <div>
+                 <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Active Broodstock Batch</p>
+                 <p className="text-sm font-black text-red-900">{activeBroodstockBatchId}</p>
+              </div>
+           </div>
+           <div className="text-right">
+              <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Context</p>
+              <p className="text-[10px] font-bold text-red-600 italic">Maturation Module</p>
+           </div>
+        </div>
+      )}
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
         {/* Field 2: Consolidated Summary Cards */}
@@ -219,7 +220,7 @@ const EggCountForm = ({
               <div className="absolute top-0 right-0 p-2 opacity-5">
                 <FlaskConical className="w-12 h-12" />
               </div>
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Ferti Egg</p>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Fertilised Egg</p>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-blue-950">{(data.summary?.totalFertilized || 0).toLocaleString()}</span>
                 <span className="text-xs font-bold text-blue-600 opacity-50 uppercase tracking-tighter">Millions</span>
@@ -230,7 +231,7 @@ const EggCountForm = ({
                <div className="absolute top-0 right-0 p-2 opacity-5 text-emerald-600">
                 <CheckCircle2 className="w-12 h-12" />
               </div>
-              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Avg Fert%</p>
+              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Avg Fert %</p>
               <p className="text-2xl font-black text-emerald-950">{(data.summary?.avgFertilization || 0).toFixed(1)}%</p>
             </Card>
 
@@ -238,7 +239,7 @@ const EggCountForm = ({
                <div className="absolute top-0 right-0 p-2 opacity-5 text-amber-600">
                 <Database className="w-12 h-12" />
               </div>
-              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Egg per Animal</p>
+              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Egg / Animal / Fer</p>
               <p className="text-2xl font-black text-amber-950">{(data.summary?.eggsPerAnimal || 0).toLocaleString()}</p>
             </Card>
           </div>
@@ -250,29 +251,38 @@ const EggCountForm = ({
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-primary/10 rounded-xl">
-                <Database className="w-4 h-4 text-primary" />
+              <div className="p-2 bg-indigo-100 rounded-xl">
+                <Database className="w-4 h-4 text-indigo-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Spawning Tank Data</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Select Batch from Spawning</h3>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => fetchSpawningData(true)} 
-                className="rounded-xl h-9 font-bold text-[10px] uppercase gap-1.5 text-primary hover:bg-primary/5"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-                Sync Spawns
-              </Button>
-              <Button variant="outline" size="sm" onClick={addEntry} className="rounded-xl border-dashed h-9 font-bold text-[10px] uppercase gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Add Manually
+              <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+                <SelectTrigger className="w-64 h-10 rounded-xl border-indigo-100 font-bold text-indigo-900 bg-white">
+                  <SelectValue placeholder="Search Spawning Batch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingBatches ? (
+                    <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                  ) : batchLogs.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted-foreground">No recent spawning batches found</div>
+                  ) : (
+                    batchLogs.map(log => (
+                      <SelectItem key={log.id} value={log.data?.batchId}>
+                        <span className="font-bold">{log.data?.batchId}</span>
+                        <span className="ml-2 opacity-50 text-[10px] font-normal">({new Date(log.created_at).toLocaleDateString()})</span>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={addEntry} className="rounded-xl border-dashed h-9 font-bold text-[10px] uppercase gap-1.5 focus:ring-indigo-500">
+                <Plus className="w-3.5 h-3.5" /> Manual Entry
               </Button>
             </div>
           </div>
 
-          {loading && entries.length === 0 ? (
+          {loadingBatches && entries.length === 0 ? (
              <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-3">
                 <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
                 <p className="text-[10px] font-bold uppercase tracking-widest opacity-50">Syncing recent spawning data...</p>
@@ -283,8 +293,8 @@ const EggCountForm = ({
                    <AlertCircle className="w-5 h-5 opacity-40" />
                 </div>
                 <div className="text-center">
-                   <p className="text-xs font-bold uppercase tracking-wider">No active spawns found</p>
-                   <p className="text-[10px] opacity-60 mt-1">Please record a Spawning activity first or add tanks manually.</p>
+                   <p className="text-xs font-bold uppercase tracking-wider">No active spawns loaded</p>
+                   <p className="text-[10px] opacity-60 mt-1">Please select a Batch ID to automatically load spawning data.</p>
                 </div>
             </div>
           ) : (

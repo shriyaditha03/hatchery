@@ -5,7 +5,7 @@ import {
     MoveRight, FileText, ChevronDown, LogOut, User, MapPin,
     ClipboardList, Pencil, CheckCircle2, Clock, Trash2,
     Heart, Sparkles, Database, ArrowUpRight, ShoppingCart,
-    Loader2, ArrowLeft, ChevronRight
+    Loader2, ArrowLeft, ChevronRight, Plus
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -25,6 +25,7 @@ const UserDashboard = () => {
         user, logout,
         activeFarmId, setActiveFarmId,
         activeSectionId, setActiveSectionId,
+        activeBroodstockBatchId, setActiveBroodstockBatchId,
         activeModule, setActiveModule,
         supervisorMode, setSupervisorMode
     } = useAuth();
@@ -32,6 +33,8 @@ const UserDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [instructions, setInstructions] = useState<any[]>([]);
     const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
+    const [maturationBatches, setMaturationBatches] = useState<any[]>([]);
+    const [batchesLoading, setBatchesLoading] = useState(false);
 
     const availableFarms = useMemo(() => {
         const farmMap: Record<string, any> = {};
@@ -84,12 +87,12 @@ const UserDashboard = () => {
         return new Date().toISOString().split('T')[0];
     };
 
-    // State validation logic
+    // State validation logic - ensuring active selections match accessibility/module
     useEffect(() => {
         if (!loading && availableFarms.length > 0) {
             const currentFarm = availableFarms.find(f => f.id === activeFarmId);
             
-            // If active farm doesn't match current module, clear the selection or auto-select if exactly 1
+            // 1. If active farm doesn't match current module, find a suitable replacement
             if (currentFarm && (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
                 if (availableFarmsForModule.length === 1) {
                     setActiveFarmId(availableFarmsForModule[0].id);
@@ -97,18 +100,75 @@ const UserDashboard = () => {
                     setActiveFarmId(null);
                 }
                 setActiveSectionId(null);
-            } else if (!activeFarmId && availableFarmsForModule.length === 1) {
+                setActiveBroodstockBatchId(null);
+            } 
+            // 2. Auto-select farm if exactly one is available for the module and none is selected
+            else if (!activeFarmId && availableFarmsForModule.length === 1) {
                 setActiveFarmId(availableFarmsForModule[0].id);
             }
-            
+
+            // 3. Section validation
             const currentSection = allMySections.find(s => s.id === activeSectionId);
-            const isWrongFarm = currentSection && currentSection.farm_id !== activeFarmId;
+            const isWrongFarmOrModule = currentSection && (
+                currentSection.farm_id !== activeFarmId || 
+                (currentSection.farm_category || 'LRT').toUpperCase() !== activeModule.toUpperCase()
+            );
             
-            if (activeSectionId && isWrongFarm) {
+            if (activeSectionId && isWrongFarmOrModule) {
                 setActiveSectionId(null);
             }
         }
-    }, [availableFarms, availableFarmsForModule, allMySections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId]);
+    }, [availableFarms, availableFarmsForModule, allMySections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId, setActiveBroodstockBatchId]);
+
+    // Maturation Batches Fetching
+    useEffect(() => {
+        if (activeModule === 'MATURATION' && activeFarmId) {
+            fetchMaturationBatches();
+        }
+    }, [activeModule, activeFarmId]);
+
+    const fetchMaturationBatches = async () => {
+        setBatchesLoading(true);
+        try {
+            // Fetch Stocking activities for the current farm
+            // Filter by categories that include 'MATURATION' or just all stocking in a maturation farm
+            const { data, error } = await supabase
+                .from('activity_logs')
+                .select('*')
+                .eq('activity_type', 'Stocking')
+                .eq('farm_id', activeFarmId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            
+            // Extract unique batch IDs from data.stockingId or data.data.stockingId
+            const batchesList: any[] = [];
+            const seenIds = new Set();
+
+            (data || []).forEach(log => {
+                const sId = log.data?.stockingId || log.stockingId;
+                if (sId && !seenIds.has(sId)) {
+                    seenIds.add(sId);
+                    batchesList.push({
+                        id: sId,
+                        name: sId,
+                        log: log
+                    });
+                }
+            });
+
+            setMaturationBatches(batchesList);
+
+            // Auto-select if exactly 1
+            if (batchesList.length === 1 && !activeBroodstockBatchId) {
+                setActiveBroodstockBatchId(batchesList[0].id);
+            }
+        } catch (err) {
+            console.error('Error fetching maturation batches:', err);
+        } finally {
+            setBatchesLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (user) {
@@ -182,7 +242,7 @@ const UserDashboard = () => {
             const today = getTodayStr();
             const { data, error } = await supabase
                 .from('activity_charts')
-                .select(`*, farms(name), tanks(name), sections(name), worker:profiles!completed_by(full_name)`)
+                .select(`*, farms(name), tanks(name), sections(name), worker:profiles!assigned_to(full_name)`)
                 .eq('created_by', user?.id)
                 .or(`is_completed.eq.false,scheduled_date.eq.${today}`)
                 .order('is_completed', { ascending: true })
@@ -231,8 +291,10 @@ const UserDashboard = () => {
 
     const activeFarm = availableFarms.find(f => f.id === activeFarmId);
     const activeSection = allMySections.find(s => s.id === activeSectionId);
+    const activeBatch = maturationBatches.find(b => b.id === activeBroodstockBatchId);
     
     const displaySectionLabel = activeSection?.name || 'Select Section';
+    const displayBatchLabel = activeBatch?.name || 'Select Broodstock Batch';
     const displayFarmLabel = activeFarm?.name || 'Select Farm';
 
     const ACTIVITY_ICONS: Record<string, any> = {
@@ -354,23 +416,49 @@ const UserDashboard = () => {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* Select Section */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild disabled={!activeFarmId || filteredSections.length === 0}>
-                            <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
-                                <div className="flex items-center gap-2 truncate">
-                                    <Layers className="w-4 h-4 opacity-70" />
-                                    <span>{displaySectionLabel}</span>
-                                </div>
-                                <ChevronDown className="w-4 h-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64">
-                            {filteredSections.map(s => (
-                                <DropdownMenuItem key={s.id} onClick={() => setActiveSectionId(s.id)}>{s.name}</DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* Select Section or Broodstock Batch */}
+                    {activeModule !== 'MATURATION' ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild disabled={!activeFarmId || filteredSections.length === 0}>
+                                <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Layers className="w-4 h-4 opacity-70" />
+                                        <span>{displaySectionLabel}</span>
+                                    </div>
+                                    <ChevronDown className="w-4 h-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64">
+                                {filteredSections.map(s => (
+                                    <DropdownMenuItem key={s.id} onClick={() => setActiveSectionId(s.id)}>{s.name}</DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild disabled={!activeFarmId || maturationBatches.length === 0}>
+                                <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Database className="w-4 h-4 opacity-70" />
+                                        <span>{batchesLoading ? 'Loading Batches...' : displayBatchLabel}</span>
+                                    </div>
+                                    <ChevronDown className="w-4 h-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto">
+                                <DropdownMenuLabel>Select Active Batch</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {maturationBatches.map(b => (
+                                    <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={activeBroodstockBatchId === b.id ? "bg-muted font-bold" : ""}>
+                                        {b.name}
+                                    </DropdownMenuItem>
+                                ))}
+                                {maturationBatches.length === 0 && !batchesLoading && (
+                                    <DropdownMenuItem disabled>No Broodstock Batches found</DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                 </div>
             </div>
 
@@ -398,7 +486,7 @@ const UserDashboard = () => {
                         </div>
                     </div>
                 </div>
-            ) : !activeSectionId ? (
+            ) : (!activeSectionId && activeModule !== 'MATURATION') ? (
                 <div className="px-4 mt-8">
                     <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
                         <Layers className="w-10 h-10 text-primary opacity-80" />
@@ -409,6 +497,22 @@ const UserDashboard = () => {
                                     ? "Please choose a section from the dropdown above to continue working."
                                     : "No sections are assigned to you in this farm. Please contact your manager."}
                             </p>
+                        </div>
+                    </div>
+                </div>
+            ) : (!activeBroodstockBatchId && activeModule === 'MATURATION') ? (
+                <div className="px-4 mt-8">
+                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
+                        <Database className="w-10 h-10 text-primary opacity-80" />
+                        <div>
+                            <h3 className="font-bold text-lg">Select a Batch ID</h3>
+                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                                Please choose an active Broodstock Batch from the dropdown above to continue working. 
+                                Tanks will be auto-populated based on the selected batch.
+                            </p>
+                            <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/user/activity/stocking?category=MATURATION')}>
+                                <Plus className="w-4 h-4 mr-2" /> Start New Broodstock Stocking
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -447,7 +551,7 @@ const UserDashboard = () => {
                             key={act.name} 
                             variant="outline" 
                             className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
-                            onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId}&category=${activeModule}`)}
+                            onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId || ''}&batch=${activeBroodstockBatchId || ''}&category=${activeModule}`)}
                         >
                             <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
                             <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>

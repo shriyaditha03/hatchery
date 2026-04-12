@@ -721,7 +721,7 @@ const CreateFarm = () => {
                             
                             return (
                             <div key={sIdx} className="space-y-4">
-                                <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col sm:flex-row sm:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sIdx)}>
+                                <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col md:flex-row md:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sIdx)}>
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 flex-shrink-0 flex items-center justify-center text-primary">
                                             <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -752,10 +752,10 @@ const CreateFarm = () => {
                                             <p className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure {section.type === 'LRT' ? 'LRT' : section.type} Section</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-                                        <div onClick={(e) => e.stopPropagation()} className="flex gap-2 items-center">
+                                    <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0 flex-wrap">
+                                        <div onClick={(e) => e.stopPropagation()} className="flex gap-2 items-center flex-wrap">
                                             {section.type === 'ANIMAL' ? (
-                                                <div className="flex gap-1.5 sm:gap-2">
+                                                <div className="flex gap-1.5 md:gap-2 flex-wrap">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"

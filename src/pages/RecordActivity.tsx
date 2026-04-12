@@ -37,6 +37,7 @@ import SpawningForm from '@/modules/maturation/components/SpawningForm';
 import EggCountForm from '@/modules/maturation/components/EggCountForm';
 import NaupliiHarvestForm from '@/modules/maturation/components/NaupliiHarvestForm';
 import NaupliiSaleForm from '@/modules/maturation/components/NaupliiSaleForm';
+import BroodstockDiscardForm from '@/modules/maturation/components/BroodstockDiscardForm';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
 import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
@@ -54,7 +55,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -74,6 +75,7 @@ const RecordActivity = () => {
     setActiveFarmId,
     setActiveSectionId, 
     activeModule, 
+    activeBroodstockBatchId,
     setActiveModule,
     logout,
     fetchUserAccess 
@@ -166,7 +168,9 @@ const RecordActivity = () => {
         'spawning': 'Spawning',
         'egg-count': 'Egg Count',
         'nauplii-harvest': 'Nauplii Harvest',
-        'nauplii-sale': 'Nauplii Sale'
+        'nauplii-sale': 'Nauplii Sale',
+        'broodstock-discard': 'Broodstock Discard',
+        'discard': 'Broodstock Discard'
       };
       
       const mappedActivity = typeMap[type.toLowerCase()];
@@ -198,6 +202,18 @@ const RecordActivity = () => {
     balanceCount: '',
     totalFemales: 0,
     returnDestinations: []
+  });
+  const [broodstockDiscardData, setBroodstockDiscardData] = useState<any>({
+    stockingId: '',
+    discardReason: '',
+    summary: {
+      initialCount: 0,
+      totalMated: 0,
+      totalSpawned: 0,
+      totalEggs: 0,
+      totalNauplii: 0,
+      totalSold: 0
+    }
   });
   const [eggCountData, setEggCountData] = useState<any>({
     entries: [],
@@ -1234,7 +1250,8 @@ const RecordActivity = () => {
             spawningData: activity === 'Spawning' ? spawningData : undefined,
             eggCountData: activity === 'Egg Count' ? eggCountData : undefined,
             naupliiHarvestData: activity === 'Nauplii Harvest' ? naupliiHarvestData : undefined,
-            naupliiSaleData: activity === 'Nauplii Sale' ? naupliiSaleData : undefined
+            naupliiSaleData: activity === 'Nauplii Sale' ? naupliiSaleData : undefined,
+            broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
@@ -1571,12 +1588,15 @@ const RecordActivity = () => {
 
     let targets = [];
     if (selectionScope === 'all') {
-      const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-      const activeFarmName = activeSection?.farm_name || '';
-      const activeFarmCategory = activeSection?.farm_category || 'LRT';
-      const displayLabel = activeSection?.name || 'Select Section';
+      const sectionId = selectedSectionId || activeSectionId;
+      const activeSection = availableTanks.find(s => s.id === sectionId);
       if (activeSection) {
         targets = activeSection.tanks
+          .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+          .map((t: any) => t.id);
+      } else if (activeFarmCategory === 'MATURATION') {
+        // If "Apply to All" in Maturation without a section, it means all tanks in the farm that match the activity
+        targets = filteredSections.flatMap(s => s.tanks)
           .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
           .map((t: any) => t.id);
       }
@@ -1655,6 +1675,7 @@ const RecordActivity = () => {
           let fId = activeFarmId;
 
           if (tId) {
+            // Find the section this tank belongs to
             const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tId));
             sId = section?.id || sId;
             fId = section?.farm_id || fId;
@@ -1749,6 +1770,137 @@ const RecordActivity = () => {
           }
 
           // Special bulk save for Tank Shifting (record for destinations too)
+          // Special bulk save for Sourcing & Mating (record for sources, spawners, and returns)
+          if (activity === 'Sourcing & Mating') {
+            const { sourceTanks, matedDestinations, returnDestinations } = currentBuildData;
+            
+            // 1. Record sourcing from each source tank (decrement)
+            const sourcePromises = (sourceTanks || []).map(async (s: any) => {
+              const qty = parseFloat(s.femaleCount) || 0;
+              if (qty <= 0) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === s.tankId));
+              return addActivity({
+                tank_id: s.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'sourcing', movementQty: -qty, role: 'source' }
+              });
+            });
+
+            // 2. Record shifting to each spawning tank (increment)
+            const spawnerPromises = (matedDestinations || []).map(async (d: any) => {
+              const qty = parseFloat(d.count) || 0;
+              if (qty <= 0 || !d.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === d.tankId));
+              return addActivity({
+                tank_id: d.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'spawning_shift', movementQty: qty, role: 'destination' }
+              });
+            });
+
+            // 3. Record return to source tanks (increment)
+            const returnPromises = (returnDestinations || []).map(async (r: any) => {
+              const qty = parseFloat(r.count) || 0;
+              if (qty <= 0 || !r.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === r.tankId));
+              return addActivity({
+                tank_id: r.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'return', movementQty: qty, role: 'return' }
+              });
+            });
+
+            await Promise.all([...sourcePromises, ...spawnerPromises, ...returnPromises]);
+          }
+
+          // Special bulk save for Spawning (record clearance of spawning tanks and return to source)
+          if (activity === 'Spawning') {
+            const { spawningTanks, returnDestinations } = currentBuildData;
+            
+            // 1. Clear population from spawning tanks (decrement)
+            const clearPromises = (spawningTanks || []).map(async (t: any) => {
+              const qty = parseFloat(t.shiftedCount) || 0;
+              if (qty <= 0 || !t.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
+              return addActivity({
+                tank_id: t.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'spawning_clearance', movementQty: -qty, role: 'source' }
+              });
+            });
+
+            // 2. Return population to source tanks (increment)
+            const returnPromises = (returnDestinations || []).map(async (r: any) => {
+              const qty = parseFloat(r.returnCount) || 0;
+              if (qty <= 0 || !r.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === r.tankId));
+              return addActivity({
+                tank_id: r.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'spawning_return', movementQty: qty, role: 'return' }
+              });
+            });
+
+            await Promise.all([...clearPromises, ...returnPromises]);
+          }
+
+          // Special bulk save for Nauplii Harvest (record arrival in Nauplii tanks)
+          if (activity === 'Nauplii Harvest') {
+            const { naupliiDestinations } = currentBuildData;
+            
+            const destPromises = (naupliiDestinations || []).map(async (d: any) => {
+              const qty = parseFloat(d.shiftedMil) || 0;
+              if (qty <= 0 || !d.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === d.tankId));
+              return addActivity({
+                tank_id: d.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'nauplii_arrival', movementQty: qty, role: 'destination' }
+              });
+            });
+
+            await Promise.all(destPromises);
+          }
+
+          // Special bulk save for Nauplii Sale (clear Nauplii tanks)
+          if (activity === 'Nauplii Sale') {
+            const { saleTanks } = currentBuildData;
+            
+            const salePromises = (saleTanks || []).map(async (t: any) => {
+              const qty = (parseFloat(t.saleMil) || 0) + (parseFloat(t.discardMil) || 0);
+              if (qty <= 0 || !t.tankId) return null;
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
+              return addActivity({
+                tank_id: t.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { ...currentBuildData, movementType: 'nauplii_clearance', movementQty: qty, role: 'source' }
+              });
+            });
+
+            await Promise.all(salePromises);
+          }
+
           if (activity === 'Tank Shifting') {
             const dests = currentBuildData.destinations || [];
             const destPromises = dests.map(async (dest: any) => {
@@ -1940,7 +2092,7 @@ const RecordActivity = () => {
               <ChevronDown className="w-3 h-3 -rotate-90" />
               <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
               <ChevronDown className="w-3 h-3 -rotate-90" />
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || 'Section'}</span>
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? 'All Sections' : 'Section')}</span>
               <ChevronDown className="w-3 h-3 -rotate-90" />
               <span className={activity ? 'text-white/80' : 'text-white'}>{isPlanningMode ? 'Plan Activity' : (editId ? 'Edit Record' : 'Record Activity')}</span>
               {activity && (
@@ -2108,7 +2260,7 @@ const RecordActivity = () => {
                 </div>
                 
                 <div className={`grid grid-cols-1 ${activeSectionId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
-                  {!activeSectionId && (
+                  {!activeSectionId && activeFarmCategory !== 'MATURATION' && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">Section {isSpecialActivity ? '(Optional)' : '*'}</Label>
                       <Select 
@@ -2155,11 +2307,25 @@ const RecordActivity = () => {
                             <SelectValue placeholder="Select tank" />
                           </SelectTrigger>
                           <SelectContent>
-                            {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
-                              .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
-                              .map((t: any) => (
-                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                            ))}
+                            {(() => {
+                              const sectionId = selectedSectionId || activeSectionId;
+                              const tanksToDisplay = sectionId 
+                                ? (availableTanks.find(s => s.id === sectionId)?.tanks || [])
+                                : (activeFarmCategory === 'MATURATION' 
+                                    ? filteredSections.flatMap(s => s.tanks) 
+                                    : []);
+                                    
+                              return tanksToDisplay
+                                .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
+                                .map((t: any) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {activeFarmCategory === 'MATURATION' && !sectionId 
+                                      ? `${availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id))?.name} - ${t.name}`
+                                      : t.name
+                                    }
+                                  </SelectItem>
+                                ));
+                            })()}
                           </SelectContent>
                         </Select>
                       ) : selectionScope === 'all' ? (
@@ -2635,6 +2801,7 @@ const RecordActivity = () => {
             tankPopulations={tankPopulations}
             isPlanningMode={isPlanningMode}
             farmId={selectedFarmId || activeFarmId}
+            activeBroodstockBatchId={activeBroodstockBatchId}
           />
         )}
 
@@ -2718,6 +2885,7 @@ const RecordActivity = () => {
             tankPopulations={tankPopulations}
             isPlanningMode={isPlanningMode}
             farmId={selectedFarmId || activeFarmId}
+            activeBroodstockBatchId={activeBroodstockBatchId}
           />
         )}
 
@@ -2733,6 +2901,7 @@ const RecordActivity = () => {
             activeSectionId={selectedSectionId || activeSectionId}
             farmId={selectedFarmId || activeFarmId}
             hatcheryId={hatcheryId}
+            activeBroodstockBatchId={activeBroodstockBatchId}
           />
         )}
 
@@ -2747,6 +2916,7 @@ const RecordActivity = () => {
             availableTanks={availableTanks}
             activeSectionId={selectedSectionId || activeSectionId}
             farmId={selectedFarmId || activeFarmId || ''}
+            activeBroodstockBatchId={activeBroodstockBatchId}
           />
         )}
 
@@ -2761,6 +2931,14 @@ const RecordActivity = () => {
             availableTanks={availableTanks}
             isPlanningMode={isPlanningMode}
             farmId={selectedFarmId || activeFarmId || ''}
+            activeBroodstockBatchId={activeBroodstockBatchId}
+          />
+        )}
+
+        {activity === 'Broodstock Discard' && (
+          <BroodstockDiscardForm
+            data={broodstockDiscardData}
+            onChange={setBroodstockDiscardData}
           />
         )}
 

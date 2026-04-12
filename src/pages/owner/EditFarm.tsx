@@ -603,7 +603,7 @@ const EditFarm = () => {
                         
                         return (
                         <div key={sectionId} className="space-y-4">
-                            <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col sm:flex-row sm:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sectionId)}>
+                            <div className="glass-card p-3 sm:p-4 rounded-2xl border-l-4 border-l-primary flex flex-col md:flex-row md:items-center justify-between shadow-md cursor-pointer hover:bg-muted/10 transition-colors sticky top-2 z-30 bg-background/95 backdrop-blur-md gap-3" onClick={() => toggleSection(sectionId)}>
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 flex-shrink-0 flex items-center justify-center text-primary">
                                         <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -622,7 +622,7 @@ const EditFarm = () => {
                                             />
                                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 {section.type === 'ANIMAL' ? (
-                                                    <div className="flex gap-1.5 sm:gap-2">
+                                                    <div className="flex gap-1.5 md:gap-2 flex-wrap">
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
@@ -654,7 +654,7 @@ const EditFarm = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+                                <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0 flex-wrap">
                                     <div onClick={(e) => e.stopPropagation()}>
                                         <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2 text-[10px] sm:text-xs">
                                             <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
