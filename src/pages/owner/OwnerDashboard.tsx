@@ -299,7 +299,7 @@ const OwnerDashboard = () => {
                                     <ChevronDown className="h-4 w-4 opacity-70" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-full sm:w-64 max-h-80 overflow-y-auto">
+                            <DropdownMenuContent className="min-w-[20rem] w-auto max-w-md max-h-80 overflow-y-auto">
                                 <DropdownMenuLabel>Select Active Batch</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 {maturationBatches.map(b => (

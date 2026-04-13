@@ -67,12 +67,17 @@ const EggCountForm = ({
           .select('*')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Spawning')
-          .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
           .order('created_at', { ascending: false })
-          .limit(30);
+          .limit(100);
 
         if (error) throw error;
-        setBatchLogs(logs || []);
+        // Filter in JS to avoid 400 errors on complex JSON queries
+        const filtered = logs.filter(l => 
+          l.stockingId === activeBroodstockBatchId || 
+          l.data?.stockingId === activeBroodstockBatchId ||
+          l.data?.batchId?.startsWith(activeBroodstockBatchId || '')
+        );
+        setBatchLogs(filtered || []);
       } catch (err) {
         console.error('Error fetching spawning batches:', err);
       } finally {
@@ -80,7 +85,22 @@ const EggCountForm = ({
       }
     };
     fetchBatches();
-  }, [farmId]);
+  }, [farmId, activeBroodstockBatchId]);
+
+  // Auto-select batch from dashboard context
+  useEffect(() => {
+    if (activeBroodstockBatchId && batchLogs.length > 0 && !selectedBatchId) {
+      const matches = batchLogs.filter(l => 
+        l.stockingId === activeBroodstockBatchId || 
+        l.data?.stockingId === activeBroodstockBatchId ||
+        l.data?.batchId?.startsWith(activeBroodstockBatchId)
+      );
+      
+      if (matches.length > 0) {
+        handleBatchSelect(matches[0].data?.batchId);
+      }
+    }
+  }, [activeBroodstockBatchId, batchLogs, selectedBatchId]);
 
   // When selectedBatchId changes, populate entries from the Spawning log
   const handleBatchSelect = (batchId: string) => {
@@ -123,13 +143,14 @@ const EggCountForm = ({
     });
 
     const avgFertilization = totalEggsValue > 0 ? (totalFertilizedValue / totalEggsValue) * 100 : 0;
-    const eggsPerAnimal = totalAnimalsValue > 0 ? (totalFertilizedValue * 1000000 / totalAnimalsValue) : 0;
+    const eggsPerAnimal = totalAnimalsValue > 0 ? (totalFertilizedValue / totalAnimalsValue) : 0;
 
     const summary = {
       totalEggs: Math.round(totalEggsValue * 100) / 100,
-      totalFertilized: Math.round(totalFertilizedValue * 10000) / 10000,
+      totalAnimals: totalAnimalsValue,
+      totalFertilized: Math.round(totalFertilizedValue * 100) / 100,
       avgFertilization: Math.round(avgFertilization * 100) / 100,
-      eggsPerAnimal: Math.round(eggsPerAnimal)
+      eggsPerAnimal: Math.round(eggsPerAnimal * 100) / 100
     };
 
     // Only update if summary or entries changed significantly
@@ -202,45 +223,49 @@ const EggCountForm = ({
              <div className="p-2 bg-indigo-100 rounded-xl">
                 <Calculator className="w-4 h-4 text-indigo-600" />
              </div>
-             <h3 className="text-sm font-bold uppercase tracking-wider">Consolidated Data</h3>
+             <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2 Egg Count Data Collection</h3>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-4 bg-white border-indigo-100 flex flex-col justify-center shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-2 opacity-5">
-                <Database className="w-12 h-12" />
+            <Card className="p-4 bg-white border-indigo-100 flex flex-col justify-center shadow-sm relative overflow-hidden">
+              <div className="absolute -right-2 -top-2 opacity-[0.03] text-indigo-900">
+                <Database className="w-16 h-16" />
               </div>
-              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Total Egg</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-indigo-950">{(data.summary?.totalEggs || 0).toLocaleString()}</span>
-                <span className="text-xs font-bold text-indigo-600 opacity-50 uppercase tracking-tighter">Millions</span>
-              </div>
-            </Card>
-
-            <Card className="p-4 bg-white border-blue-100 flex flex-col justify-center shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-2 opacity-5">
-                <FlaskConical className="w-12 h-12" />
-              </div>
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Fertilised Egg</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-blue-950">{(data.summary?.totalFertilized || 0).toLocaleString()}</span>
-                <span className="text-xs font-bold text-blue-600 opacity-50 uppercase tracking-tighter">Millions</span>
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1.5">Total Egg</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-indigo-950 leading-none">{(data.summary?.totalEggs || 0).toLocaleString()}</span>
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">mil</span>
               </div>
             </Card>
 
-            <Card className="p-4 bg-white border-emerald-100 flex flex-col justify-center shadow-sm relative overflow-hidden group">
-               <div className="absolute top-0 right-0 p-2 opacity-5 text-emerald-600">
-                <CheckCircle2 className="w-12 h-12" />
+            <Card className="p-4 bg-white border-blue-100 flex flex-col justify-center shadow-sm relative overflow-hidden">
+              <div className="absolute -right-2 -top-2 opacity-[0.03] text-blue-900">
+                <FlaskConical className="w-16 h-16" />
               </div>
-              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Avg Fert %</p>
-              <p className="text-2xl font-black text-emerald-950">{(data.summary?.avgFertilization || 0).toFixed(1)}%</p>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1.5">Fertilised Egg</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-blue-950 leading-none">{(data.summary?.totalFertilized || 0).toLocaleString()}</span>
+                <span className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">mil</span>
+              </div>
             </Card>
 
-            <Card className="p-4 bg-white border-amber-100 flex flex-col justify-center shadow-sm relative overflow-hidden group">
-               <div className="absolute top-0 right-0 p-2 opacity-5 text-amber-600">
-                <Database className="w-12 h-12" />
+            <Card className="p-4 bg-white border-emerald-100 flex flex-col justify-center shadow-sm relative overflow-hidden">
+               <div className="absolute -right-2 -top-2 opacity-[0.03] text-emerald-900">
+                <CheckCircle2 className="w-16 h-16" />
               </div>
-              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Egg / Animal / Fer</p>
-              <p className="text-2xl font-black text-amber-950">{(data.summary?.eggsPerAnimal || 0).toLocaleString()}</p>
+              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1.5">Avg Fert %</p>
+              <p className="text-2xl font-black text-emerald-950 leading-none">{(data.summary?.avgFertilization || 0).toFixed(1)}%</p>
+            </Card>
+
+            <Card className="p-4 bg-white border-amber-100 flex flex-col justify-center shadow-sm relative overflow-hidden">
+               <div className="absolute -right-2 -top-2 opacity-[0.03] text-amber-900">
+                <Database className="w-16 h-16" />
+              </div>
+              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1.5">Egg / Animal</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-amber-950 leading-none">{(data.summary?.eggsPerAnimal || 0).toLocaleString()}</span>
+                <span className="text-[10px] font-black text-amber-400 uppercase tracking-tighter">mil</span>
+              </div>
+              <p className="text-[8px] font-bold text-amber-600/60 mt-1 leading-none italic">({data.summary?.totalFertilized} / {data.summary?.totalAnimals} F)</p>
             </Card>
           </div>
         </div>
@@ -248,40 +273,69 @@ const EggCountForm = ({
         <div className="h-px bg-muted-foreground/10 mx-4" />
 
         {/* Field 1: Spawning Tank Inputs */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-indigo-100 rounded-xl">
-                <Database className="w-4 h-4 text-indigo-600" />
-              </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Select Batch from Spawning</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-                <SelectTrigger className="w-64 h-10 rounded-xl border-indigo-100 font-bold text-indigo-900 bg-white">
-                  <SelectValue placeholder="Search Spawning Batch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {loadingBatches ? (
-                    <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                  ) : batchLogs.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No recent spawning batches found</div>
-                  ) : (
-                    batchLogs.map(log => (
-                      <SelectItem key={log.id} value={log.data?.batchId}>
-                        <span className="font-bold">{log.data?.batchId}</span>
-                        <span className="ml-2 opacity-50 text-[10px] font-normal">({new Date(log.created_at).toLocaleDateString()})</span>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" onClick={addEntry} className="rounded-xl border-dashed h-9 font-bold text-[10px] uppercase gap-1.5 focus:ring-indigo-500">
-                <Plus className="w-3.5 h-3.5" /> Manual Entry
-              </Button>
-            </div>
+        <div className="space-y-4">
+        {selectedBatchId && activeBroodstockBatchId ? (
+          <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-xl">
+                   <Database className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                   <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70">Active Spawning Batch</p>
+                   <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
+                </div>
+             </div>
+             <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedBatchId('')} 
+                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100"
+             >
+                Change Batch
+             </Button>
           </div>
-
+        ) : (
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 bg-indigo-100 rounded-lg">
+                  <Database className="w-3.5 h-3.5 text-indigo-600" />
+                </div>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Step # 1: Choose Batch</Label>
+              </div>
+              <div className="flex items-stretch gap-2">
+                <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+                  <SelectTrigger className="flex-1 h-11 rounded-xl border-indigo-100 font-bold text-indigo-900 bg-white shadow-sm ring-offset-background focus:ring-2 focus:ring-indigo-500">
+                    <SelectValue placeholder="Search Spawning Batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingBatches ? (
+                      <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                    ) : batchLogs.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-amber-600 bg-amber-50 rounded-xl">
+                        <AlertCircle className="w-4 h-4 inline mr-2" />
+                        No spawning batches found.
+                      </div>
+                    ) : (
+                      batchLogs.map(log => (
+                        <SelectItem key={log.id} value={log.data?.batchId}>
+                          <span className="font-bold">{log.data?.batchId}</span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  onClick={addEntry} 
+                  className="px-4 rounded-xl border-dashed h-11 font-black text-[10px] uppercase gap-2 text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-indigo-300 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Manual Entry
+                </Button>
+              </div>
+          </div>
+        )}
+        </div>
           {loadingBatches && entries.length === 0 ? (
              <div className="flex flex-col items-center justify-center p-12 bg-muted/5 rounded-3xl border border-dashed text-muted-foreground gap-3">
                 <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
@@ -326,7 +380,12 @@ const EggCountForm = ({
                             </SelectTrigger>
                             <SelectContent>
                               {availableTanks
-                                .filter(s => s.section_type === 'SPAWNING' && (!farmId || s.farm_id === farmId))
+                                .filter(s => {
+                                  const sType = (s.section_type || '').toUpperCase();
+                                  const sName = (s.name || '').toUpperCase();
+                                  // Robust keywords: SPAWN, SPW, SS
+                                  return (sType.includes('SPAWN') || sName.includes('SPAWN') || sName.includes('SPW') || sName.includes('SS')) && (!farmId || s.farm_id === farmId);
+                                })
                                 .flatMap(s => s.tanks.map((t:any) => (
                                   <SelectItem key={t.id} value={t.id}>{s.name} - {t.name}</SelectItem>
                                 )))}
@@ -407,9 +466,30 @@ const EggCountForm = ({
                   </div>
                 </Card>
               ))}
+              
+              {/* Note Specs Totals Row */}
+              <div className="px-6 py-4 bg-white/40 border border-dashed rounded-3xl flex items-center justify-between shadow-sm border-indigo-200">
+                 <div className="flex-1">
+                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Calculated Totals</p>
+                    <p className="text-xs font-bold text-indigo-950 italic opacity-60">Sum of above spawning tanks</p>
+                 </div>
+                 <div className="flex items-center gap-8">
+                    <div className="text-center min-w-[80px]">
+                       <p className="text-[8px] font-black text-muted-foreground uppercase opacity-50">Spawn Animal</p>
+                       <p className="text-lg font-black text-slate-800">{data.summary?.totalAnimals || 0} (F)</p>
+                    </div>
+                    <div className="text-center min-w-[80px]">
+                       <p className="text-[8px] font-black text-indigo-600 uppercase opacity-50">Egg Count</p>
+                       <p className="text-lg font-black text-indigo-950">{data.summary?.totalEggs || 0} mil</p>
+                    </div>
+                    <div className="text-center min-w-[80px]">
+                       <p className="text-[8px] font-black text-emerald-600 uppercase opacity-50">Avg % Fert</p>
+                       <p className="text-lg font-black text-emerald-950">{data.summary?.avgFertilization || 0}%</p>
+                    </div>
+                 </div>
+              </div>
             </div>
           )}
-        </div>
 
         {/* Activity Photo */}
         <div className="space-y-1.5 pt-4 border-t border-dashed">

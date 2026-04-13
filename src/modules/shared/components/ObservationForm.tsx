@@ -501,8 +501,9 @@ const ObservationForm = ({
 
       {/* Comments */}
       <div className="space-y-1.5">
-        <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
+        <Label className="text-xs" htmlFor="observation-comments">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
         <Textarea 
+          id="observation-comments"
           value={comments} 
           onChange={e => onCommentsChange(e.target.value)} 
           placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."} 

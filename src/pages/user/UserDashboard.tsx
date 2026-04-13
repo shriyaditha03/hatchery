@@ -87,12 +87,31 @@ const UserDashboard = () => {
         return new Date().toISOString().split('T')[0];
     };
 
-    // State validation logic - ensuring active selections match accessibility/module
     useEffect(() => {
         if (!loading && availableFarms.length > 0) {
+            // Greedy auto-selection: find if there's exactly one farm and exactly one section available
+            const needsFarmSelection = !activeFarmId && availableFarmsForModule.length === 1;
+            const targetFarmId = needsFarmSelection ? availableFarmsForModule[0].id : activeFarmId;
+
+            // Update farm if needed
+            if (needsFarmSelection) {
+                setActiveFarmId(targetFarmId);
+            }
+
+            // Immediately check for section auto-selection using the targetFarmId (even if just set)
+            if (targetFarmId && !activeSectionId) {
+                const sectionsForTargetFarm = allMySections.filter(s => 
+                    s.farm_id === targetFarmId && 
+                    (s.farm_category || 'LRT').toUpperCase() === activeModule.toUpperCase()
+                );
+                
+                if (sectionsForTargetFarm.length === 1 && activeModule !== 'MATURATION') {
+                    setActiveSectionId(sectionsForTargetFarm[0].id);
+                }
+            }
+
+            // Section and Farm validation (cleanup)
             const currentFarm = availableFarms.find(f => f.id === activeFarmId);
-            
-            // 1. If active farm doesn't match current module, find a suitable replacement
             if (currentFarm && (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
                 if (availableFarmsForModule.length === 1) {
                     setActiveFarmId(availableFarmsForModule[0].id);
@@ -101,13 +120,8 @@ const UserDashboard = () => {
                 }
                 setActiveSectionId(null);
                 setActiveBroodstockBatchId(null);
-            } 
-            // 2. Auto-select farm if exactly one is available for the module and none is selected
-            else if (!activeFarmId && availableFarmsForModule.length === 1) {
-                setActiveFarmId(availableFarmsForModule[0].id);
             }
 
-            // 3. Section validation
             const currentSection = allMySections.find(s => s.id === activeSectionId);
             const isWrongFarmOrModule = currentSection && (
                 currentSection.farm_id !== activeFarmId || 
@@ -118,7 +132,7 @@ const UserDashboard = () => {
                 setActiveSectionId(null);
             }
         }
-    }, [availableFarms, availableFarmsForModule, allMySections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId, setActiveBroodstockBatchId]);
+    }, [availableFarms, availableFarmsForModule, allMySections, filteredSections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId, setActiveBroodstockBatchId]);
 
     // Maturation Batches Fetching
     useEffect(() => {
@@ -395,7 +409,7 @@ const UserDashboard = () => {
                     {/* Select Farm */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild disabled={!hasAccessToModule}>
-                            <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                            <Button variant="outline" data-testid="farm-select" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                 <div className="flex items-center gap-2 truncate">
                                     <MapPin className="w-4 h-4 opacity-70" />
                                     <span>{hasAccessToModule ? displayFarmLabel : 'No Access'}</span>
@@ -420,7 +434,7 @@ const UserDashboard = () => {
                     {activeModule !== 'MATURATION' ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild disabled={!activeFarmId || filteredSections.length === 0}>
-                                <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
+                                <Button variant="outline" data-testid="tank-select" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                     <div className="flex items-center gap-2 truncate">
                                         <Layers className="w-4 h-4 opacity-70" />
                                         <span>{displaySectionLabel}</span>
@@ -445,7 +459,7 @@ const UserDashboard = () => {
                                     <ChevronDown className="w-4 h-4" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto">
+                            <DropdownMenuContent className="min-w-[20rem] w-auto max-w-md max-h-80 overflow-y-auto">
                                 <DropdownMenuLabel>Select Active Batch</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 {maturationBatches.map(b => (
@@ -557,7 +571,12 @@ const UserDashboard = () => {
                             <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
                         </Button>
                     ))}
-                    <Button variant="outline" className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}>
+                    <Button 
+                        variant="outline" 
+                        data-testid="daily-report-button"
+                        className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" 
+                        onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
+                    >
                         <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
                         <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
                     </Button>

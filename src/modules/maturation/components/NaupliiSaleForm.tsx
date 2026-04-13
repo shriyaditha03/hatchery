@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -67,12 +67,17 @@ const NaupliiSaleForm = ({
           .select('*')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Nauplii Harvest')
-          .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
           .order('created_at', { ascending: false })
-          .limit(30);
+          .limit(100);
 
         if (error) throw error;
-        setBatchLogs(logs || []);
+        // Filter in JS to avoid 400 errors on complex JSON queries
+        const filtered = logs.filter(l => 
+          l.stockingId === activeBroodstockBatchId || 
+          l.data?.stockingId === activeBroodstockBatchId ||
+          l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId || '')
+        );
+        setBatchLogs(filtered || []);
       } catch (err) {
         console.error('Error fetching harvest batches:', err);
       } finally {
@@ -80,7 +85,22 @@ const NaupliiSaleForm = ({
       }
     };
     fetchBatches();
-  }, [farmId]);
+  }, [farmId, activeBroodstockBatchId]);
+
+  // Auto-select batch from dashboard context
+  useEffect(() => {
+    if (activeBroodstockBatchId && batchLogs.length > 0 && !selectedBatchId) {
+      const matches = batchLogs.filter(l => 
+        l.stockingId === activeBroodstockBatchId || 
+        l.data?.stockingId === activeBroodstockBatchId ||
+        l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId)
+      );
+      
+      if (matches.length > 0) {
+        handleBatchSelect(matches[0].data?.selectedBatchId);
+      }
+    }
+  }, [activeBroodstockBatchId, batchLogs, selectedBatchId]);
 
   const handleBatchSelect = (batchId: string) => {
     setSelectedBatchId(batchId);
@@ -147,37 +167,63 @@ const NaupliiSaleForm = ({
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
         {/* Batch Selection */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-indigo-100 rounded-xl">
-              <Database className="w-4 h-4 text-indigo-600" />
+        {selectedBatchId && activeBroodstockBatchId ? (
+          <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-xl">
+                   <Database className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                   <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70">Active Harvest Batch</p>
+                   <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
+                </div>
+             </div>
+             <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedBatchId('')} 
+                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-blue-100"
+             >
+                Change Batch
+             </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-indigo-100 rounded-xl">
+                <Database className="w-4 h-4 text-indigo-600" />
+              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
+              <p className="text-[10px] text-muted-foreground uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Harvest</p>
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Select Batch from Harvest</h3>
+            
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
+              <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+                 <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900">
+                   <SelectValue placeholder="Search Batch ID" />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {loadingBatches ? (
+                     <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                   ) : batchLogs.length === 0 ? (
+                     <div className="p-4 text-center text-xs text-amber-600 bg-amber-50 rounded-xl">
+                        <AlertCircle className="w-4 h-4 inline mr-2" />
+                        No Harvest batches found. Please record a "Nauplii Harvest" activity first.
+                     </div>
+                   ) : (
+                     batchLogs.map(log => (
+                       <SelectItem key={log.id} value={log.data?.selectedBatchId}>
+                         <span className="font-bold">{log.data?.selectedBatchId}</span>
+                         <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
+                       </SelectItem>
+                     ))
+                   )}
+                 </SelectContent>
+              </Select>
+            </div>
           </div>
-          
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-            <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-               <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900">
-                 <SelectValue placeholder="Search Batch ID" />
-               </SelectTrigger>
-               <SelectContent>
-                 {loadingBatches ? (
-                   <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                 ) : batchLogs.length === 0 ? (
-                   <div className="p-4 text-center text-xs text-muted-foreground">No recent Harvest batches found</div>
-                 ) : (
-                   batchLogs.map(log => (
-                     <SelectItem key={log.id} value={log.data?.selectedBatchId}>
-                       <span className="font-bold">{log.data?.selectedBatchId}</span>
-                       <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
-                     </SelectItem>
-                   ))
-                 )}
-               </SelectContent>
-            </Select>
-          </div>
-        </div>
+        )}
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
 
@@ -187,7 +233,7 @@ const NaupliiSaleForm = ({
             <div className="p-2 bg-emerald-100 rounded-xl">
               <ShoppingCart className="w-4 h-4 text-emerald-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Nauplii Available for Sale / Discard</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2 available Nauplii tanks</h3>
           </div>
           
           <div className="space-y-4">
@@ -202,7 +248,7 @@ const NaupliiSaleForm = ({
 
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-emerald-700 ml-1 leading-none tracking-widest">Sale (mil) *</Label>
+                        <Label className="text-[9px] font-black uppercase text-emerald-700 ml-1 leading-none tracking-widest">Step # 3 Amount for sale (mil) *</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
@@ -216,7 +262,7 @@ const NaupliiSaleForm = ({
                         </div>
                      </div>
                      <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">Discards (mil)</Label>
+                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">Step # 6 Discarded amount (mil)</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
@@ -263,7 +309,7 @@ const NaupliiSaleForm = ({
 
               {/* Bonus % Input */}
               <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black text-blue-700 uppercase tracking-widest ml-1">Bonus % *</Label>
+                 <Label className="text-[10px] font-black text-blue-700 uppercase tracking-widest ml-1">Step # 4 Bonus % *</Label>
                  <div className="relative">
                     <Input 
                       type="number" 
@@ -280,7 +326,7 @@ const NaupliiSaleForm = ({
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
               {/* Net Sale Display */}
               <div className="p-6 bg-indigo-600 rounded-[2rem] text-white shadow-xl shadow-indigo-100 overflow-hidden relative group">
-                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Net Nauplii Sale</p>
+                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Step # 7: Net nauplii sold</p>
                  <p className="text-4xl font-black mt-1 leading-none">{data.netNauplii?.toLocaleString()}<span className="text-sm opacity-50 ml-2 uppercase">Millions</span></p>
                  <p className="text-[8px] mt-2 opacity-50 italic animate-pulse tracking-tight">Auto-calculated: Gross * (1 + Bonus%)</p>
                  <ShoppingCart className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10" />
@@ -288,7 +334,7 @@ const NaupliiSaleForm = ({
 
               {/* No of Packets */}
               <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1 leading-none">No. of Packets Packed *</Label>
+                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1 leading-none">Step # 5: Nos. of packets packed *</Label>
                  <div className="relative">
                     <Input 
                        type="number" 

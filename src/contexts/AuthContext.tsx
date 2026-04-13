@@ -277,15 +277,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Legacy Admin User
   const DUMMY_USER: UserProfile = {
-    id: 'legacy-admin-id',
+    id: '00000000-0000-0000-0000-000000000001',
     username: 'admin',
     name: 'Rajesh Kumar',
-    role: 'technician',
-    hatchery_id: 'legacy-hatchery',
+    role: 'owner',
+    hatchery_id: '00000000-0000-0000-0000-000000000003',
     hatchery_name: 'Sunrise Aqua Farm',
     location: 'Nellore, Andhra Pradesh',
     email: 'rajesh@sunriseaqua.com',
     phone: '+91 98765 43210',
+    access: [
+      {
+        farm_id: '00000000-0000-0000-0000-000000000004',
+        farm_name: 'Sunrise Main Farm',
+        farm_category: 'LRT',
+        section_id: '00000000-0000-0000-0000-000000000005',
+        section_name: 'Section A',
+        tank_id: null
+      }
+    ]
+  };
+
+  // Legacy Worker User
+  const DUMMY_WORKER: UserProfile = {
+    id: '00000000-0000-0000-0000-000000000002',
+    username: 'worker',
+    name: 'Suresh Staff',
+    role: 'worker',
+    hatchery_id: '00000000-0000-0000-0000-000000000003',
+    hatchery_name: 'Sunrise Aqua Farm',
+    location: 'Nellore, Andhra Pradesh',
+    email: 'suresh@sunriseaqua.com',
+    phone: '+91 98765 43211',
+    access: [
+      {
+        farm_id: '00000000-0000-0000-0000-000000000004',
+        farm_name: 'Sunrise Main Farm',
+        farm_category: 'LRT',
+        section_id: '00000000-0000-0000-0000-000000000005',
+        section_name: 'Section A',
+        tank_id: null
+      }
+    ]
   };
 
   const loginWithUsername = async (username: string, password: string) => {
@@ -295,6 +328,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // 1. Check Legacy Admin (admin/admin123)
       if (username === 'admin' && password === 'admin123') {
         setUser(DUMMY_USER);
+        return { error: null };
+      }
+
+      // 2. Check Legacy Worker (worker/worker123)
+      if (username === 'worker' && password === 'worker123') {
+        setUser(DUMMY_WORKER);
         return { error: null };
       }
 

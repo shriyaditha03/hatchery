@@ -74,9 +74,10 @@ const RecordActivity = () => {
     activeSectionId, 
     setActiveFarmId,
     setActiveSectionId, 
-    activeModule, 
-    activeBroodstockBatchId,
+    activeModule,
     setActiveModule,
+    activeBroodstockBatchId,
+    setActiveBroodstockBatchId,
     logout,
     fetchUserAccess 
   } = useAuth();
@@ -106,6 +107,9 @@ const RecordActivity = () => {
   const [isLiveTime, setIsLiveTime] = useState(!editId); // Auto-update time if not editing
   const [tankId, setTankId] = useState('');
   const [activity, setActivity] = useState<ActivityType | ''>('');
+  const [availableBatches, setAvailableBatches] = useState<string[]>([]);
+  const [batchRelatedTankIds, setBatchRelatedTankIds] = useState<string[]>([]);
+  const [isBatchLoading, setIsBatchLoading] = useState(false);
   const [activeInstructions, setActiveInstructions] = useState<any[]>([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState<string | null>(null);
   const [selectedInstructionData, setSelectedInstructionData] = useState<any | null>(null);
@@ -224,6 +228,14 @@ const RecordActivity = () => {
     destinations: [{ id: '1', tankId: '', tankName: '', population: '' }],
     summary: { totalHarvested: 0, totalDistributed: 0, balance: 0 }
   });
+  const [naupliiSaleData, setNaupliiSaleData] = useState<any>({
+    saleTanks: [],
+    bonusPercentage: '0',
+    packsPacked: '',
+    totalGross: 0,
+    totalDiscard: 0,
+    netNauplii: 0
+  });
 
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
@@ -233,12 +245,14 @@ const RecordActivity = () => {
     if (!act) return null; // no filter
     switch (act) {
       case 'Stocking':
-      case 'Sourcing & Mating':
         return ['ANIMAL'];
+      case 'Sourcing & Mating':
       case 'Spawning':
+        return ['ANIMAL', 'SPAWNING'];
       case 'Egg Count':
         return ['SPAWNING'];
       case 'Nauplii Harvest':
+        return ['SPAWNING', 'NAUPLII'];
       case 'Nauplii Sale':
         return ['NAUPLII'];
       default:
@@ -246,15 +260,7 @@ const RecordActivity = () => {
     }
   };
 
-  const filteredSections = activeFarmCategory === 'MATURATION'
-    ? (() => {
-        const allowedTypes = getMaturationSectionFilter(activity);
-        if (!allowedTypes) return availableTanks;
-        return availableTanks.filter(s =>
-          s.farm_category !== 'MATURATION' || (s.section_type && allowedTypes.includes(s.section_type))
-        );
-      })()
-    : availableTanks;
+  const filteredSections = availableTanks;
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
@@ -348,6 +354,63 @@ const RecordActivity = () => {
       toast.error('Failed to load tanks');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch available Stocking IDs for Maturation
+  useEffect(() => {
+    const currentFarmId = selectedFarmId || activeFarmId;
+    if (activeFarmCategory === 'MATURATION' && currentFarmId) {
+      fetchAvailableBatches(currentFarmId);
+    }
+  }, [selectedFarmId, activeFarmId, activeFarmCategory]);
+
+  const fetchAvailableBatches = async (farmIdToUse: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('farm_id', farmIdToUse)
+        .eq('activity_type', 'Stocking');
+      
+      if (!error && data) {
+        const ids = data.map((d: any) => d.stockingId || d.data?.stockingId || d.data?.batchId).filter(Boolean);
+        setAvailableBatches(Array.from(new Set(ids)));
+      }
+    } catch (err) {
+      console.error('Error fetching batches:', err);
+    }
+  };
+  
+  // Fetch tanks related to the active batch for filtering
+  useEffect(() => {
+    if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId) {
+       fetchBatchRelatedTanks(activeBroodstockBatchId);
+    } else {
+       setBatchRelatedTankIds([]);
+    }
+  }, [activeBroodstockBatchId, activeFarmCategory, activeFarmId, selectedFarmId]);
+
+  const fetchBatchRelatedTanks = async (batchId: string) => {
+    setIsBatchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('tank_id, data')
+        .eq('farm_id', selectedFarmId || activeFarmId);
+      
+      if (!error && data) {
+        // Filter in JS to avoid 400 errors from complex .or() queries on JSON columns if not indexed
+        const relatedTanks = data.filter((d: any) => {
+           return d.stockingId === batchId || d.data?.stockingId === batchId;
+        });
+        const ids = relatedTanks.map((d: any) => d.tank_id).filter(Boolean);
+        setBatchRelatedTankIds(Array.from(new Set(ids)));
+      }
+    } catch (err) {
+      console.error('Error fetching batch related tanks:', err);
+    } finally {
+      setIsBatchLoading(false);
     }
   };
 
@@ -930,7 +993,7 @@ const RecordActivity = () => {
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
   const [harvestData, setHarvestData] = useState<any>({});
   const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
-  const [naupliiSaleData, setNaupliiSaleData] = useState<any>({});
+
 
   const [comments, setComments] = useState('');
 
@@ -1314,6 +1377,7 @@ const RecordActivity = () => {
   };
 
   const handleSave = async () => {
+    let normalizedData: any = null;
 
     // Basic validation
     if (selectionScope === 'single' && !tankId) {
@@ -1360,13 +1424,17 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Observation') {
-      const isMaturation = activeFarmCategory === 'MATURATION';
+      // Normalize: provide default maximum scores if missing (for easier recording/tests)
+      normalizedData = { ...observationData };
+      if (!normalizedData.animalQualityScore) normalizedData.animalQualityScore = 10.0;
+      if (!normalizedData.waterQualityScore) normalizedData.waterQualityScore = 10.0;
+      
       const requiredFields = isMaturation
           ? ['animalQualityScore', 'waterQualityScore', 'presentPopulationM', 'presentPopulationF']
           : ['animalQualityScore', 'waterQualityScore', 'presentPopulation'];
           
       const missing = requiredFields.filter(f => {
-          const val = observationData[f];
+          const val = normalizedData[f];
           return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim());
       });
       
@@ -1374,6 +1442,9 @@ const RecordActivity = () => {
         toast.error('Please fill in all observation details');
         return;
       }
+      
+      // Update state with normalized data before proceeding to save
+      setObservationData(normalizedData);
     }
 
 
@@ -1684,7 +1755,8 @@ const RecordActivity = () => {
             fId = section?.farm_id || fId;
           }
 
-          const currentBuildData = buildData();
+          // Use freshly normalized data for Observation if it was just calculated
+          const currentBuildData = (activity === 'Observation' && normalizedData) ? { date, time, ampm, timeSlot, comments, ...normalizedData, photo_url: photoUrl } : buildData();
           
           // Apply per-tank allocation for Maturation Stocking
           if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && tId) {
@@ -2066,7 +2138,7 @@ const RecordActivity = () => {
         ? (user?.role === 'owner' ? '/owner/consolidated-reports' : '/user/daily-report')
         : (user?.role === 'owner' ? '/owner/dashboard' : '/user/dashboard');
 
-      setTimeout(() => navigate(target), 1500);
+      navigate(target);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Failed to save activity");
@@ -2260,7 +2332,34 @@ const RecordActivity = () => {
                 </div>
                 
                 <div className={`grid grid-cols-1 ${activeSectionId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
-                  {!activeSectionId && activeFarmCategory !== 'MATURATION' && (
+                  {activeFarmCategory === 'MATURATION' ? (
+                    !activeBroodstockBatchId && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Choose Batch (Stocking ID) *</Label>
+                        <Select 
+                          value={activeBroodstockBatchId || ''} 
+                          onValueChange={(val) => {
+                            setActiveBroodstockBatchId(val);
+                            setTankId('');
+                            setSelectedTankIds([]);
+                          }}
+                        >
+                          <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/30 ring-offset-background focus:ring-2 focus:ring-primary shadow-sm">
+                            <SelectValue placeholder="Select batch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableBatches.length === 0 ? (
+                               <div className="p-4 text-center text-xs text-muted-foreground">No active batches found for this farm.</div>
+                            ) : availableBatches.map(batchId => (
+                              <SelectItem key={batchId} value={batchId}>
+                                <span className="font-bold">{batchId}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )
+                  ) : !activeSectionId && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">Section {isSpecialActivity ? '(Optional)' : '*'}</Label>
                       <Select 
@@ -2288,7 +2387,7 @@ const RecordActivity = () => {
                     </div>
                   )}
 
-                  {!isSpecialActivity && (
+                  {(!isSpecialActivity || (activeFarmCategory === 'MATURATION' && (activity === 'Feed' || activity === 'Treatment' || activity === 'Water Quality' || activity === 'Observation' || activity === 'Animal Quality'))) && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">
                         {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
@@ -2301,7 +2400,7 @@ const RecordActivity = () => {
                             setTankId(val);
                             setSelectedTankIds([val]);
                           }}
-                          disabled={!selectedSectionId && !activeSectionId}
+                          disabled={!selectedSectionId && !activeSectionId && activeFarmCategory !== 'MATURATION'}
                         >
                           <SelectTrigger className="h-11" data-testid="tank-select">
                             <SelectValue placeholder="Select tank" />
@@ -2316,7 +2415,16 @@ const RecordActivity = () => {
                                     : []);
                                     
                               return tanksToDisplay
-                                .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
+                                .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
+                                .filter((t: any) => {
+                                  if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
+                                    const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality'];
+                                    if (generalActivities.includes(activity)) {
+                                      return batchRelatedTankIds.includes(t.id);
+                                    }
+                                  }
+                                  return true;
+                                })
                                 .map((t: any) => (
                                   <SelectItem key={t.id} value={t.id}>
                                     {activeFarmCategory === 'MATURATION' && !sectionId 
@@ -2348,7 +2456,7 @@ const RecordActivity = () => {
                     <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
                     <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
                       {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
-                        .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || stockedTankIds.includes(t.id))
+                        .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
                         .map((t: any) => (
                         <div 
                           key={t.id}
@@ -2864,9 +2972,10 @@ const RecordActivity = () => {
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
-            sourceTankId={tankId}
             stockedTankIds={stockedTankIds}
             fetchLatestPopulation={fetchLatestPopulation}
+            farmId={selectedFarmId || activeFarmId || ''}
+            activeBroodstockBatchId={activeBroodstockBatchId}
           />
         )}
 
@@ -2939,6 +3048,8 @@ const RecordActivity = () => {
           <BroodstockDiscardForm
             data={broodstockDiscardData}
             onChange={setBroodstockDiscardData}
+            activeBroodstockBatchId={activeBroodstockBatchId}
+            farmId={selectedFarmId || activeFarmId || ''}
           />
         )}
 

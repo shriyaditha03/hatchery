@@ -58,12 +58,17 @@ const SpawningForm = ({
           .select('*')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Sourcing & Mating')
-          .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
           .order('created_at', { ascending: false })
-          .limit(30);
+          .limit(100);
 
         if (error) throw error;
-        setBatchLogs(logs || []);
+        // Filter in JS to avoid 400 errors on complex JSON queries
+        const filtered = logs.filter(l => 
+          l.stockingId === activeBroodstockBatchId || 
+          l.data?.stockingId === activeBroodstockBatchId ||
+          l.data?.batchNumber?.startsWith(activeBroodstockBatchId || '')
+        );
+        setBatchLogs(filtered || []);
       } catch (err) {
         console.error('Error fetching batches:', err);
       } finally {
@@ -71,7 +76,23 @@ const SpawningForm = ({
       }
     };
     fetchBatches();
-  }, [farmId]);
+  }, [farmId, activeBroodstockBatchId]);
+
+  // Auto-select batch from dashboard context
+  useEffect(() => {
+    if (activeBroodstockBatchId && batchLogs.length > 0 && !selectedBatchId) {
+      // Find logs that match this stockingId (either in direct field or data)
+      const matches = batchLogs.filter(l => 
+        l.stockingId === activeBroodstockBatchId || 
+        l.data?.stockingId === activeBroodstockBatchId ||
+        l.data?.batchNumber?.startsWith(activeBroodstockBatchId)
+      );
+      
+      if (matches.length > 0) {
+        setSelectedBatchId(matches[0].data?.batchNumber);
+      }
+    }
+  }, [activeBroodstockBatchId, batchLogs, selectedBatchId]);
 
   // When selectedBatchId changes, populate tank lists from the log
   useEffect(() => {
@@ -167,39 +188,64 @@ const SpawningForm = ({
         </div>
       )}
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
-        {/* 1. Spawning Tank Selection */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-blue-100 rounded-xl">
-              <Database className="w-4 h-4 text-blue-600" />
+        {selectedBatchId && activeBroodstockBatchId ? (
+          <div className="flex items-center justify-between px-4 py-3 bg-blue-50/50 rounded-2xl border border-blue-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-xl">
+                   <Database className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                   <p className="text-[10px] font-bold text-blue-800 uppercase tracking-widest opacity-70">Active Spawning Batch</p>
+                   <p className="text-sm font-black text-blue-900">{selectedBatchId}</p>
+                </div>
+             </div>
+             <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedBatchId('')} 
+                className="h-8 text-[10px] font-bold text-blue-600 hover:bg-blue-100"
+             >
+                Change Batch
+             </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-blue-100 rounded-xl">
+                <Database className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
+              <p className="text-[10px] text-muted-foreground uppercase bg-blue-50 px-2 py-1 rounded-md font-bold">From Sourcing & Mating</p>
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Select Batch from Sourcing & Mating</h3>
+            
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
+              <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+                 <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/20 bg-background/50 text-base font-black text-primary">
+                   <SelectValue placeholder="Search Batch ID" />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {loadingBatches ? (
+                     <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                   ) : batchLogs.length === 0 ? (
+                     <div className="p-4 text-center text-xs text-amber-600 bg-amber-50">
+                        <AlertCircle className="w-4 h-4 inline mr-2" />
+                        No batches found. Please record a "Sourcing & Mating" activity first.
+                     </div>
+                   ) : (
+                     batchLogs.map(log => (
+                       <SelectItem key={log.id} value={log.data?.batchNumber}>
+                         <span className="font-bold">{log.data?.batchNumber}</span>
+                         <span className="ml-2 opacity-50 text-[10px]">({log.data?.totalSourced} F)</span>
+                       </SelectItem>
+                     ))
+                   )}
+                 </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
+            </div>
           </div>
-          
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-            <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
-               <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/20 bg-background/50 text-base font-black text-primary">
-                 <SelectValue placeholder="Search Batch ID" />
-               </SelectTrigger>
-               <SelectContent>
-                 {loadingBatches ? (
-                   <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                 ) : batchLogs.length === 0 ? (
-                   <div className="p-4 text-center text-xs text-muted-foreground">No recent batches found</div>
-                 ) : (
-                   batchLogs.map(log => (
-                     <SelectItem key={log.id} value={log.data?.batchNumber}>
-                       <span className="font-bold">{log.data?.batchNumber}</span>
-                       <span className="ml-2 opacity-50 text-[10px]">({log.data?.totalSourced} F)</span>
-                     </SelectItem>
-                   ))
-                 )}
-               </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
-          </div>
-        </div>
+        )}
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
 
@@ -209,7 +255,7 @@ const SpawningForm = ({
             <div className="p-2 bg-amber-100 rounded-xl">
               <Sparkles className="w-4 h-4 text-amber-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Spawning Results for Batch Tanks</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2 Spawner Result</h3>
           </div>
           
           <div className="space-y-1 text-[10px] text-muted-foreground italic -mt-2 px-1">
@@ -271,7 +317,7 @@ const SpawningForm = ({
             <div className="p-2 bg-indigo-100 rounded-xl">
               <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Animals Shifted To (Return Source)</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 3 Animal Shifted To (Return Source)</h3>
           </div>
           
           <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">Confirm return to starting tanks.</div>

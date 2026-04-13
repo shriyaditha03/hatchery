@@ -81,54 +81,98 @@ const SourcingMatingForm = ({
 
   // 1. Automatically populate Field 1 with female tanks from the active Broodstock Batch
   useEffect(() => {
-    if (availableTanks.length > 0 && sourceTanks.length === 0 && activeBroodstockBatchId) {
-      fetchSourceTanksFromBatch();
+    if (availableTanks.length > 0 && activeBroodstockBatchId) {
+      // Re-run if we haven't found tanks yet, in case population data was still loading
+      if (sourceTanks.length === 0 || matingTanks.length === 0) {
+         fetchInitialData();
+      }
     }
-  }, [availableTanks, activeBroodstockBatchId, farmId]);
+  }, [availableTanks, activeBroodstockBatchId, farmId, tankPopulations]);
 
-  const fetchSourceTanksFromBatch = async () => {
+  const fetchInitialData = async () => {
+    let stockedTankIds: string[] = [];
     try {
-      // Find the Stocking log for this batch
+      // 1. Get the Stocking record for this batch to find specific tanks
       const { data: logs, error } = await supabase
         .from('activity_logs')
         .select('*')
         .eq('activity_type', 'Stocking')
         .eq('farm_id', farmId)
-        .or(`stockingId.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`)
-        .single();
+        .or(`stockingId.eq."${activeBroodstockBatchId}"`)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (error) throw error;
-
-      // The stocking record contains 'allocations' (tankId -> count)
-      const allocations = logs.data?.allocations || {};
-      const stockedTankIds = Object.keys(allocations);
-
-      const initialSources: any[] = [];
-      
-      availableTanks.forEach(section => {
-        section.tanks
-          .filter((t: any) => t.gender === 'FEMALE' && stockedTankIds.includes(t.id))
-          .forEach((t: any) => {
-            const availableCount = tankPopulations[t.id] || 0;
-            initialSources.push({
-              id: t.id,
-              tankId: t.id,
-              tankName: t.name,
-              sectionName: section.name,
-              available: availableCount,
-              femaleCount: '' // User will enter how many are RIPE
-            });
-          });
-      });
-
-      if (initialSources.length > 0) {
-        setSourceTanks(initialSources);
-        updateData({ sourceTanks: initialSources });
+      if (!error && logs && logs[0]?.data?.allocations) {
+         stockedTankIds = Object.keys(logs[0].data.allocations);
       }
     } catch (err) {
-      console.error('Error fetching source tanks from batch:', err);
+      console.warn('Optional stocking record not found');
+    }
+
+    const initialSources: any[] = [];
+    const initialMating: any[] = [];
+    const filteredSections = availableTanks;
+
+    filteredSections.forEach(section => {
+      section.tanks.forEach((t: any) => {
+        const availableCount = tankPopulations[t.id] || 0;
+        const isStockedInBatch = stockedTankIds.length === 0 || stockedTankIds.includes(t.id);
+
+        // Field 1: Female Sourcing (Robust case-insensitive check)
+        const genderUpper = (t.gender || '').toUpperCase();
+        if (genderUpper === 'FEMALE') {
+          initialSources.push({
+            id: t.id,
+            tankId: t.id,
+            tankName: t.name || t.tank_name || 'Unknown',
+            sectionName: section.name,
+            available: availableCount,
+            femaleCount: ''
+          });
+        }
+
+        // Field 2: Male Mating (Robust case-insensitive check)
+        if (genderUpper === 'MALE') {
+          initialMating.push({
+            id: t.id,
+            tankId: t.id,
+            tankName: t.name || t.tank_name || 'Unknown',
+            maleCount: availableCount,
+            femalesAdded: '',
+            femalesMated: '',
+            balance: 0
+          });
+        }
+      });
+    });
+
+    if (initialSources.length > 0 && sourceTanks.length === 0) {
+      setSourceTanks(initialSources);
+      updateData({ sourceTanks: initialSources });
+    }
+    if (initialMating.length > 0 && matingTanks.length === 0) {
+      setMatingTanks(initialMating);
+      updateData({ matingTanks: initialMating });
     }
   };
+
+  // Sync populations for mating tanks when they load
+  useEffect(() => {
+    if (matingTanks.length > 0) {
+      const updatedMating = matingTanks.map(m => {
+        const currentPop = tankPopulations[m.tankId] || 0;
+        if (m.maleCount !== currentPop) {
+          return { ...m, maleCount: currentPop };
+        }
+        return m;
+      });
+      
+      if (JSON.stringify(updatedMating) !== JSON.stringify(matingTanks)) {
+        setMatingTanks(updatedMating);
+        updateData({ matingTanks: updatedMating });
+      }
+    }
+  }, [tankPopulations]);
 
   useEffect(() => {
     if (sourceTanks.length > 0) {
@@ -332,12 +376,31 @@ const SourcingMatingForm = ({
         }))
     );
 
-  const spawningTanksOptions = availableTanks
-    .filter(s => s.section_type === 'SPAWNING' && (!farmId || s.farm_id === farmId))
-    .flatMap(s => s.tanks.map((t: any) => ({
-      id: t.id,
-      label: `${s.name} - ${t.name}`
-    })));
+  const spawningTanksOptions = (() => {
+    // Phase 1: Try many keywords
+    const matches = availableTanks
+      .filter(s => {
+        const sType = (s.section_type || '').toUpperCase();
+        const sName = (s.name || '').toUpperCase();
+        return (sType.includes('SPAWN') || sName.includes('SPAWN') || sName.includes('SPW') || sName.includes('SS') || sName.includes('SP-')) && (!farmId || s.farm_id === farmId);
+      });
+
+    // Phase 2: If keywords fail, show ALL Maturation sections that aren't the animal/source ones
+    const finalSections = matches.length > 0 ? matches : availableTanks.filter(s => {
+      const sName = (s.name || '').toUpperCase();
+      return s.farm_category === 'MATURATION' && !sName.includes('ANIMAL') && !sName.includes('BS') && (!farmId || s.farm_id === farmId);
+    });
+
+    // Phase 3: Final check - if we STILL have nothing, just show all empty tanks in the entire farm
+    const pool = finalSections.length > 0 ? finalSections : availableTanks;
+
+    return pool.flatMap(s => s.tanks
+      .filter((t: any) => (tankPopulations[t.id] || 0) === 0)
+      .map((t: any) => ({
+        id: t.id,
+        label: `${s.name} - ${t.name}`
+      })));
+  })();
 
   const returnTanksOptions = sourceTanks
     .filter(s => parseFloat(s.femaleCount) > 0)
@@ -417,7 +480,7 @@ const SourcingMatingForm = ({
               <div className="p-2 bg-emerald-100 rounded-xl">
                 <Search className="w-4 h-4 text-emerald-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">1. Ripe Females Sourced</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 4 Ripe Females Sourced</h3>
             </div>
             <div className="text-[10px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-1 rounded-md">
               Female Tanks in Animal Sections
@@ -489,13 +552,11 @@ const SourcingMatingForm = ({
               <div className="p-2 bg-pink-100 rounded-xl">
                 <Heart className="w-4 h-4 text-pink-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Mating Details</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 5 Mating (Male Tanks)</h3>
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={addMatingTank} className="h-8 text-xs font-bold text-pink-600 hover:bg-pink-50">
-              <Plus className="w-4 h-4 mr-1" /> Add Mating tank
-            </Button>
           </div>
-          <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">List all male tanks and record female additions.</div>
+          <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">Enter mating data for each male tank.</div>
+
 
           <div className="space-y-6">
             {matingTanks.length === 0 && (
@@ -505,81 +566,54 @@ const SourcingMatingForm = ({
               </div>
             )}
             {matingTanks.map((mating, idx) => (
-              <Card key={mating.id} className="p-5 bg-pink-50/30 border-pink-100/50 rounded-[2rem] space-y-5 relative group shadow-sm transition-all hover:shadow-md">
-                <Button 
-                  variant="ghost" size="icon" 
-                  onClick={() => removeMatingTank(mating.id)}
-                  className="absolute top-4 right-4 h-8 w-8 text-pink-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-pink-700">Mating Tank (Male) *</Label>
-                    <Select value={mating.tankId} onValueChange={val => handleMatingTankChange(mating.id, { tankId: val })}>
-                      <SelectTrigger className="h-11 rounded-xl bg-white/80 border-pink-200">
-                        <SelectValue placeholder="Select Male Tank" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {matingTanksOptions.map(opt => (
-                          <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-pink-700/60 uppercase tracking-wider ml-1">Males in Tank <span className="text-[10px] lowercase font-normal italic">(Auto)</span></Label>
-                    <div className="h-11 rounded-xl bg-white/50 border border-dashed border-pink-200 flex items-center px-4">
-                      <span className="text-sm font-black text-foreground">{mating.maleCount}</span>
-                      <span className="ml-2 text-[10px] font-bold text-muted-foreground uppercase opacity-50">Males</span>
-                    </div>
-                  </div>
+              <Card key={mating.id} className="p-4 bg-pink-50/20 border-pink-100/50 rounded-2xl space-y-4 relative group shadow-sm">
+                <div className="flex items-center justify-between border-b border-pink-100/30 pb-3">
+                   <div className="flex items-center gap-4">
+                      <div className="p-2 bg-white rounded-lg border border-pink-100 shadow-sm">
+                         <p className="text-sm font-black text-pink-900 leading-none">{mating.tankName}</p>
+                      </div>
+                      <div className="flex flex-col">
+                         <span className="text-[9px] font-black uppercase text-pink-600/70 tracking-widest leading-none">Male Animals</span>
+                         <span className="text-base font-black text-pink-950 mt-0.5">{mating.maleCount} (M)</span>
+                      </div>
+                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 p-4 bg-white/40 rounded-2xl border border-pink-100">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Female Added *</Label>
+                    <Label className="text-[10px] font-black uppercase text-pink-900/60 ml-1">Female Added</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
                         value={mating.femalesAdded} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
-                        className={cn(
-                          "h-10 rounded-xl font-bold bg-white pr-8",
-                          !editedFields[`mating_${mating.id}_added`] && mating.femalesAdded && "border-primary/20 bg-primary/5 text-primary"
-                        )} 
+                        className="h-11 rounded-xl font-black bg-white border-pink-100 text-pink-950 pr-8" 
                         placeholder="0"
                       />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        {!editedFields[`mating_${mating.id}_added`] && mating.femalesAdded && (
-                          <Wand2 className="w-2.5 h-2.5 text-primary opacity-60" />
-                        )}
-                        <span className="text-[9px] font-black text-pink-400">F</span>
-                      </div>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-400">F</span>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">(F) Mated *</Label>
+                    <Label className="text-[10px] font-black uppercase text-pink-900/60 ml-1">(F) Mated</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
                         value={mating.femalesMated} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesMated: e.target.value })} 
-                        className="h-10 rounded-xl font-bold bg-white" 
+                        className="h-11 rounded-xl font-black bg-white border-pink-100 text-pink-950 pr-8" 
                         placeholder="0"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-pink-400">F</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-400">F</span>
                     </div>
                   </div>
-                  <div className="col-span-2 xl:col-span-1 border-t xl:border-t-0 xl:border-l border-dashed border-pink-200 pt-3 xl:pt-0 xl:pl-4 space-y-1">
-                    <Label className="text-[10px] font-bold uppercase text-pink-600">c) Balance Non-Mated</Label>
-                    <div className="flex items-center gap-2">
-                       <span className="text-xl font-black text-pink-700">{mating.balance}</span>
-                       <span className="text-[10px] font-bold text-pink-400 uppercase">Females</span>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-dashed border-pink-100">
+                    <span className="text-[10px] font-black uppercase text-pink-400 tracking-wider">Balance Non-Mated:</span>
+                    <div className="flex items-center gap-1.5">
+                       <span className="text-sm font-black text-pink-700">{mating.balance}</span>
+                       <span className="text-[10px] font-bold text-pink-400 uppercase">F</span>
                     </div>
-                    <p className="text-[8px] text-pink-400 italic">Remaining in tank</p>
-                  </div>
                 </div>
               </Card>
             ))}
@@ -617,7 +651,7 @@ const SourcingMatingForm = ({
             {/* 3a: Spawning Tanks */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-blue-700 ml-1">Mated (F) To Spawning Tanks *</Label>
+                <Label className="text-[10px] font-black uppercase text-blue-700 ml-1">Step # 6 Animal Shifted to Spawning *</Label>
                 <Button type="button" variant="ghost" size="sm" onClick={addMatedDestination} className="h-7 text-[10px] font-bold text-blue-600 hover:bg-blue-50">
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
@@ -678,7 +712,7 @@ const SourcingMatingForm = ({
             {/* 3b: Return to Source */}
             <div className="space-y-4 pt-6 md:pt-0 border-t md:border-t-0 md:border-l md:pl-6 border-dashed border-blue-100">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-slate-700 ml-1">Non-Mated (F) Return to Source *</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-700 ml-1">Step # 7 Return to Source Tanks *</Label>
                 <Button type="button" variant="ghost" size="sm" onClick={addReturnDestination} className="h-7 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
@@ -722,7 +756,12 @@ const SourcingMatingForm = ({
                          <div className="mt-1 px-1 flex justify-between items-center text-[8px] font-bold">
                             <span className="text-muted-foreground uppercase">New Pop:</span>
                             <span className="text-slate-700">
-                               {Math.max(0, (tankPopulations[dest.tankId] || 0) + (parseFloat(dest.count) || 0))} F
+                               {(() => {
+                                 const currentPop = tankPopulations[dest.tankId] || 0;
+                                 const sourcedFromThisTank = sourceTanks.find(s => s.tankId === dest.tankId)?.femaleCount || 0;
+                                 const returnedCount = parseFloat(dest.count) || 0;
+                                 return Math.max(0, currentPop - parseFloat(sourcedFromThisTank) + returnedCount);
+                               })()} F
                             </span>
                          </div>
                       )}
