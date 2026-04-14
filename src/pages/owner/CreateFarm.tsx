@@ -156,6 +156,14 @@ const CreateFarm = () => {
         };
     };
 
+    const getFarmPrefix = (name: string) => {
+        if (!name) return 'F';
+        const words = name.trim().split(/\s+/);
+        const initials = words.map(w => w.match(/[a-zA-Z]/)?.[0]?.toUpperCase()).filter(Boolean).join('');
+        const numbers = name.match(/\d+/g)?.join('') || '';
+        return `${initials}${numbers}` || 'F';
+    };
+
     const handleContinueToSetup = () => {
         if (!farmName.trim()) {
             toast.error("Please enter a farm name");
@@ -210,15 +218,20 @@ const CreateFarm = () => {
             const currentTanks = currentSection.tanks;
             
             const prefix = getTankPrefix(currentSection, sIdx);
+            const farmPrefix = getFarmPrefix(farmName);
             
             let tankName = customName;
             if (!tankName) {
                 if (currentSection.type === 'ANIMAL' && gender) {
                     const genderCode = gender === 'MALE' ? 'MT' : 'FT';
                     const genderTanks = currentTanks.filter(t => t.gender === gender);
-                    tankName = `${prefix}_${genderCode}${genderTanks.length + 1}`;
+                    tankName = farmCategory === 'MATURATION' 
+                        ? `${farmPrefix}_${prefix}_${genderCode}${genderTanks.length + 1}`
+                        : `${prefix}_${genderCode}${genderTanks.length + 1}`;
                 } else {
-                    tankName = `${prefix}_T${currentTanks.length + 1}`;
+                    tankName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
+                        : `${prefix}_T${currentTanks.length + 1}`;
                 }
             }
 
@@ -281,17 +294,25 @@ const CreateFarm = () => {
             if (count > currentTanks.length) {
                 // Add tanks
                 const additionalCount = count - currentTanks.length;
-                const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => ({
-                    name: `S${sIdx + 1}_T${currentTanks.length + i + 1}`,
-                    type: (currentTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
-                    shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
-                    length: 0,
-                    width: 0,
-                    height: 0,
-                    radius: 0,
-                    volume: 0,
-                    area: 0
-                }));
+                const prefix = getTankPrefix(newSections[sIdx], sIdx);
+                const farmPrefix = getFarmPrefix(farmName);
+                const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => {
+                    const name = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
+                        : `S${sIdx + 1}_T${currentTanks.length + i + 1}`;
+
+                    return {
+                        name: name,
+                        type: (currentTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
+                        shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
+                        length: 0,
+                        width: 0,
+                        height: 0,
+                        radius: 0,
+                        volume: 0,
+                        area: 0
+                    };
+                });
                 newSections[sIdx].tanks = [...currentTanks, ...additionalTanks];
             } else if (count < currentTanks.length) {
                 // Remove tanks
@@ -325,12 +346,17 @@ const CreateFarm = () => {
 
             const newTanks = Array.from({ length: count }).map((_, i) => {
                 let newName = '';
+                const farmPrefix = getFarmPrefix(farmName);
                 if (tankToCopy.gender) {
                     const genderCode = tankToCopy.gender === 'MALE' ? 'MT' : 'FT';
                     const existingGenderCount = currentTanks.filter(t => t.gender === tankToCopy.gender).length;
-                    newName = `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
+                    newName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_${genderCode}${existingGenderCount + i + 1}`
+                        : `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
                 } else {
-                    newName = `${prefix}_T${currentTanks.length + i + 1}`;
+                    newName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
+                        : `${prefix}_T${currentTanks.length + i + 1}`;
                 }
                 return { ...tankToCopy, name: newName };
             });

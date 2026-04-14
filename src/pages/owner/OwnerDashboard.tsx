@@ -29,8 +29,6 @@ const OwnerDashboard = () => {
     } = useAuth();
     const navigate = useNavigate();
     const [farms, setFarms] = useState<any[]>([]);
-    const [maturationBatches, setMaturationBatches] = useState<any[]>([]);
-    const [batchesLoading, setBatchesLoading] = useState(false);
 
     // Fetch Farms
     useEffect(() => {
@@ -74,46 +72,6 @@ const OwnerDashboard = () => {
             }
         }
     }, [farms, activeFarmId, activeModule, setActiveFarmId, setActiveBroodstockBatchId]);
-
-    // Maturation Batches Fetching
-    useEffect(() => {
-        if (activeModule === 'MATURATION' && activeFarmId) {
-            fetchMaturationBatches();
-        }
-    }, [activeModule, activeFarmId]);
-
-    const fetchMaturationBatches = async () => {
-        setBatchesLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from('activity_logs')
-                .select('*')
-                .eq('activity_type', 'Stocking')
-                .eq('farm_id', activeFarmId)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            
-            const batchesList: any[] = [];
-            const seenIds = new Set();
-            (data || []).forEach(log => {
-                const sId = log.data?.stockingId || log.stockingId;
-                if (sId && !seenIds.has(sId)) {
-                    seenIds.add(sId);
-                    batchesList.push({ id: sId, name: sId });
-                }
-            });
-            setMaturationBatches(batchesList);
-            if (batchesList.length === 1 && !activeBroodstockBatchId) {
-                setActiveBroodstockBatchId(batchesList[0].id);
-            }
-        } catch (err) {
-            console.error('Error:', err);
-        } finally {
-            setBatchesLoading(false);
-        }
-    };
-
 
     // Handle module switch
     const handleModuleChange = (module: string) => {
@@ -171,8 +129,6 @@ const OwnerDashboard = () => {
     const filteredFarms = farms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
     const activeFarm = farms.find(f => f.id === activeFarmId);
     const activeFarmName = activeFarm?.name || 'Select Farm';
-    const activeBatch = maturationBatches.find(b => b.id === activeBroodstockBatchId);
-    const displayBatchLabel = activeBatch?.name || 'Select Broodstock Batch';
 
     return (
         <div className="min-h-screen bg-background pb-10">
@@ -285,39 +241,7 @@ const OwnerDashboard = () => {
                     )}
                 </div>
 
-                {/* Batch Selector for Maturation */}
-                {activeModule === 'MATURATION' && activeFarmId && (
-                    <div className="mt-3 flex flex-col gap-1">
-                        <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Broodstock Batch</label>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-9 font-semibold text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <Database className="w-4 h-4 opacity-70" />
-                                        <span>{batchesLoading ? 'Loading...' : displayBatchLabel}</span>
-                                    </div>
-                                    <ChevronDown className="h-4 w-4 opacity-70" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="min-w-[20rem] w-auto max-w-md max-h-80 overflow-y-auto">
-                                <DropdownMenuLabel>Select Active Batch</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {maturationBatches.map(b => (
-                                    <DropdownMenuItem 
-                                        key={b.id} 
-                                        onClick={() => setActiveBroodstockBatchId(b.id)}
-                                        className={b.id === activeBroodstockBatchId ? "font-bold bg-muted" : ""}
-                                    >
-                                        <Database className="mr-2 h-4 w-4 opacity-50" /> {b.name}
-                                    </DropdownMenuItem>
-                                ))}
-                                {maturationBatches.length === 0 && !batchesLoading && (
-                                    <DropdownMenuItem disabled>No Batches Found</DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                )}
+                {/* Quick Stats or Info could go here */}
             </div>
 
             {/* Main Grid */}

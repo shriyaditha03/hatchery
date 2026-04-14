@@ -260,7 +260,8 @@ const RecordActivity = () => {
     }
   };
 
-  const filteredSections = availableTanks;
+  const currentFarmId = selectedFarmId || activeFarmId;
+  const filteredSections = availableTanks.filter(s => currentFarmId ? s.farm_id === currentFarmId : true);
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
@@ -1803,18 +1804,21 @@ const RecordActivity = () => {
           }
 
           // If Stocking, dynamically append Section and Tank names to the generated stockingId
+          // EXCEPT for Maturation, where we want ONE consolidated Batch ID
           if (activity === 'Stocking' && currentBuildData.stockingId) {
-            let suffix = '';
-            if (sId) {
-              const sec = availableTanks.find(s => s.id === sId);
-              if (sec) suffix += `_${sec.name.replace(/\s+/g, '')}`;
+            if (activeFarmCategory !== 'MATURATION') {
+              let suffix = '';
+              if (sId) {
+                const sec = availableTanks.find(s => s.id === sId);
+                if (sec) suffix += `_${sec.name.replace(/\s+/g, '')}`;
+              }
+              if (tId && sId) {
+                const sec = availableTanks.find(s => s.id === sId);
+                const tnk = sec?.tanks.find((t: any) => t.id === tId);
+                if (tnk) suffix += `_${tnk.name.replace(/\s+/g, '')}`;
+              }
+              currentBuildData.stockingId = `${currentBuildData.stockingId}${suffix}`;
             }
-            if (tId && sId) {
-              const sec = availableTanks.find(s => s.id === sId);
-              const tnk = sec?.tanks.find((t: any) => t.id === tId);
-              if (tnk) suffix += `_${tnk.name.replace(/\s+/g, '')}`;
-            }
-            currentBuildData.stockingId = `${currentBuildData.stockingId}${suffix}`;
             
             // Also save a copy inside stockingData for consistency if needed by other logic
             if (currentBuildData.stockingData) {
@@ -2164,7 +2168,7 @@ const RecordActivity = () => {
               <ChevronDown className="w-3 h-3 -rotate-90" />
               <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
               <ChevronDown className="w-3 h-3 -rotate-90" />
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? 'All Sections' : 'Section')}</span>
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? (activity === 'Stocking' ? 'New Batch' : 'All Sections') : 'Section')}</span>
               <ChevronDown className="w-3 h-3 -rotate-90" />
               <span className={activity ? 'text-white/80' : 'text-white'}>{isPlanningMode ? 'Plan Activity' : (editId ? 'Edit Record' : 'Record Activity')}</span>
               {activity && (
@@ -2310,7 +2314,7 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {(activity || !type) && !isSpecialActivity && (
+        {(activity || !type) && !isSpecialActivity && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
           <div className="glass-card rounded-2xl p-4 space-y-4">
 
             {true && (
@@ -2427,10 +2431,16 @@ const RecordActivity = () => {
                                 })
                                 .map((t: any) => (
                                   <SelectItem key={t.id} value={t.id}>
-                                    {activeFarmCategory === 'MATURATION' && !sectionId 
-                                      ? `${availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id))?.name} - ${t.name}`
-                                      : t.name
-                                    }
+                                    <span className={`text-xs ${
+                                      activeFarmCategory === 'MATURATION' 
+                                        ? (t.name.toUpperCase().includes('_MT') ? 'text-blue-600 font-bold' : t.name.toUpperCase().includes('_FT') ? 'text-pink-600 font-bold' : '')
+                                        : ''
+                                    }`}>
+                                      {activeFarmCategory === 'MATURATION' && !sectionId 
+                                        ? `${availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id))?.name} - ${t.name}`
+                                        : t.name
+                                      }
+                                    </span>
                                   </SelectItem>
                                 ));
                             })()}
@@ -2451,13 +2461,28 @@ const RecordActivity = () => {
                 </div>
 
                 {/* Custom Selection List */}
-                {selectionScope === 'custom' && (selectedSectionId || activeSectionId) && (
+                {selectionScope === 'custom' && (selectedSectionId || activeSectionId || activeFarmCategory === 'MATURATION') && (
                   <div className="pt-2 border-t border-dashed animate-in fade-in slide-in-from-top-2">
                     <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
                     <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
-                      {(availableTanks.find(s => s.id === (selectedSectionId || activeSectionId))?.tanks || [])
-                        .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
-                        .map((t: any) => (
+                      {(() => {
+                        const sectionId = selectedSectionId || activeSectionId;
+                        const tanksToDisplay = sectionId 
+                          ? (availableTanks.find(s => s.id === sectionId)?.tanks || [])
+                          : (activeFarmCategory === 'MATURATION' ? filteredSections.flatMap(s => s.tanks) : []);
+                        
+                        return tanksToDisplay
+                          .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
+                          .filter((t: any) => {
+                            if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
+                              const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality'];
+                              if (generalActivities.includes(activity)) {
+                                return batchRelatedTankIds.includes(t.id);
+                              }
+                            }
+                            return true;
+                          })
+                          .map((t: any) => (
                         <div 
                           key={t.id}
                           onClick={() => {
@@ -2472,9 +2497,16 @@ const RecordActivity = () => {
                           }`}
                         >
                           <Checkbox checked={selectedTankIds.includes(t.id)} className="pointer-events-none" />
-                          <span className="text-xs truncate">{t.name}</span>
+                          <span className={`text-xs break-all ${
+                            activeFarmCategory === 'MATURATION' && t.name
+                              ? (t.name.toUpperCase().includes('_MT') ? 'text-blue-600 font-bold' : t.name.toUpperCase().includes('_FT') ? 'text-pink-600 font-bold' : '')
+                              : ''
+                          }`}>
+                            {t.name}
+                          </span>
                         </div>
-                      ))}
+                      ));
+                    })()}
                     </div>
                   </div>
                 )}

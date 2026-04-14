@@ -187,6 +187,14 @@ const EditFarm = () => {
         });
     };
 
+    const getFarmPrefix = (name: string) => {
+        if (!name) return 'F';
+        const words = name.trim().split(/\s+/);
+        const initials = words.map(w => w.match(/[a-zA-Z]/)?.[0]?.toUpperCase()).filter(Boolean).join('');
+        const numbers = name.match(/\d+/g)?.join('') || '';
+        return `${initials}${numbers}` || 'F';
+    };
+
     const getTankPrefix = (section: SectionConfig, sIdx: number) => {
         const sNumMatch = section.name.match(/\d+/);
         const sNum = sNumMatch ? sNumMatch[0] : (sIdx + 1);
@@ -236,14 +244,19 @@ const EditFarm = () => {
             const currentTanks = currentSection.tanks;
             
             const prefix = getTankPrefix(currentSection, sIdx);
+            const farmPrefix = getFarmPrefix(farmName);
             
             let tankName = '';
             if (currentSection.type === 'ANIMAL' && gender) {
                 const genderCode = gender === 'MALE' ? 'MT' : 'FT';
                 const genderTanks = currentTanks.filter(t => t.gender === gender);
-                tankName = `${prefix}_${genderCode}${genderTanks.length + 1}`;
+                tankName = farmCategory === 'MATURATION'
+                    ? `${farmPrefix}_${prefix}_${genderCode}${genderTanks.length + 1}`
+                    : `${prefix}_${genderCode}${genderTanks.length + 1}`;
             } else {
-                tankName = `${prefix}_T${currentTanks.length + 1}`;
+                tankName = farmCategory === 'MATURATION'
+                    ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
+                    : `${prefix}_T${currentTanks.length + 1}`;
             }
 
             newSections[sIdx].tanks.push({
@@ -283,12 +296,17 @@ const EditFarm = () => {
 
             const newTanks = Array.from({ length: count }).map((_, i) => {
                 let newName = '';
+                const farmPrefix = getFarmPrefix(farmName);
                 if (tankToCopy.gender) {
                     const genderCode = tankToCopy.gender === 'MALE' ? 'MT' : 'FT';
                     const existingGenderCount = currentTanks.filter(t => t.gender === tankToCopy.gender).length;
-                    newName = `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
+                    newName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_${genderCode}${existingGenderCount + i + 1}`
+                        : `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
                 } else {
-                    newName = `${prefix}_T${currentTanks.length + i + 1}`;
+                    newName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
+                        : `${prefix}_T${currentTanks.length + i + 1}`;
                 }
                 return { ...tankToCopy, id: undefined, name: newName };
             });

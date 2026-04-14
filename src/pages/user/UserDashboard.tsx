@@ -144,8 +144,6 @@ const UserDashboard = () => {
     const fetchMaturationBatches = async () => {
         setBatchesLoading(true);
         try {
-            // Fetch Stocking activities for the current farm
-            // Filter by categories that include 'MATURATION' or just all stocking in a maturation farm
             const { data, error } = await supabase
                 .from('activity_logs')
                 .select('*')
@@ -254,15 +252,50 @@ const UserDashboard = () => {
     const fetchSupervisorInstructions = async () => {
         try {
             const today = getTodayStr();
-            const { data, error } = await supabase
+            // 1. Fetch raw instructions
+            const { data: rawData, error: fetchError } = await supabase
                 .from('activity_charts')
-                .select(`*, farms(name), tanks(name), sections(name), worker:profiles!assigned_to(full_name)`)
+                .select('*')
                 .eq('created_by', user?.id)
                 .or(`is_completed.eq.false,scheduled_date.eq.${today}`)
                 .order('is_completed', { ascending: true })
                 .order('scheduled_date', { ascending: true })
                 .order('scheduled_time', { ascending: true });
-            if (!error) setSupervisorInstructions(data || []);
+            
+            if (fetchError) throw fetchError;
+            if (!rawData || rawData.length === 0) {
+                setSupervisorInstructions([]);
+                return;
+            }
+
+            // 2. Fetch related data for manual join
+            const farmIds = Array.from(new Set(rawData.map(c => c.farm_id).filter(id => !!id)));
+            const sectionIds = Array.from(new Set(rawData.map(c => c.section_id).filter(id => !!id)));
+            const tankIds = Array.from(new Set(rawData.map(c => c.tank_id).filter(id => !!id)));
+            const workerIds = Array.from(new Set(rawData.map(c => c.assigned_to).filter(id => !!id)));
+
+            const [
+                { data: farms }, 
+                { data: sections }, 
+                { data: tanks },
+                { data: workers }
+            ] = await Promise.all([
+                supabase.from('farms').select('id, name').in('id', farmIds),
+                supabase.from('sections').select('id, name').in('id', sectionIds),
+                supabase.from('tanks').select('id, name').in('id', tankIds),
+                supabase.from('profiles').select('id, full_name').in('id', workerIds)
+            ]);
+
+            // 3. Combine in memory
+            const mapped = rawData.map((instr: any) => ({
+                ...instr,
+                farms: farms?.find(f => f.id === instr.farm_id) || null,
+                sections: sections?.find(s => s.id === instr.section_id) || null,
+                tanks: tanks?.find(t => t.id === instr.tank_id) || null,
+                worker: workers?.find(w => w.id === instr.assigned_to) || null
+            }));
+
+            setSupervisorInstructions(mapped);
         } catch (err) {
             console.error('Failed to load supervisor instructions:', err);
         }
@@ -308,7 +341,7 @@ const UserDashboard = () => {
     const activeBatch = maturationBatches.find(b => b.id === activeBroodstockBatchId);
     
     const displaySectionLabel = activeSection?.name || 'Select Section';
-    const displayBatchLabel = activeBatch?.name || 'Select Broodstock Batch';
+    const displayBatchLabel = activeBatch?.name || (activeBroodstockBatchId === 'new' ? 'New Batch' : 'Select Broodstock Batch');
     const displayFarmLabel = activeFarm?.name || 'Select Farm';
 
     const ACTIVITY_ICONS: Record<string, any> = {
@@ -450,7 +483,7 @@ const UserDashboard = () => {
                         </DropdownMenu>
                     ) : (
                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild disabled={!activeFarmId || maturationBatches.length === 0}>
+                            <DropdownMenuTrigger asChild disabled={!activeFarmId}>
                                 <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                     <div className="flex items-center gap-2 truncate">
                                         <Database className="w-4 h-4 opacity-70" />
@@ -460,15 +493,51 @@ const UserDashboard = () => {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="min-w-[20rem] w-auto max-w-md max-h-80 overflow-y-auto">
-                                <DropdownMenuLabel>Select Active Batch</DropdownMenuLabel>
+                                <DropdownMenuLabel className="flex items-center justify-between">
+                                    <span>Select Active Batch</span>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-6 text-[9px] font-black uppercase tracking-tighter text-primary hover:bg-primary/5 px-2"
+                                        onClick={() => {
+                                            setActiveBroodstockBatchId('new');
+                                            navigate('/user/activity/stocking?category=MATURATION&mode=activity');
+                                        }}>
+                                        <Plus className="w-3 h-3 mr-1" /> Create New
+                                    </Button>
+                                </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                    onClick={() => {
+                                        setActiveBroodstockBatchId('new');
+                                        navigate('/user/activity/stocking?category=MATURATION&mode=activity');
+                                    }}
+                                    className={`flex items-center gap-2 py-2.5 px-3 border-b border-muted/30 ${activeBroodstockBatchId === 'new' ? 'bg-primary/10 text-primary font-black' : 'font-bold text-primary/80'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeBroodstockBatchId === 'new' ? 'bg-primary text-white' : 'bg-primary/10'}`}>
+                                        <Plus className="w-4 h-4" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs">+ Start New BS Batch</span>
+                                        <span className="text-[9px] font-medium opacity-60">Initialize a new stocking session</span>
+                                    </div>
+                                </DropdownMenuItem>
                                 {maturationBatches.map(b => (
-                                    <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={activeBroodstockBatchId === b.id ? "bg-muted font-bold" : ""}>
-                                        {b.name}
+                                    <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={`flex items-center gap-3 py-3 px-3 transition-colors ${activeBroodstockBatchId === b.id ? "bg-muted/50 font-black border-l-4 border-primary" : "hover:bg-muted/30"}`}>
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
+                                            <Database className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs">{b.name}</span>
+                                            <span className="text-[9px] font-medium text-muted-foreground">
+                                                ID: {b.id.slice(0, 15)}...
+                                            </span>
+                                        </div>
                                     </DropdownMenuItem>
                                 ))}
                                 {maturationBatches.length === 0 && !batchesLoading && (
-                                    <DropdownMenuItem disabled>No Broodstock Batches found</DropdownMenuItem>
+                                    <div className="p-4 text-center">
+                                        <p className="text-[10px] text-muted-foreground font-medium">No active batches found</p>
+                                    </div>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -489,24 +558,28 @@ const UserDashboard = () => {
                     </div>
                 </div>
             ) : !activeFarmId ? (
-                <div className="px-4 mt-8">
-                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
-                        <MapPin className="w-10 h-10 text-primary opacity-80" />
+                <div className="px-4 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="bg-white/80 backdrop-blur-md p-10 rounded-[2.5rem] border border-white/40 shadow-xl text-center flex flex-col items-center justify-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl ocean-gradient flex items-center justify-center shadow-lg shadow-blue-200/50">
+                            <MapPin className="w-8 h-8 text-white" />
+                        </div>
                         <div>
-                            <h3 className="font-bold text-lg">Select an Assigned Farm</h3>
-                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                            <h3 className="font-black text-xl text-slate-800 tracking-tight">Select an Assigned Farm</h3>
+                            <p className="text-sm text-slate-500 mt-2 px-6 leading-relaxed">
                                 Please choose a farm from the dropdown above to continue working.
                             </p>
                         </div>
                     </div>
                 </div>
             ) : (!activeSectionId && activeModule !== 'MATURATION') ? (
-                <div className="px-4 mt-8">
-                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
-                        <Layers className="w-10 h-10 text-primary opacity-80" />
+                <div className="px-4 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="bg-white/80 backdrop-blur-md p-10 rounded-[2.5rem] border border-white/40 shadow-xl text-center flex flex-col items-center justify-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-200/50">
+                            <Layers className="w-8 h-8 text-white" />
+                        </div>
                         <div>
-                            <h3 className="font-bold text-lg">Select a Section</h3>
-                            <p className="text-xs text-muted-foreground mt-1 px-4">
+                            <h3 className="font-black text-xl text-slate-800 tracking-tight">Select a Section</h3>
+                            <p className="text-sm text-slate-500 mt-2 px-6 leading-relaxed">
                                 {filteredSections.length > 0 
                                     ? "Please choose a section from the dropdown above to continue working."
                                     : "No sections are assigned to you in this farm. Please contact your manager."}
@@ -515,19 +588,28 @@ const UserDashboard = () => {
                     </div>
                 </div>
             ) : (!activeBroodstockBatchId && activeModule === 'MATURATION') ? (
-                <div className="px-4 mt-8">
-                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
-                        <Database className="w-10 h-10 text-primary opacity-80" />
-                        <div>
-                            <h3 className="font-bold text-lg">Select a Batch ID</h3>
-                            <p className="text-xs text-muted-foreground mt-1 px-4">
-                                Please choose an active Broodstock Batch from the dropdown above to continue working. 
-                                Tanks will be auto-populated based on the selected batch.
-                            </p>
-                            <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/user/activity/stocking?category=MATURATION')}>
-                                <Plus className="w-4 h-4 mr-2" /> Start New Broodstock Stocking
-                            </Button>
+                <div className="px-4 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="bg-white/80 backdrop-blur-md p-10 rounded-[2.5rem] border border-white/40 shadow-xl text-center flex flex-col items-center justify-center gap-5">
+                        <div className="w-16 h-16 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-200/50">
+                            <Database className="w-8 h-8 text-white" />
                         </div>
+                        <div>
+                            <h3 className="font-black text-xl text-slate-800 tracking-tight">
+                                {activeBroodstockBatchId === 'new' ? 'Create New BS Batch' : 'Select a Batch ID'}
+                            </h3>
+                            <p className="text-sm text-slate-500 mt-2 px-6 leading-relaxed">
+                                {activeBroodstockBatchId === 'new' 
+                                    ? 'Fill out the stocking form to initialize this batch. The ID will be auto-generated based on supplier details.' 
+                                    : 'Please choose an active Broodstock Batch from the dropdown above to continue working. Tanks will be auto-populated based on the selected batch.'}
+                            </p>
+                        </div>
+                        <Button 
+                            variant={activeBroodstockBatchId === 'new' ? 'default' : 'outline'} 
+                            className={`mt-6 h-12 px-6 rounded-xl border-dashed border-2 hover:border-primary hover:bg-primary/5 font-bold transition-all group ${activeBroodstockBatchId === 'new' ? 'ocean-gradient border-none' : 'text-primary'}`} 
+                            onClick={() => navigate(`/user/activity/stocking?category=MATURATION&mode=activity`)}>
+                            <Plus className={`w-5 h-5 mr-3 group-hover:rotate-90 transition-transform duration-300 ${activeBroodstockBatchId === 'new' ? 'text-white' : ''}`} /> 
+                            {activeBroodstockBatchId === 'new' ? 'Create New Stocking' : 'Start New Broodstock Stocking'}
+                        </Button>
                     </div>
                 </div>
             ) : (
