@@ -62,13 +62,22 @@ const SpawningForm = ({
           .limit(100);
 
         if (error) throw error;
-        // Filter in JS to avoid 400 errors on complex JSON queries
-        const filtered = logs.filter(l => 
-          l.stockingId === activeBroodstockBatchId || 
-          l.data?.stockingId === activeBroodstockBatchId ||
-          l.data?.batchNumber?.startsWith(activeBroodstockBatchId || '')
-        );
-        setBatchLogs(filtered || []);
+        // Filter to logs belonging to the active broodstock batch
+        // Include: matching stockingId OR no stockingId (fallback for older records)
+        const filtered = (logs || []).filter(l => {
+          const logStockingId = l.data?.stockingId || l.stockingId;
+          if (!logStockingId) return true; // old record without link — show it
+          return logStockingId === activeBroodstockBatchId;
+        });
+        // De-duplicate by batchNumber (each save creates multiple logs — one per tank)
+        const seen = new Set<string>();
+        const unique = filtered.filter(l => {
+          const bn = l.data?.batchNumber || l.data?.naupliiBatchId;
+          if (!bn || seen.has(bn)) return false;
+          seen.add(bn);
+          return true;
+        });
+        setBatchLogs(unique);
       } catch (err) {
         console.error('Error fetching batches:', err);
       } finally {

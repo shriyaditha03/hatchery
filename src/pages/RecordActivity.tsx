@@ -817,12 +817,104 @@ const RecordActivity = () => {
     }
   }, [editId, tankId, selectedSectionId, availableTanks]);
 
-  // Auto-fetch Stocking data for Observation
+  // Auto-fetch Stocking data for Observation (LRT single-tank mode only)
   useEffect(() => {
-    if (activity === 'Observation' && tankId && !editId) {
+    if (activity === 'Observation' && tankId && !editId && activeFarmCategory !== 'MATURATION') {
       fetchLatestStockingData(tankId);
     }
-  }, [activity, tankId]);
+  }, [activity, tankId, activeFarmCategory]);
+
+  // Maturation Observation: build tankEntries whenever scope/selection changes
+  useEffect(() => {
+    if (activeFarmCategory !== 'MATURATION' || activity !== 'Observation' || editId) return;
+
+    const currentFarmId = selectedFarmId || activeFarmId;
+    const sectionId = selectedSectionId || activeSectionId;
+
+    // Resolve which tanks to show based on scope
+    let effectiveTankIds: string[] = [];
+
+    if (selectionScope === 'all') {
+      const allSectionTanks = sectionId
+        ? (availableTanks.find(s => s.id === sectionId)?.tanks || []).map((t: any) => t.id)
+        : availableTanks.filter(s => s.farm_id === currentFarmId).flatMap(s => s.tanks || []).map((t: any) => t.id);
+      effectiveTankIds = batchRelatedTankIds.length > 0
+        ? allSectionTanks.filter((id: string) => batchRelatedTankIds.includes(id))
+        : allSectionTanks;
+    } else if (selectionScope === 'custom') {
+      effectiveTankIds = selectedTankIds;
+    } else {
+      effectiveTankIds = tankId ? [tankId] : [];
+    }
+
+    if (effectiveTankIds.length === 0) {
+      setObservationData((prev: any) => ({ ...prev, tankEntries: [] }));
+      return;
+    }
+
+    let isCancelled = false;
+
+    const buildEntries = async () => {
+      const entries = await Promise.all(
+        effectiveTankIds.map(async (tid) => {
+          const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
+          const tank = section?.tanks.find((t: any) => t.id === tid);
+          const farmId = section?.farm_id || currentFarmId;
+
+          const { data, error } = await supabase
+            .from('activity_logs')
+            .select('data, activity_type')
+            .eq('tank_id', tid)
+            .in('activity_type', ['Stocking', 'Observation'])
+            .eq('farm_id', farmId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          let originalPopM = '0';
+          let originalPopF = '0';
+          let stockingId = '';
+
+          if (!error && data && data.data) {
+            const isStocking = data.activity_type === 'Stocking';
+            originalPopM = isStocking ? (data.data.totalMales || '0') : (data.data.presentPopulationM || '0');
+            originalPopF = isStocking ? (data.data.totalFemales || '0') : (data.data.presentPopulationF || '0');
+            stockingId = data.data.stockingId || '';
+          }
+
+          return {
+            tankId: tid,
+            tankName: tank?.name || tid,
+            sectionName: section?.name || '',
+            originalPopM,
+            originalPopF,
+            moults: '',
+            mortalityNo: '',
+            avgBodyWt: '',
+            stockingId,
+          };
+        })
+      );
+
+      if (isCancelled) return;
+
+      // Preserve user-entered data for tanks already in the list
+      setObservationData((prev: any) => {
+        const prevEntries: any[] = prev.tankEntries || [];
+        const merged = entries.map(e => {
+          const existing = prevEntries.find(p => p.tankId === e.tankId);
+          return existing
+            ? { ...e, moults: existing.moults, mortalityNo: existing.mortalityNo, avgBodyWt: existing.avgBodyWt }
+            : e;
+        });
+        return { ...prev, tankEntries: merged };
+      });
+    };
+
+    buildEntries();
+
+    return () => { isCancelled = true; };
+  }, [activeFarmCategory, activity, selectionScope, selectedTankIds, tankId, editId, availableTanks, activeFarmId, selectedFarmId, selectedSectionId, activeSectionId, batchRelatedTankIds]);
 
   const fetchLatestStockingData = async (tid: string) => {
     try {
@@ -957,9 +1049,12 @@ const RecordActivity = () => {
   }, [type, editId]);
 
   // Auto-set selectionScope to 'all' for Maturation Stocking
+  // Auto-set selectionScope to 'custom' for Maturation Observation
   useEffect(() => {
     if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
       setSelectionScope('all');
+    } else if (activeFarmCategory === 'MATURATION' && activity === 'Observation' && !editId) {
+      setSelectionScope('custom');
     }
   }, [activeFarmCategory, activity]);
 
@@ -1382,7 +1477,7 @@ const RecordActivity = () => {
 
     // Basic validation
     if (selectionScope === 'single' && !tankId) {
-      if (isSpecialActivity && !selectedSectionId && !activeSectionId) {
+      if (isSpecialActivity && !selectedSectionId && !activeSectionId && activity !== 'Sourcing & Mating') {
         toast.error('Please select a section for this activity');
         return;
       }
@@ -1429,21 +1524,32 @@ const RecordActivity = () => {
       normalizedData = { ...observationData };
       if (!normalizedData.animalQualityScore) normalizedData.animalQualityScore = 10.0;
       if (!normalizedData.waterQualityScore) normalizedData.waterQualityScore = 10.0;
-      
-      const requiredFields = isMaturation
-          ? ['animalQualityScore', 'waterQualityScore', 'presentPopulationM', 'presentPopulationF']
-          : ['animalQualityScore', 'waterQualityScore', 'presentPopulation'];
-          
-      const missing = requiredFields.filter(f => {
-          const val = normalizedData[f];
-          return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim());
-      });
-      
-      if (missing.length > 0) {
-        toast.error('Please fill in all observation details');
-        return;
+
+      const isMaturation = activeFarmCategory === 'MATURATION';
+
+      if (isMaturation && !editId) {
+        // Maturation: validate that we have at least one tank entry
+        const entries = normalizedData.tankEntries || [];
+        if (entries.length === 0) {
+          toast.error('Please select at least one tank');
+          return;
+        }
+      } else {
+        const requiredFields = isMaturation
+            ? ['animalQualityScore', 'waterQualityScore', 'presentPopulationM', 'presentPopulationF']
+            : ['animalQualityScore', 'waterQualityScore', 'presentPopulation'];
+
+        const missing = requiredFields.filter(f => {
+            const val = normalizedData[f];
+            return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim());
+        });
+
+        if (missing.length > 0) {
+          toast.error('Please fill in all observation details');
+          return;
+        }
       }
-      
+
       // Update state with normalized data before proceeding to save
       setObservationData(normalizedData);
     }
@@ -1588,23 +1694,27 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Sourcing & Mating' && !isPlanningMode) {
-      const { sourceTanks, matedCount, matedDestinations, returnDestinations } = sourcingMatingData;
-      const totalSourced = sourceTanks.reduce((sum: number, s: any) => sum + (parseFloat(s.femaleCount) || 0), 0);
-      const totalDistributedMated = matedDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
-      const totalDistributedReturn = returnDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
-      const matedVal = parseFloat(matedCount) || 0;
-      const balanceCount = Math.max(0, totalSourced - matedVal);
+      const { sourceTanks, matingTanks, matedDestinations, returnDestinations } = sourcingMatingData;
+      const totalSourced = (sourceTanks || []).reduce((sum: number, s: any) => sum + (parseFloat(s.femaleCount) || 0), 0);
+      const totalMated = (matingTanks || []).reduce((sum: number, t: any) => sum + (parseFloat(t.femalesMated) || 0), 0);
+      const nonMatedBalance = Math.max(0, totalSourced - totalMated);
+      const totalToSpawning = (matedDestinations || []).reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
+      const totalReturned = (returnDestinations || []).reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
 
       if (totalSourced === 0) {
-        toast.error('Please enter at least one source tank count');
+        toast.error('Please enter how many females were sourced from each tank');
         return;
       }
-      if (totalDistributedMated !== matedVal) {
-        toast.error(`Mated redistribution (${totalDistributedMated}) must match total mated (${matedVal})`);
+      if (totalMated === 0) {
+        toast.error('Please enter females mated in at least one male tank');
         return;
       }
-      if (totalDistributedReturn !== balanceCount) {
-        toast.error(`Return redistribution (${totalDistributedReturn}) must match balance (${balanceCount})`);
+      if (totalToSpawning !== totalMated) {
+        toast.error(`Animals shifted to spawning (${totalToSpawning}) must equal total mated (${totalMated})`);
+        return;
+      }
+      if (totalReturned !== nonMatedBalance) {
+        toast.error(`Animals returned to female tanks (${totalReturned}) must equal non-mated balance (${nonMatedBalance})`);
         return;
       }
     }
@@ -1659,7 +1769,12 @@ const RecordActivity = () => {
     }
 
     let targets = [];
-    if (selectionScope === 'all') {
+
+    // Maturation Observation: targets come directly from tankEntries (one log per tank)
+    if (activeFarmCategory === 'MATURATION' && activity === 'Observation' && !editId) {
+      const entries = (normalizedData || observationData).tankEntries || [];
+      targets = entries.map((e: any) => e.tankId).filter(Boolean);
+    } else if (selectionScope === 'all') {
       const sectionId = selectedSectionId || activeSectionId;
       const activeSection = availableTanks.find(s => s.id === sectionId);
       if (activeSection) {
@@ -1667,7 +1782,6 @@ const RecordActivity = () => {
           .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
           .map((t: any) => t.id);
       } else if (activeFarmCategory === 'MATURATION') {
-        // If "Apply to All" in Maturation without a section, it means all tanks in the farm that match the activity
         targets = filteredSections.flatMap(s => s.tanks)
           .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
           .map((t: any) => t.id);
@@ -1757,7 +1871,51 @@ const RecordActivity = () => {
           }
 
           // Use freshly normalized data for Observation if it was just calculated
-          const currentBuildData = (activity === 'Observation' && normalizedData) ? { date, time, ampm, timeSlot, comments, ...normalizedData, photo_url: photoUrl } : buildData();
+          let currentBuildData = (activity === 'Observation' && normalizedData) ? { date, time, ampm, timeSlot, comments, ...normalizedData, photo_url: photoUrl } : buildData();
+
+          // Maturation Observation: inject per-tank data into each log
+          if (activeFarmCategory === 'MATURATION' && activity === 'Observation' && !editId) {
+            const entries = (normalizedData || observationData).tankEntries || [];
+            const entry = entries.find((e: any) => e.tankId === tId);
+            if (entry) {
+              const popM = parseFloat(entry.originalPopM || '0');
+              const popF = parseFloat(entry.originalPopF || '0');
+              const totalPop = popM + popF;
+              const mort = parseFloat(entry.mortalityNo || '0');
+              const avgWt = parseFloat(entry.avgBodyWt || '0');
+
+              // Distribute mortality proportionally M/F
+              let mortM = 0;
+              let mortF = 0;
+              if (totalPop > 0 && mort > 0) {
+                if (popM === 0) { mortF = mort; }
+                else if (popF === 0) { mortM = mort; }
+                else {
+                  mortM = Math.round(mort * popM / totalPop);
+                  mortF = mort - mortM;
+                }
+              }
+
+              const presentPopM = Math.max(0, popM - mortM);
+              const presentPopF = Math.max(0, popF - mortF);
+              const presentPop = presentPopM + presentPopF;
+              const biomassKg = avgWt > 0 ? (presentPop * avgWt / 1000).toFixed(3) : '0.000';
+
+              currentBuildData = {
+                ...currentBuildData,
+                stockingId: entry.stockingId || currentBuildData.stockingId,
+                moults: entry.moults,
+                mortalityNo: entry.mortalityNo,
+                mortalityM: mortM.toString(),
+                mortalityF: mortF.toString(),
+                avgBodyWt: entry.avgBodyWt,
+                presentPopulationM: presentPopM.toString(),
+                presentPopulationF: presentPopF.toString(),
+                presentPopulation: presentPop.toString(),
+                estimatedBiomass: biomassKg,
+              };
+            }
+          }
           
           // Apply per-tank allocation for Maturation Stocking
           if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && tId) {
@@ -1848,7 +2006,17 @@ const RecordActivity = () => {
           // Special bulk save for Tank Shifting (record for destinations too)
           // Special bulk save for Sourcing & Mating (record for sources, spawners, and returns)
           if (activity === 'Sourcing & Mating') {
-            const { sourceTanks, matedDestinations, returnDestinations } = currentBuildData;
+            const { sourceTanks, matedDestinations, returnDestinations, matingTanks, batchNumber } = currentBuildData;
+            const totalSourced = (sourceTanks || []).reduce((sum: number, s: any) => sum + (parseFloat(s.femaleCount) || 0), 0);
+            const totalMated = (matingTanks || []).reduce((sum: number, t: any) => sum + (parseFloat(t.femalesMated) || 0), 0);
+            // Augment every log with the broodstock batch link and batch summary
+            const batchMeta = {
+              stockingId: activeBroodstockBatchId || null,
+              naupliiBatchId: batchNumber || currentBuildData.batchNumber,
+              totalSourced,
+              totalMated,
+              totalNonMated: Math.max(0, totalSourced - totalMated),
+            };
             
             // 1. Record sourcing from each source tank (decrement)
             const sourcePromises = (sourceTanks || []).map(async (s: any) => {
@@ -1861,7 +2029,7 @@ const RecordActivity = () => {
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'sourcing', movementQty: -qty, role: 'source' }
+                data: { ...currentBuildData, ...batchMeta, movementType: 'sourcing', movementQty: -qty, role: 'source' }
               });
             });
 
@@ -1876,7 +2044,7 @@ const RecordActivity = () => {
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'spawning_shift', movementQty: qty, role: 'destination' }
+                data: { ...currentBuildData, ...batchMeta, movementType: 'spawning_shift', movementQty: qty, role: 'destination' }
               });
             });
 
@@ -1891,7 +2059,7 @@ const RecordActivity = () => {
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'return', movementQty: qty, role: 'return' }
+                data: { ...currentBuildData, ...batchMeta, movementType: 'return', movementQty: qty, role: 'return' }
               });
             });
 
@@ -2959,6 +3127,19 @@ const RecordActivity = () => {
               setActivity('Stocking');
               setIsRedirectedFromObservation(true);
             }}
+            selectedTanks={(() => {
+              if (activeFarmCategory === 'MATURATION' && !editId) {
+                // Build tank objects from selectedTankIds
+                return selectedTankIds
+                  .map(tid => {
+                    const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
+                    const tank = section?.tanks.find((t: any) => t.id === tid);
+                    return tank ? { ...tank, sectionName: section?.name } : null;
+                  })
+                  .filter(Boolean);
+              }
+              return [];
+            })()}
           />
         )}
 

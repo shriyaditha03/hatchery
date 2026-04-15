@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -56,24 +56,23 @@ const SourcingMatingForm = ({
   // Auto-fill tracking state
   const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
 
-  const generateBatchId = (totalSourcedCount: number = 0) => {
+  const generateBatchId = (totalSourcedCount: number = 0, totalMatedCount: number = 0) => {
     const dateStr = getTodayStr().replace(/-/g, '').slice(2); // YYMMDD
-    const countStr = totalSourcedCount.toString().padStart(2, '0');
-    const serial = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-    return `${dateStr}-${countStr}-${serial}`;
+    return `NP_FS${totalSourcedCount}_FM${totalMatedCount}_${dateStr}`;
   };
 
-  // Auto-generate Batch ID if not present or if totalSourced changes significantly
+  // Auto-generate Batch ID if not present or if totals change
   useEffect(() => {
     const totalSourced = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
+    const totalMated = matingTanks.reduce((sum, t) => sum + (parseFloat(t.femalesMated) || 0), 0);
     if (!isBatchIdManuallyEdited) {
-      const newId = generateBatchId(totalSourced);
+      const newId = generateBatchId(totalSourced, totalMated);
       if (newId !== batchNumber) {
         setBatchNumber(newId);
         updateData({ batchNumber: newId });
       }
     }
-  }, [sourceTanks, farmId]);
+  }, [sourceTanks, matingTanks, farmId]);
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates, batchNumber: updates.batchNumber !== undefined ? updates.batchNumber : batchNumber });
@@ -120,7 +119,7 @@ const SourcingMatingForm = ({
 
         // Field 1: Female Sourcing (Robust case-insensitive check)
         const genderUpper = (t.gender || '').toUpperCase();
-        if (genderUpper === 'FEMALE') {
+        if (genderUpper === 'FEMALE' && availableCount > 0) {
           initialSources.push({
             id: t.id,
             tankId: t.id,
@@ -132,7 +131,7 @@ const SourcingMatingForm = ({
         }
 
         // Field 2: Male Mating (Robust case-insensitive check)
-        if (genderUpper === 'MALE') {
+        if (genderUpper === 'MALE' && availableCount > 0) {
           initialMating.push({
             id: t.id,
             tankId: t.id,
@@ -263,13 +262,15 @@ const SourcingMatingForm = ({
     updateData({ matedDestinations: newList });
   };
 
-  const handleMatedDestinationChange = (id: string, updates: any, isManual = false) => {
-    const newList = matedDestinations.map(d => d.id === id ? { ...d, ...updates } : d);
+  const handleMatedDestinationChange = (idOrTankId: string, updates: any, isManual = false) => {
+    const newList = matedDestinations.map(d =>
+      (d.id === idOrTankId || d.tankId === idOrTankId) ? { ...d, ...updates } : d
+    );
     if (isManual && updates.count !== undefined) {
-      setEditedFields(prev => ({ ...prev, [`mated_dest_${id}`]: true }));
+      setEditedFields(prev => ({ ...prev, [`mated_dest_${idOrTankId}`]: true }));
     }
     setMatedDestinations(newList);
-    updateData({ matedDestinations: newList, editedFields: { ...editedFields, ...(isManual && updates.count !== undefined ? { [`mated_dest_${id}`]: true } : {}) } });
+    updateData({ matedDestinations: newList });
   };
 
   const addReturnDestination = () => {
@@ -284,13 +285,15 @@ const SourcingMatingForm = ({
     updateData({ returnDestinations: newList });
   };
 
-  const handleReturnDestinationChange = (id: string, updates: any, isManual = false) => {
-    const newList = returnDestinations.map(d => d.id === id ? { ...d, ...updates } : d);
+  const handleReturnDestinationChange = (idOrTankId: string, updates: any, isManual = false) => {
+    const newList = returnDestinations.map(d =>
+      (d.id === idOrTankId || d.tankId === idOrTankId) ? { ...d, ...updates } : d
+    );
     if (isManual && updates.count !== undefined) {
-      setEditedFields(prev => ({ ...prev, [`return_dest_${id}`]: true }));
+      setEditedFields(prev => ({ ...prev, [`return_dest_${idOrTankId}`]: true }));
     }
     setReturnDestinations(newList);
-    updateData({ returnDestinations: newList, editedFields: { ...editedFields, ...(isManual && updates.count !== undefined ? { [`return_dest_${id}`]: true } : {}) } });
+    updateData({ returnDestinations: newList });
   };
 
   const totalSourcedFromStep1 = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
@@ -376,7 +379,7 @@ const SourcingMatingForm = ({
         }))
     );
 
-  const spawningTanksOptions = (() => {
+  const spawningTanksOptions = React.useMemo(() => {
     // Phase 1: Try many keywords
     const matches = availableTanks
       .filter(s => {
@@ -400,14 +403,58 @@ const SourcingMatingForm = ({
         id: t.id,
         label: `${s.name} - ${t.name}`
       })));
-  })();
+  }, [availableTanks, farmId, tankPopulations]);
 
-  const returnTanksOptions = sourceTanks
-    .filter(s => parseFloat(s.femaleCount) > 0)
-    .map(s => ({
-      id: s.tankId,
-      label: s.tankName
-    }));
+  const returnTanksOptions = React.useMemo(() => {
+    return sourceTanks
+      .filter(s => parseFloat(s.femaleCount) > 0)
+      .map(s => ({
+        id: s.tankId,
+        label: s.tankName
+      }));
+  }, [sourceTanks]);
+
+  // Auto-fill Spawning Destinations
+  useEffect(() => {
+    setMatedDestinations(prev => {
+      const existing = new Map(prev.map(p => [p.tankId, p]));
+      const nextDests = spawningTanksOptions.map(opt => {
+        const ex = existing.get(opt.id) || {};
+        return {
+          id: ex.id || opt.id,
+          tankId: opt.id,
+          tankName: opt.label.split(' - ')[1] || opt.label,
+          count: ex.count || ''
+        };
+      });
+      if (JSON.stringify(nextDests) !== JSON.stringify(prev)) {
+        setTimeout(() => onDataChange({ ...data, matedDestinations: nextDests }), 0);
+        return nextDests;
+      }
+      return prev;
+    });
+  }, [spawningTanksOptions]);
+
+  // Auto-fill Return Destinations
+  useEffect(() => {
+    setReturnDestinations(prev => {
+      const existing = new Map(prev.map(p => [p.tankId, p]));
+      const nextReturns = returnTanksOptions.map(opt => {
+         const ex = existing.get(opt.id) || {};
+         return {
+           id: ex.id || opt.id,
+           tankId: opt.id,
+           tankName: opt.label,
+           count: ex.count || ''
+         };
+      });
+      if (JSON.stringify(nextReturns) !== JSON.stringify(prev)) {
+         setTimeout(() => onDataChange({ ...data, returnDestinations: nextReturns }), 0);
+         return nextReturns;
+      }
+      return prev;
+    });
+  }, [returnTanksOptions]);
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -435,7 +482,7 @@ const SourcingMatingForm = ({
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-primary">
                  <Database className="w-4 h-4" />
-                 <h3 className="text-[10px] font-black uppercase tracking-widest">Sourcing Batch ID (YYMMDD-Count-Sequence)</h3>
+                 <h3 className="text-[10px] font-black uppercase tracking-widest">{"Nauplii Production Batch ID (NP_FS{sourced}_FM{mated}_{YYMMDD})"}</h3>
               </div>
               <Button 
                 variant="ghost" 
@@ -558,12 +605,11 @@ const SourcingMatingForm = ({
           <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">Enter mating data for each male tank.</div>
 
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {matingTanks.length === 0 && (
-              <div className="text-center py-8 border-2 border-dashed rounded-3xl space-y-2">
-                <p className="text-xs text-muted-foreground italic">No mating tanks added yet</p>
-                <Button variant="outline" size="sm" onClick={addMatingTank} className="rounded-full h-8 text-[10px] px-4">Click to add</Button>
-              </div>
+              <p className="text-xs text-muted-foreground italic text-center py-6 border border-dashed rounded-2xl">
+                No male tanks with animals found — ensure tanks are stocked.
+              </p>
             )}
             {matingTanks.map((mating, idx) => (
               <Card key={mating.id} className="p-4 bg-pink-50/20 border-pink-100/50 rounded-2xl space-y-4 relative group shadow-sm">
@@ -647,139 +693,88 @@ const SourcingMatingForm = ({
           </div>
           <div className="px-1 text-[10px] text-muted-foreground italic -mt-2">Record where mated and non-mated animals are shifted to.</div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 3a: Spawning Tanks */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-blue-700 ml-1">Step # 6 Animal Shifted to Spawning *</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={addMatedDestination} className="h-7 text-[10px] font-bold text-blue-600 hover:bg-blue-50">
-                  <Plus className="w-3 h-3 mr-1" /> Add
-                </Button>
+          {/* 3a: Spawning Tanks - Auto-populated */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 bg-blue-100 rounded-lg">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
               </div>
-              <div className="px-1 text-[8px] text-blue-400 font-bold mb-2">FILTER: Showing only Empty Spawning Tanks</div>
-              <div className="space-y-3">
-                {matedDestinations.map(dest => (
-                  <div key={dest.id} className="flex gap-2 items-start group">
-                    <div className="flex-1">
-                      <Select value={dest.tankId} onValueChange={val => handleMatedDestinationChange(dest.id, { tankId: val })}>
-                        <SelectTrigger className="h-10 rounded-xl bg-blue-50/50 border-blue-100 text-xs shadow-none">
-                          <SelectValue placeholder="Select Empty Spawning Tank" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {spawningTanksOptions
-                             .filter(opt => (tankPopulations[opt.id] || 0) === 0 || matedDestinations.some(d => d.tankId === opt.id))
-                             .map(opt => (
-                            <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-20">
-                      <div className="relative group/input">
-                        <Input 
-                          type="number" 
-                          value={dest.count} 
-                          onChange={e => handleMatedDestinationChange(dest.id, { count: e.target.value }, true)} 
-                          className={cn(
-                            "h-10 rounded-xl font-bold bg-white pr-8",
-                            !editedFields[`mated_dest_${dest.id}`] && dest.count && "border-blue-400/30 bg-blue-50/50 text-blue-700"
-                          )}
-                          placeholder="0"
-                        />
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                          {!editedFields[`mated_dest_${dest.id}`] && dest.count && (
-                            <Wand2 className="w-2 h-2 text-blue-400 opacity-60" />
-                          )}
-                          <span className="text-[8px] font-bold text-blue-400">F</span>
-                        </div>
-                      </div>
-                    </div>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      onClick={() => removeMatedDestination(dest.id)}
-                      className="h-10 w-10 text-blue-200 hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {matedDestinations.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic text-center py-4 bg-muted/5 rounded-xl border border-dashed">No spawning tanks allocated</p>
-                )}
-              </div>
+              <Label className="text-[10px] font-black uppercase text-blue-700">Mated Animals → Spawning Tanks</Label>
             </div>
+            <div className="px-1 text-[8px] text-blue-400 font-bold mb-1">Only empty spawning tanks shown</div>
+            {matedDestinations.length === 0 && (
+              <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
+                No empty spawning tanks available
+              </p>
+            )}
+            {matedDestinations.map(dest => (
+              <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-blue-50/40 border border-blue-100 rounded-xl">
+                <div>
+                  <p className="text-xs font-black text-blue-900 leading-none">{dest.tankName}</p>
+                  <p className="text-[9px] text-blue-400 font-bold uppercase mt-0.5">Spawning Tank</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative w-24">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={dest.count}
+                      onChange={e => handleMatedDestinationChange(dest.tankId, { count: e.target.value }, true)}
+                      className="h-9 rounded-xl text-center font-bold border-blue-200 bg-white text-blue-900 pr-6 text-sm"
+                      placeholder="0"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400">F</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-            {/* 3b: Return to Source */}
-            <div className="space-y-4 pt-6 md:pt-0 border-t md:border-t-0 md:border-l md:pl-6 border-dashed border-blue-100">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase text-slate-700 ml-1">Step # 7 Return to Source Tanks *</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={addReturnDestination} className="h-7 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
-                  <Plus className="w-3 h-3 mr-1" /> Add
-                </Button>
+          <div className="h-px bg-muted-foreground/10" />
+
+          {/* 3b: Return to Female Source Tanks - Auto-populated */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 bg-slate-100 rounded-lg">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
               </div>
-              <div className="px-1 text-[8px] text-slate-400 font-bold mb-2">FILTER: Showing only used Source Tanks</div>
-              <div className="space-y-3">
-                {returnDestinations.map(dest => (
-                  <div key={dest.id} className="flex gap-2 items-start group">
-                    <div className="flex-1">
-                      <Select value={dest.tankId} onValueChange={val => handleReturnDestinationChange(dest.id, { tankId: val })}>
-                        <SelectTrigger className="h-10 rounded-xl bg-slate-50/50 border-slate-100 text-xs shadow-none">
-                          <SelectValue placeholder="Select Source Tank" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {returnTanksOptions.map(opt => (
-                            <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-20">
-                      <div className="relative group/input">
-                        <Input 
-                          type="number" 
-                          value={dest.count} 
-                          onChange={e => handleReturnDestinationChange(dest.id, { count: e.target.value }, true)} 
-                          className={cn(
-                            "h-10 rounded-xl font-bold bg-white pr-8",
-                            !editedFields[`return_dest_${dest.id}`] && dest.count && "border-slate-400/30 bg-slate-50/50 text-slate-700"
-                          )}
-                          placeholder="0"
-                        />
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                          {!editedFields[`return_dest_${dest.id}`] && dest.count && (
-                            <Wand2 className="w-2 h-2 text-slate-400 opacity-60" />
-                          )}
-                          <span className="text-[8px] font-bold text-slate-400">F</span>
-                        </div>
-                      </div>
-                      {dest.tankId && (
-                         <div className="mt-1 px-1 flex justify-between items-center text-[8px] font-bold">
-                            <span className="text-muted-foreground uppercase">New Pop:</span>
-                            <span className="text-slate-700">
-                               {(() => {
-                                 const currentPop = tankPopulations[dest.tankId] || 0;
-                                 const sourcedFromThisTank = sourceTanks.find(s => s.tankId === dest.tankId)?.femaleCount || 0;
-                                 const returnedCount = parseFloat(dest.count) || 0;
-                                 return Math.max(0, currentPop - parseFloat(sourcedFromThisTank) + returnedCount);
-                               })()} F
-                            </span>
-                         </div>
-                      )}
-                    </div>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      onClick={() => removeReturnDestination(dest.id)}
-                      className="h-10 w-10 text-slate-200 hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {returnDestinations.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic text-center py-4 bg-muted/5 rounded-xl border border-dashed">No return tanks allocated</p>
-                )}
-              </div>
+              <Label className="text-[10px] font-black uppercase text-slate-700">Non-Mated Animals → Female Tanks</Label>
             </div>
+            <div className="px-1 text-[8px] text-slate-400 font-bold mb-1">From Ripe Females Sourced above</div>
+            {returnDestinations.length === 0 && (
+              <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
+                Enter females sourced above first
+              </p>
+            )}
+            {returnDestinations.map(dest => {
+              const currentPop = tankPopulations[dest.tankId] || 0;
+              const sourcedFromThisTank = parseFloat(sourceTanks.find(s => s.tankId === dest.tankId)?.femaleCount || '0');
+              const returnedCount = parseFloat(dest.count) || 0;
+              const newPop = Math.max(0, currentPop - sourcedFromThisTank + returnedCount);
+              return (
+                <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-slate-50/60 border border-slate-100 rounded-xl">
+                  <div>
+                    <p className="text-xs font-black text-slate-900 leading-none">{dest.tankName}</p>
+                    {returnedCount > 0 && (
+                      <p className="text-[9px] text-slate-500 font-bold mt-0.5">New pop: {newPop} F</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-24">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={dest.count}
+                        onChange={e => handleReturnDestinationChange(dest.tankId, { count: e.target.value }, true)}
+                        className="h-9 rounded-xl text-center font-bold border-slate-200 bg-white text-slate-900 pr-6 text-sm"
+                        placeholder="0"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400">F</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Validation Status Card */}
