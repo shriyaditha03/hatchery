@@ -182,7 +182,7 @@ const NaupliiSaleForm = ({
                 variant="ghost" 
                 size="sm" 
                 onClick={() => setSelectedBatchId('')} 
-                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-blue-100"
+                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100"
              >
                 Change Batch
              </Button>
@@ -227,38 +227,38 @@ const NaupliiSaleForm = ({
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
 
-        {/* Step 1: Sale vs. Discard */}
+        {/* Step 2: Sale vs. Discard */}
         <div className="space-y-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-emerald-100 rounded-xl">
-              <ShoppingCart className="w-4 h-4 text-emerald-600" />
+            <div className="p-2 bg-amber-100 rounded-xl">
+              <ShoppingCart className="w-4 h-4 text-amber-600" />
             </div>
             <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2 available Nauplii tanks</h3>
           </div>
           
           <div className="space-y-4">
              {saleTanks.map((tank) => (
-               <Card key={tank.id} className="p-5 bg-muted/5 border-none rounded-[2rem] space-y-4 relative group">
+               <Card key={tank.id} className="p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors">
                   <div className="flex items-center justify-between px-2">
                      <div>
-                        <p className="text-xs font-black text-foreground">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Harvested: {tank.harvestedAmount} mil</p>
+                        <p className="text-xs font-black text-amber-950">{tank.tankName}</p>
+                        <p className="text-[9px] font-bold text-amber-600 uppercase opacity-60">Harvested: {tank.harvestedAmount} mil</p>
                      </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-emerald-700 ml-1 leading-none tracking-widest">Step # 3 Amount for sale (mil) *</Label>
+                        <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Step # 3 Amount for sale (mil) *</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
                             step="0.01"
                             value={tank.saleMil} 
                             onChange={e => handleTankUpdate(tank.id, { saleMil: e.target.value })} 
-                            className="h-11 rounded-xl font-black bg-white border-none shadow-sm text-lg text-emerald-950 pr-10" 
+                            className="h-11 rounded-xl font-black bg-white border border-amber-100 shadow-sm text-lg text-amber-950 pr-10 focus:ring-amber-500" 
                             placeholder="0.0"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-emerald-300">MIL</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-amber-400">MIL</span>
                         </div>
                      </div>
                      <div className="space-y-1.5">
@@ -269,7 +269,7 @@ const NaupliiSaleForm = ({
                             step="0.01"
                             value={tank.discardMil} 
                             onChange={e => handleTankUpdate(tank.id, { discardMil: e.target.value })} 
-                            className="h-11 rounded-xl font-black bg-white border-none shadow-sm text-lg text-rose-950 pr-10" 
+                            className="h-11 rounded-xl font-black bg-white border border-rose-100 shadow-sm text-lg text-rose-950 pr-10 focus:ring-rose-500" 
                             placeholder="0.0"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-300">MIL</span>
@@ -286,16 +286,14 @@ const NaupliiSaleForm = ({
           </div>
         </div>
 
-        {/* Calculations Section: Points 4, 5, 6, 7 */}
-        <div className="p-8 bg-muted/5 rounded-[2.5rem] border border-dashed border-primary/20 space-y-8">
-           {/* Calculations Section: Results Card */}
-        <div className="p-8 bg-muted/5 rounded-[2.5rem] border border-dashed border-primary/20 space-y-8">
+        {/* Calculations Section */}
+        <div className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-dashed border-amber-200 space-y-8">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Summary Metrics */}
               <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-1">
-                    <Label className="text-[9px] font-black uppercase text-emerald-600 tracking-widest ml-1">Gross Sale (mil)</Label>
-                    <div className="h-12 bg-white rounded-2xl border border-emerald-100 flex items-center justify-center font-black text-emerald-950">
+                    <Label className="text-[9px] font-black uppercase text-amber-600 tracking-widest ml-1">Gross Sale (mil)</Label>
+                    <div className="h-12 bg-white rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950">
                        {data.totalGross?.toLocaleString()}M
                     </div>
                  </div>
@@ -309,23 +307,23 @@ const NaupliiSaleForm = ({
 
               {/* Bonus % Input */}
               <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black text-blue-700 uppercase tracking-widest ml-1">Step # 4 Bonus % *</Label>
+                 <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1">Step # 4 Bonus % *</Label>
                  <div className="relative">
                     <Input 
                       type="number" 
                       value={bonusPercentage} 
                       onChange={e => setBonusPercentage(e.target.value)} 
-                      className="h-12 rounded-2xl font-black bg-blue-50/30 border-blue-100 text-xl text-blue-950 shadow-sm pr-12 text-center" 
+                      className="h-12 rounded-2xl font-black bg-amber-50/30 border-amber-100 text-xl text-amber-950 shadow-sm pr-12 text-center focus:ring-amber-500" 
                       placeholder="0"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-blue-200">%</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">%</span>
                  </div>
               </div>
            </div>
 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
               {/* Net Sale Display */}
-              <div className="p-6 bg-indigo-600 rounded-[2rem] text-white shadow-xl shadow-indigo-100 overflow-hidden relative group">
+              <div className="p-6 bg-amber-600 rounded-[2rem] text-white shadow-xl shadow-amber-100 overflow-hidden relative group">
                  <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Step # 7: Net nauplii sold</p>
                  <p className="text-4xl font-black mt-1 leading-none">{data.netNauplii?.toLocaleString()}<span className="text-sm opacity-50 ml-2 uppercase">Millions</span></p>
                  <p className="text-[8px] mt-2 opacity-50 italic animate-pulse tracking-tight">Auto-calculated: Gross * (1 + Bonus%)</p>
@@ -340,7 +338,7 @@ const NaupliiSaleForm = ({
                        type="number" 
                        value={packsPacked} 
                        onChange={e => setPacksPacked(e.target.value)} 
-                       className="h-16 rounded-[2rem] font-black bg-white border-muted-foreground/10 text-2xl shadow-sm pr-20 text-center" 
+                       className="h-16 rounded-[2rem] font-black bg-white border-muted-foreground/10 text-2xl shadow-sm pr-20 text-center focus:ring-amber-500" 
                        placeholder="0"
                     />
                     <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
@@ -350,7 +348,6 @@ const NaupliiSaleForm = ({
                  </div>
               </div>
            </div>
-        </div>
         </div>
 
         {/* Points 9 & 10: Media & Comments */}

@@ -264,22 +264,22 @@ const NaupliiHarvestForm = ({
         {/* Step 1: Nauplii Harvested */}
         <div className="space-y-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-emerald-100 rounded-xl">
-              <ClipboardList className="w-4 h-4 text-emerald-600" />
+            <div className="p-2 bg-indigo-100 rounded-xl">
+              <ClipboardList className="w-4 h-4 text-indigo-600" />
             </div>
             <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2: Nauplii Harvested</h3>
           </div>
           
           <div className="space-y-3">
              {harvestTanks.map((tank) => (
-               <Card key={tank.id} className="p-4 bg-muted/5 border-none rounded-2xl overflow-hidden group">
+               <Card key={tank.id} className="p-4 bg-indigo-50/40 border-indigo-100 shadow-sm rounded-2xl overflow-hidden group hover:bg-indigo-50/60 transition-colors">
                   <div className="flex items-center justify-between gap-4">
                      <div className="flex-1">
-                        <p className="text-xs font-black text-foreground">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">Spawning Tank ({tank.spawnedCount} F)</p>
+                        <p className="text-xs font-black text-indigo-950">{tank.tankName}</p>
+                        <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60">Spawning Tank ({tank.spawnedCount} F)</p>
                      </div>
                      <div className="w-44">
-                        <Label className="text-[8px] font-black uppercase text-emerald-600 block mb-1 ml-1 text-center">Harvested (mil) *</Label>
+                        <Label className="text-[8px] font-black uppercase text-indigo-600 block mb-1 ml-1 text-center">Harvested (mil) *</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
@@ -302,12 +302,12 @@ const NaupliiHarvestForm = ({
              )}
           </div>
 
-          <Card className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center justify-between">
+          <Card className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-center justify-between">
               <div>
-                 <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest block leading-tight">Total Nauplii Harvested</span>
+                 <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest block leading-tight">Total Nauplii Harvested</span>
                  <span className="text-[8px] font-bold text-muted-foreground italic">(Millions)</span>
               </div>
-              <span className="text-3xl font-black text-emerald-950 leading-none">{totalHarvestedMil.toLocaleString()}</span>
+              <span className="text-3xl font-black text-indigo-950 leading-none">{totalHarvestedMil.toLocaleString()}</span>
           </Card>
         </div>
 
@@ -316,15 +316,15 @@ const NaupliiHarvestForm = ({
         {/* Step 2: Shifted To */}
         <div className="space-y-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-blue-100 rounded-xl">
-              <ArrowUpRight className="w-4 h-4 text-blue-600" />
+            <div className="p-2 bg-amber-100 rounded-xl">
+              <ArrowUpRight className="w-4 h-4 text-amber-600" />
             </div>
             <h3 className="text-sm font-bold uppercase tracking-wider">Step # 3: Shifted To (Nauplii Tanks)</h3>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {naupliiDestinations.map((dest) => (
-               <Card key={dest.id} className="p-5 bg-blue-50/30 border-blue-100/50 rounded-[2rem] space-y-4 relative group">
+               <Card key={dest.id} className="p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors">
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -335,9 +335,9 @@ const NaupliiHarvestForm = ({
                   </Button>
                   
                   <div className="space-y-1.5">
-                     <Label className="text-[9px] font-black uppercase text-blue-700 ml-1 leading-none tracking-widest">Nauplii Tank ID</Label>
+                     <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Nauplii Tank ID</Label>
                      <Select value={dest.tankId} onValueChange={val => handleDestChange(dest.id, { tankId: val })}>
-                        <SelectTrigger className="h-10 rounded-xl border-blue-50 bg-white font-bold text-blue-950 text-xs">
+                        <SelectTrigger className="h-10 rounded-xl border-amber-100 bg-white font-bold text-amber-950 text-xs focus:ring-amber-500">
                            <SelectValue placeholder="Select Tank" />
                         </SelectTrigger>
                         <SelectContent>
@@ -356,17 +356,17 @@ const NaupliiHarvestForm = ({
                   </div>
 
                   <div className="space-y-1.5">
-                     <Label className="text-[9px] font-black uppercase text-blue-700 ml-1 leading-none tracking-widest">Amount Shifted (mil)</Label>
+                     <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Amount Shifted (mil)</Label>
                      <div className="relative">
                         <Input 
                            type="number" 
                            step="0.01"
                            value={dest.shiftedMil} 
                            onChange={e => handleDestChange(dest.id, { shiftedMil: e.target.value })} 
-                           className="h-11 rounded-xl font-black bg-white border-blue-50 text-lg text-blue-950 pr-12 focus:border-blue-500 shadow-sm" 
+                           className="h-11 rounded-xl font-black bg-white border-amber-100 text-lg text-amber-950 pr-12 focus:ring-amber-500 shadow-sm" 
                            placeholder="0.0"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400 opacity-60">MIL</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-400 opacity-60">MIL</span>
                      </div>
                   </div>
                </Card>
@@ -375,7 +375,7 @@ const NaupliiHarvestForm = ({
              <Button 
                 variant="outline" 
                 onClick={addDestination}
-                className="h-auto py-8 rounded-[2rem] border-dashed border-blue-200 bg-blue-50/10 hover:bg-blue-50 text-blue-600 hover:text-blue-700 font-bold text-xs uppercase flex flex-col gap-3 transition-all"
+                className="h-auto py-8 rounded-[2rem] border-dashed border-amber-200 bg-amber-50/10 hover:bg-amber-50 text-amber-600 hover:text-amber-700 font-bold text-xs uppercase flex flex-col gap-3 transition-all"
              >
                 <Plus className="w-6 h-6" />
                 Add Nauplii Tank
@@ -384,7 +384,7 @@ const NaupliiHarvestForm = ({
 
           <div className={cn(
              "p-6 rounded-[2.5rem] border-2 transition-all duration-500 shadow-lg",
-             isBalanced ? "bg-blue-600 border-blue-400 text-white" : "bg-rose-50 border-rose-100 text-rose-900"
+             isBalanced ? "bg-amber-600 border-amber-400 text-white" : "bg-rose-50 border-rose-100 text-rose-900"
           )}>
              <div className="flex items-center justify-between">
                 <div>

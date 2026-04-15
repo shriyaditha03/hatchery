@@ -524,12 +524,12 @@ const SourcingMatingForm = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-pink-100 rounded-xl">
-                <Search className="w-4 h-4 text-pink-600" />
+              <div className="p-2 bg-rose-100 rounded-xl">
+                <Search className="w-4 h-4 text-rose-600" />
               </div>
               <h3 className="text-sm font-bold uppercase tracking-wider">Step # 4 Ripe Females Sourced</h3>
             </div>
-            <div className="text-[10px] font-bold text-pink-600 uppercase bg-pink-50 px-2 py-1 rounded-md">
+            <div className="text-[10px] font-bold text-rose-600 uppercase bg-rose-50 px-2 py-1 rounded-md">
               Female Tanks in Animal Sections
             </div>
           </div>
@@ -539,7 +539,7 @@ const SourcingMatingForm = ({
               <p className="text-xs text-muted-foreground italic text-center py-4 border border-dashed rounded-2xl">No female tanks found in Animal sections</p>
             )}
             {sourceTanks.map((source) => (
-              <Card key={source.id} className="p-4 bg-pink-50/20 border-pink-100/50 rounded-2xl relative group overflow-hidden shadow-sm">
+              <Card key={source.id} className="p-4 bg-rose-50/40 border-rose-100/50 rounded-2xl relative group overflow-hidden shadow-sm hover:bg-rose-50/60 transition-colors">
                 <div className="space-y-3">
                   {/* Row 1: Tank info */}
                   <div className="flex items-center justify-between">
@@ -554,7 +554,7 @@ const SourcingMatingForm = ({
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">Available:</span>
-                        <span className="text-[10px] font-black text-pink-600">{source.available} F</span>
+                        <span className="text-[10px] font-black text-rose-600">{source.available} F</span>
                       </div>
                     </div>
                   </div>
@@ -567,16 +567,16 @@ const SourcingMatingForm = ({
                           type="number" 
                           value={source.femaleCount} 
                           onChange={e => handleSourceChange(source.id, e.target.value)} 
-                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-pink-500/20" 
+                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-rose-500/20" 
                           placeholder="0"
                           max={source.available}
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-600/40 pointer-events-none">F</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-rose-600/40 pointer-events-none">F</span>
                       </div>
                     </div>
                     <div className="w-16 flex flex-col items-center justify-center pb-0.5">
                        <Label className="text-[8px] font-bold uppercase text-muted-foreground mb-1 block">Balance</Label>
-                       <span className="text-sm font-black text-pink-700/60">
+                       <span className="text-sm font-black text-rose-700/60">
                          {Math.max(0, (source.available || 0) - (parseFloat(source.femaleCount) || 0))}
                        </span>
                     </div>
@@ -587,7 +587,7 @@ const SourcingMatingForm = ({
           </div>
 
           {totalSourcedFromStep1 > 0 && (
-            <div className="flex justify-between items-center px-4 py-3 bg-pink-600 text-white rounded-2xl shadow-lg shadow-pink-100">
+            <div className="flex justify-between items-center px-4 py-3 bg-rose-600 text-white rounded-2xl shadow-lg shadow-rose-100">
               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Total Sourced Pool</span>
               <span className="text-lg font-black">{totalSourcedFromStep1} Females</span>
             </div>
@@ -616,7 +616,7 @@ const SourcingMatingForm = ({
               </p>
             )}
             {matingTanks.map((mating, idx) => (
-              <Card key={mating.id} className="p-4 bg-blue-50/20 border-blue-100/50 rounded-2xl space-y-4 relative group shadow-sm">
+              <Card key={mating.id} className="p-4 bg-blue-50/40 border-blue-100 shadow-sm rounded-2xl space-y-4 relative group hover:bg-blue-50/60 transition-colors">
                 <div className="flex items-center justify-between border-b border-blue-100/30 pb-3">
                    <div className="flex items-center gap-4">
                       <div className="p-2 bg-white rounded-lg border border-blue-100 shadow-sm">
@@ -637,32 +637,32 @@ const SourcingMatingForm = ({
                         type="number" 
                         value={mating.femalesAdded} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
-                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8" 
+                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8 shadow-sm focus:border-blue-500" 
                         placeholder="0"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">F</span>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-blue-900/60 ml-1">(F) Mated</Label>
+                    <Label className="text-[10px] font-black uppercase text-indigo-900/60 ml-1">(F) Mated</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
                         value={mating.femalesMated} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesMated: e.target.value })} 
-                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8" 
+                        className="h-11 rounded-xl font-black bg-white border-indigo-100 text-indigo-950 pr-8 shadow-sm focus:border-indigo-500" 
                         placeholder="0"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">F</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400">F</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-dashed border-blue-100">
-                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-wider">Balance Non-Mated:</span>
+                    <span className="text-[10px] font-black uppercase text-indigo-400 tracking-wider">Balance Non-Mated:</span>
                     <div className="flex items-center gap-1.5">
-                       <span className="text-sm font-black text-blue-700">{mating.balance}</span>
-                       <span className="text-[10px] font-bold text-blue-400 uppercase">F</span>
+                       <span className="text-sm font-black text-indigo-700">{mating.balance}</span>
+                       <span className="text-[10px] font-bold text-indigo-400 uppercase">F</span>
                     </div>
                 </div>
               </Card>
@@ -700,22 +700,22 @@ const SourcingMatingForm = ({
           {/* 3a: Spawning Tanks - Auto-populated */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 bg-blue-100 rounded-lg">
-                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+              <div className="p-1.5 bg-indigo-100 rounded-lg">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
               </div>
-              <Label className="text-[10px] font-black uppercase text-blue-700">Mated Animals → Spawning Tanks</Label>
+              <Label className="text-[10px] font-black uppercase text-indigo-700">Mated Animals → Spawning Tanks</Label>
             </div>
-            <div className="px-1 text-[8px] text-blue-400 font-bold mb-1">Only empty spawning tanks shown</div>
+            <div className="px-1 text-[8px] text-indigo-400 font-bold mb-1">Only empty spawning tanks shown</div>
             {matedDestinations.length === 0 && (
               <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
                 No empty spawning tanks available
               </p>
             )}
             {matedDestinations.map(dest => (
-              <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-blue-50/40 border border-blue-100 rounded-xl">
+              <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-indigo-50/40 border border-indigo-100 rounded-xl">
                 <div>
-                  <p className="text-xs font-black text-blue-900 leading-none">{dest.tankName}</p>
-                  <p className="text-[9px] text-blue-400 font-bold uppercase mt-0.5">Spawning Tank</p>
+                  <p className="text-xs font-black text-indigo-900 leading-none">{dest.tankName}</p>
+                  <p className="text-[9px] text-indigo-400 font-bold uppercase mt-0.5">Spawning Tank</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative w-24">
@@ -724,10 +724,10 @@ const SourcingMatingForm = ({
                       min="0"
                       value={dest.count}
                       onChange={e => handleMatedDestinationChange(dest.tankId, { count: e.target.value }, true)}
-                      className="h-9 rounded-xl text-center font-bold border-blue-200 bg-white text-blue-900 pr-6 text-sm"
+                      className="h-9 rounded-xl text-center font-bold border-indigo-200 bg-white text-indigo-900 pr-6 text-sm focus:border-indigo-500 shadow-sm"
                       placeholder="0"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400">F</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400">F</span>
                   </div>
                 </div>
               </div>
@@ -739,12 +739,12 @@ const SourcingMatingForm = ({
           {/* 3b: Return to Female Source Tanks - Auto-populated */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 bg-slate-100 rounded-lg">
-                <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
+              <div className="p-1.5 bg-rose-100 rounded-lg">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-rose-500" />
               </div>
-              <Label className="text-[10px] font-black uppercase text-slate-700">Non-Mated Animals → Female Tanks</Label>
+              <Label className="text-[10px] font-black uppercase text-rose-700">Non-Mated Animals → Female Tanks</Label>
             </div>
-            <div className="px-1 text-[8px] text-slate-400 font-bold mb-1">From Ripe Females Sourced above</div>
+            <div className="px-1 text-[8px] text-rose-400 font-bold mb-1">From Ripe Females Sourced above</div>
             {returnDestinations.length === 0 && (
               <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
                 Enter females sourced above first
@@ -756,11 +756,11 @@ const SourcingMatingForm = ({
               const returnedCount = parseFloat(dest.count) || 0;
               const newPop = Math.max(0, currentPop - sourcedFromThisTank + returnedCount);
               return (
-                <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-slate-50/60 border border-slate-100 rounded-xl">
+                <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-rose-50/60 border border-rose-100 rounded-xl">
                   <div>
-                    <p className="text-xs font-black text-slate-900 leading-none">{dest.tankName}</p>
+                    <p className="text-xs font-black text-rose-900 leading-none">{dest.tankName}</p>
                     {returnedCount > 0 && (
-                      <p className="text-[9px] text-slate-500 font-bold mt-0.5">New pop: {newPop} F</p>
+                      <p className="text-[9px] text-rose-500 font-bold mt-0.5">New pop: {newPop} F</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -770,10 +770,10 @@ const SourcingMatingForm = ({
                         min="0"
                         value={dest.count}
                         onChange={e => handleReturnDestinationChange(dest.tankId, { count: e.target.value }, true)}
-                        className="h-9 rounded-xl text-center font-bold border-slate-200 bg-white text-slate-900 pr-6 text-sm"
+                        className="h-9 rounded-xl text-center font-bold border-rose-200 bg-white text-rose-900 pr-6 text-sm focus:border-rose-500 shadow-sm"
                         placeholder="0"
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400">F</span>
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-400">F</span>
                     </div>
                   </div>
                 </div>

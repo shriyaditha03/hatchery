@@ -1477,7 +1477,8 @@ const RecordActivity = () => {
 
     // Basic validation
     if (selectionScope === 'single' && !tankId) {
-      if (isSpecialActivity && !selectedSectionId && !activeSectionId && activity !== 'Sourcing & Mating') {
+      const activitiesWithInternalSelection = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
+      if (isSpecialActivity && !selectedSectionId && !activeSectionId && !activitiesWithInternalSelection.includes(activity)) {
         toast.error('Please select a section for this activity');
         return;
       }
@@ -1748,20 +1749,21 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Spawning' && !isPlanningMode) {
-      const { tankId, spawnedCount, balanceCount, returnDestinations } = spawningData;
-      if (!tankId) {
-        toast.error('Please select a spawning tank');
+      const { spawningTanks, returnDestinations, totalInitialShifted } = spawningData;
+      
+      if (!spawningTanks || spawningTanks.length === 0) {
+        toast.error('Please select a batch with valid spawning tanks');
         return;
       }
-      const sVal = parseFloat(spawnedCount) || 0;
-      const bVal = parseFloat(balanceCount) || 0;
-      const totalFemales = sVal + bVal;
-      const totalRedistributed = returnDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
+      
+      const totalFemales = parseFloat(totalInitialShifted) || 0;
+      const totalRedistributed = (returnDestinations || []).reduce((sum: number, d: any) => sum + (parseFloat(d.count) || 0), 0);
       
       if (totalFemales === 0) {
-        toast.error('Please enter spawned or balance counts');
+        toast.error('No animals found in the selected spawning tanks');
         return;
       }
+      
       if (totalRedistributed !== totalFemales) {
         toast.error(`Total females (${totalFemales}) must match total redistributed (${totalRedistributed})`);
         return;
@@ -2087,7 +2089,7 @@ const RecordActivity = () => {
 
             // 2. Return population to source tanks (increment)
             const returnPromises = (returnDestinations || []).map(async (r: any) => {
-              const qty = parseFloat(r.returnCount) || 0;
+              const qty = parseFloat(r.count) || 0;
               if (qty <= 0 || !r.tankId) return null;
               
               const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === r.tankId));
