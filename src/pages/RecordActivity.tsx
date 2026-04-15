@@ -3103,7 +3103,29 @@ const RecordActivity = () => {
             onCommentsChange={setComments}
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
-            availableTanks={availableTanks}
+            availableTanks={(() => {
+              const cFarmId = selectedFarmId || activeFarmId;
+              // SPAWNING sections always needed for Field 3 destinations
+              const spawningSections = availableTanks.filter(s =>
+                s.farm_id === cFarmId &&
+                (s.section_type === 'SPAWNING' || (s.name || '').toUpperCase().includes('SPAWN'))
+              );
+              // Start with ANIMAL sections for the current farm
+              const animalSections = availableTanks.filter(s =>
+                s.farm_id === cFarmId &&
+                (s.section_type === 'ANIMAL' || (s.name || '').toUpperCase().includes('ANIMAL'))
+              );
+              // If we have batch-related tank IDs, further filter ANIMAL tanks to only those in the batch
+              if (activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
+                const filtered = animalSections.map(s => ({
+                  ...s,
+                  tanks: s.tanks.filter((t: any) => batchRelatedTankIds.includes(t.id))
+                })).filter(s => s.tanks.length > 0);
+                // If filtering yielded results, use them; otherwise fall back to all ANIMAL sections
+                if (filtered.length > 0) return [...filtered, ...spawningSections];
+              }
+              return [...animalSections, ...spawningSections];
+            })()}
             activeSectionId={selectedSectionId || activeSectionId}
             activeTankId={tankId}
             tankPopulations={tankPopulations}

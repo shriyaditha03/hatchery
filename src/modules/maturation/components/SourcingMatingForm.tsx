@@ -524,12 +524,12 @@ const SourcingMatingForm = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-emerald-100 rounded-xl">
-                <Search className="w-4 h-4 text-emerald-600" />
+              <div className="p-2 bg-pink-100 rounded-xl">
+                <Search className="w-4 h-4 text-pink-600" />
               </div>
               <h3 className="text-sm font-bold uppercase tracking-wider">Step # 4 Ripe Females Sourced</h3>
             </div>
-            <div className="text-[10px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-1 rounded-md">
+            <div className="text-[10px] font-bold text-pink-600 uppercase bg-pink-50 px-2 py-1 rounded-md">
               Female Tanks in Animal Sections
             </div>
           </div>
@@ -539,40 +539,44 @@ const SourcingMatingForm = ({
               <p className="text-xs text-muted-foreground italic text-center py-4 border border-dashed rounded-2xl">No female tanks found in Animal sections</p>
             )}
             {sourceTanks.map((source) => (
-              <Card key={source.id} className="p-4 bg-muted/20 border-none rounded-2xl relative group overflow-hidden">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                       <p className="text-sm font-bold text-foreground">{source.tankName}</p>
-                       {source.sectionName && (
-                         <span className="text-[8px] font-black uppercase text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-sm">
-                           {source.sectionName}
-                         </span>
-                       )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">Available:</span>
-                      <span className="text-[10px] font-black text-emerald-600">{source.available} F</span>
+              <Card key={source.id} className="p-4 bg-pink-50/20 border-pink-100/50 rounded-2xl relative group overflow-hidden shadow-sm">
+                <div className="space-y-3">
+                  {/* Row 1: Tank info */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                         <p className="text-sm font-bold text-foreground">{source.tankName}</p>
+                         {source.sectionName && (
+                           <span className="text-[8px] font-black uppercase text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-sm">
+                             {source.sectionName}
+                           </span>
+                         )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">Available:</span>
+                        <span className="text-[10px] font-black text-pink-600">{source.available} F</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="w-48 flex items-center gap-3">
-                    <div className="flex-1">
+                  {/* Row 2: Sourced input + Balance */}
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+                    <div>
                       <Label className="text-[9px] font-bold uppercase text-muted-foreground mb-1 block ml-1">Sourced (F) *</Label>
                       <div className="relative group/input">
                         <Input 
                           type="number" 
                           value={source.femaleCount} 
                           onChange={e => handleSourceChange(source.id, e.target.value)} 
-                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-emerald-500/20" 
+                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-pink-500/20" 
                           placeholder="0"
                           max={source.available}
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-emerald-600/40 pointer-events-none">F</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-600/40 pointer-events-none">F</span>
                       </div>
                     </div>
-                    <div className="w-16 flex flex-col items-center justify-center pt-4">
+                    <div className="w-16 flex flex-col items-center justify-center pb-0.5">
                        <Label className="text-[8px] font-bold uppercase text-muted-foreground mb-1 block">Balance</Label>
-                       <span className="text-sm font-black text-emerald-700/60">
+                       <span className="text-sm font-black text-pink-700/60">
                          {Math.max(0, (source.available || 0) - (parseFloat(source.femaleCount) || 0))}
                        </span>
                     </div>
@@ -583,7 +587,7 @@ const SourcingMatingForm = ({
           </div>
 
           {totalSourcedFromStep1 > 0 && (
-            <div className="flex justify-between items-center px-4 py-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100">
+            <div className="flex justify-between items-center px-4 py-3 bg-pink-600 text-white rounded-2xl shadow-lg shadow-pink-100">
               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Total Sourced Pool</span>
               <span className="text-lg font-black">{totalSourcedFromStep1} Females</span>
             </div>
@@ -596,8 +600,8 @@ const SourcingMatingForm = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-pink-100 rounded-xl">
-                <Heart className="w-4 h-4 text-pink-600" />
+              <div className="p-2 bg-blue-100 rounded-xl">
+                <Heart className="w-4 h-4 text-blue-600" />
               </div>
               <h3 className="text-sm font-bold uppercase tracking-wider">Step # 5 Mating (Male Tanks)</h3>
             </div>
@@ -612,53 +616,53 @@ const SourcingMatingForm = ({
               </p>
             )}
             {matingTanks.map((mating, idx) => (
-              <Card key={mating.id} className="p-4 bg-pink-50/20 border-pink-100/50 rounded-2xl space-y-4 relative group shadow-sm">
-                <div className="flex items-center justify-between border-b border-pink-100/30 pb-3">
+              <Card key={mating.id} className="p-4 bg-blue-50/20 border-blue-100/50 rounded-2xl space-y-4 relative group shadow-sm">
+                <div className="flex items-center justify-between border-b border-blue-100/30 pb-3">
                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-white rounded-lg border border-pink-100 shadow-sm">
-                         <p className="text-sm font-black text-pink-900 leading-none">{mating.tankName}</p>
+                      <div className="p-2 bg-white rounded-lg border border-blue-100 shadow-sm">
+                         <p className="text-sm font-black text-blue-900 leading-none">{mating.tankName}</p>
                       </div>
                       <div className="flex flex-col">
-                         <span className="text-[9px] font-black uppercase text-pink-600/70 tracking-widest leading-none">Male Animals</span>
-                         <span className="text-base font-black text-pink-950 mt-0.5">{mating.maleCount} (M)</span>
+                         <span className="text-[9px] font-black uppercase text-blue-600/70 tracking-widest leading-none">Male Animals</span>
+                         <span className="text-base font-black text-blue-950 mt-0.5">{mating.maleCount} (M)</span>
                       </div>
                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-pink-900/60 ml-1">Female Added</Label>
+                    <Label className="text-[10px] font-black uppercase text-blue-900/60 ml-1">Female Added</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
                         value={mating.femalesAdded} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
-                        className="h-11 rounded-xl font-black bg-white border-pink-100 text-pink-950 pr-8" 
+                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8" 
                         placeholder="0"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-400">F</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">F</span>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-pink-900/60 ml-1">(F) Mated</Label>
+                    <Label className="text-[10px] font-black uppercase text-blue-900/60 ml-1">(F) Mated</Label>
                     <div className="relative">
                       <Input 
                         type="number" 
                         value={mating.femalesMated} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesMated: e.target.value })} 
-                        className="h-11 rounded-xl font-black bg-white border-pink-100 text-pink-950 pr-8" 
+                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8" 
                         placeholder="0"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-400">F</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">F</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-dashed border-pink-100">
-                    <span className="text-[10px] font-black uppercase text-pink-400 tracking-wider">Balance Non-Mated:</span>
+                <div className="flex items-center justify-between pt-2 border-t border-dashed border-blue-100">
+                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-wider">Balance Non-Mated:</span>
                     <div className="flex items-center gap-1.5">
-                       <span className="text-sm font-black text-pink-700">{mating.balance}</span>
-                       <span className="text-[10px] font-bold text-pink-400 uppercase">F</span>
+                       <span className="text-sm font-black text-blue-700">{mating.balance}</span>
+                       <span className="text-[10px] font-bold text-blue-400 uppercase">F</span>
                     </div>
                 </div>
               </Card>
