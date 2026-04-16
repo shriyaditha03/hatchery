@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2, AlertCircle, CheckCircle, Database, Loader2, PlusCircle } from 'lucide-react';
+import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2, AlertCircle, CheckCircle, Database, Loader2, PlusCircle, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -48,6 +48,10 @@ const SpawningForm = ({
   const [spawningTanks, setSpawningTanks] = useState<any[]>(data.spawningTanks || []);
   const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
   const [loadingBatches, setLoadingBatches] = useState(false);
+  
+  const isSupervisor = user?.role === 'supervisor' || user?.role === 'owner';
+  const isEditing = !!data.id;
+  const canEdit = isSupervisor || !isEditing;
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates });
@@ -68,12 +72,30 @@ const SpawningForm = ({
           .limit(100);
 
         if (error) throw error;
+
+        // Fetch Spawning logs to check for completed batches
+        const { data: spawnLogs } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Spawning');
+
+        const spawnedBatchNumbers = new Set((spawnLogs || []).map(l => l.data?.batchId || l.data?.batchNumber));
+
         // Filter to logs belonging to the active broodstock batch
         const filtered = (logs || []).filter(l => {
           const logStockingId = l.data?.stockingId || l.stockingId;
-          if (!logStockingId) return true;
-          return logStockingId === activeBroodstockBatchId;
+          const bn = l.data?.batchNumber || l.data?.batchId;
+          
+          // Filter by active broodstock batch
+          if (activeBroodstockBatchId && logStockingId !== activeBroodstockBatchId) return false;
+          
+          // Filter out already spawned batches (unless we are in edit mode for one)
+          if (spawnedBatchNumbers.has(bn) && data.batchId !== bn) return false;
+          
+          return true;
         });
+        
         // De-duplicate by batchNumber
         const seen = new Set<string>();
         const unique = filtered.filter(l => {
@@ -143,8 +165,8 @@ const SpawningForm = ({
 
     const log = batchLogs.find(l => l.data?.batchNumber === selectedBatchId);
     if (log && log.data) {
-      // 1. Spawning Tanks (Destinations from Mating)
-      const matDests = log.data.matedDestinations || [];
+      // 1. Spawning Tanks (Destinations from Mating) - ONLY those with animals shifted in
+      const matDests = (log.data.matedDestinations || []).filter((d: any) => (parseFloat(d.count) || 0) > 0);
       const newSpawningTanks = matDests.map((d: any) => {
         let tName = 'Unknown Tank';
         availableTanks.forEach(s => {
@@ -250,7 +272,18 @@ const SpawningForm = ({
            </div>
         </div>
       )}
-      <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
+
+      {!canEdit && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm">
+          <ShieldAlert className="w-5 h-5 text-amber-600" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest">Read-Only Mode</p>
+            <p className="text-[10px] font-medium opacity-80">This spawning record can only be edited by a supervisor.</p>
+          </div>
+        </div>
+      )}
+
+      <div className={cn("glass-card rounded-3xl p-6 border shadow-sm space-y-8", !canEdit && "opacity-80 pointer-events-none select-none")}>
         {selectedBatchId && activeBroodstockBatchId ? (
           <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
              <div className="flex items-center gap-3">

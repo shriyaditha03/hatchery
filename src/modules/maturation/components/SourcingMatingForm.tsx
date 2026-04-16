@@ -52,13 +52,14 @@ const SourcingMatingForm = ({
   const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
   const [batchNumber, setBatchNumber] = useState<string>(data.batchNumber || '');
   const [isBatchIdManuallyEdited, setIsBatchIdManuallyEdited] = useState(data.batchNumber ? true : false);
+  const [uniqueSuffix] = useState(() => Math.random().toString(36).substring(2, 6).toUpperCase());
 
   // Auto-fill tracking state
   const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
 
   const generateBatchId = (totalSourcedCount: number = 0, totalMatedCount: number = 0) => {
     const dateStr = getTodayStr().replace(/-/g, '').slice(2); // YYMMDD
-    return `NP_FS${totalSourcedCount}_FM${totalMatedCount}_${dateStr}`;
+    return `NP_FS${totalSourcedCount}_FM${totalMatedCount}_${dateStr}_${uniqueSuffix}`;
   };
 
   // Auto-generate Batch ID if not present or if totals change
@@ -479,28 +480,12 @@ const SourcingMatingForm = ({
         
         {/* Batch Information */}
         <div className="p-5 bg-primary/5 rounded-[2rem] border border-dashed border-primary/20 space-y-4">
-           <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-primary">
-                 <Database className="w-4 h-4" />
-                 <h3 className="text-[10px] font-black uppercase tracking-widest">{"Nauplii Production Batch ID (NP_FS{sourced}_FM{mated}_{YYMMDD})"}</h3>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => {
-                  const totalSourced = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
-                  const newId = generateBatchId(totalSourced);
-                  setBatchNumber(newId);
-                  setIsBatchIdManuallyEdited(true);
-                  updateData({ batchNumber: newId });
-                }}
-                className="h-8 text-[9px] font-black uppercase text-primary/60 hover:text-primary gap-1"
-              >
-                <RefreshCw className="w-3 h-3" /> Regenerate
-              </Button>
+           <div className="flex items-center gap-2 text-primary">
+              <Database className="w-4 h-4" />
+              <h3 className="text-[10px] font-black uppercase tracking-widest leading-none">Nauplii Production Batch ID</h3>
            </div>
            
-           <div className="relative group">
+           <div className="relative">
               <Input 
                 value={batchNumber}
                 onChange={(e) => {
@@ -508,12 +493,9 @@ const SourcingMatingForm = ({
                   setIsBatchIdManuallyEdited(true);
                   updateData({ batchNumber: e.target.value });
                 }}
-                className="h-14 rounded-2xl font-black bg-white/50 border-primary/10 text-xl text-primary tracking-tight shadow-sm text-center uppercase"
+                className="h-14 rounded-2xl font-black bg-white border-primary/10 text-xl text-primary tracking-tight shadow-sm text-center uppercase"
                 placeholder="BATCH-ID"
               />
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none opacity-20">
-                 <RefreshCw className="w-5 h-5" />
-              </div>
            </div>
            <p className="text-[9px] text-muted-foreground italic text-center px-4">
              Unique identifier used to track this batch lifecycle.

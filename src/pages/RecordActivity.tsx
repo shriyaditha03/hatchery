@@ -2025,13 +2025,28 @@ const RecordActivity = () => {
               const qty = parseFloat(s.femaleCount) || 0;
               if (qty <= 0) return null;
               
+              const currentPop = tankPopulations[s.tankId] || 0;
+              const newPop = Math.max(0, currentPop - qty);
+              
               const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === s.tankId));
               return addActivity({
                 tank_id: s.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, ...batchMeta, movementType: 'sourcing', movementQty: -qty, role: 'source' }
+                data: { 
+                  ...currentBuildData, 
+                  ...batchMeta, 
+                  movementType: 'sourcing', 
+                  movementQty: -qty, 
+                  role: 'source',
+                  // Multiple fields to ensure RPC compatibility
+                  presentPopulation: newPop.toString(),
+                  presentPopulationF: newPop.toString(),
+                  presentPopulationM: "0",
+                  newPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString()
+                }
               });
             });
 
@@ -2040,13 +2055,27 @@ const RecordActivity = () => {
               const qty = parseFloat(d.count) || 0;
               if (qty <= 0 || !d.tankId) return null;
               
+              const currentPop = tankPopulations[d.tankId] || 0;
+              const newPop = currentPop + qty;
+
               const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === d.tankId));
               return addActivity({
                 tank_id: d.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, ...batchMeta, movementType: 'spawning_shift', movementQty: qty, role: 'destination' }
+                data: { 
+                  ...currentBuildData, 
+                  ...batchMeta, 
+                  movementType: 'spawning_shift', 
+                  movementQty: qty, 
+                  role: 'destination',
+                  presentPopulation: newPop.toString(),
+                  presentPopulationF: newPop.toString(),
+                  presentPopulationM: "0",
+                  newPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString()
+                }
               });
             });
 
@@ -2055,17 +2084,72 @@ const RecordActivity = () => {
               const qty = parseFloat(r.count) || 0;
               if (qty <= 0 || !r.tankId) return null;
               
+              const sourcedFromThisTank = (sourceTanks || []).find((s: any) => s.tankId === r.tankId);
+              const sourcedQty = sourcedFromThisTank ? (parseFloat(sourcedFromThisTank.femaleCount) || 0) : 0;
+              
+              const currentPop = tankPopulations[r.tankId] || 0;
+              const newPop = Math.max(0, currentPop - sourcedQty + qty);
+
               const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === r.tankId));
               return addActivity({
                 tank_id: r.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, ...batchMeta, movementType: 'return', movementQty: qty, role: 'return' }
+                data: { 
+                  ...currentBuildData, 
+                  ...batchMeta, 
+                  movementType: 'return', 
+                  movementQty: qty, 
+                  role: 'return',
+                  presentPopulation: newPop.toString(),
+                  presentPopulationF: newPop.toString(),
+                  presentPopulationM: "0",
+                  newPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString()
+                }
               });
             });
 
-            await Promise.all([...sourcePromises, ...spawnerPromises, ...returnPromises]);
+            // 4. Record "Ghost" Observations to force population sync for all involved tanks
+            const involvedTanks = new Map<string, number>();
+            
+            // Collect final states
+            sourceTanks.forEach((s: any) => {
+              const qty = parseFloat(s.femaleCount) || 0;
+              const currentPop = tankPopulations[s.tankId] || 0;
+              const returnQty = (returnDestinations || []).find((r: any) => r.tankId === s.tankId)?.count || 0;
+              involvedTanks.set(s.tankId, Math.max(0, currentPop - qty + parseFloat(returnQty)));
+            });
+            
+            (matedDestinations || []).forEach((d: any) => {
+              if (d.tankId) {
+                const currentPop = tankPopulations[d.tankId] || 0;
+                involvedTanks.set(d.tankId, currentPop + (parseFloat(d.count) || 0));
+              }
+            });
+
+            const syncPromises = Array.from(involvedTanks.entries()).map(([tId, finalPop]) => {
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === tId));
+              return addActivity({
+                tank_id: tId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: {
+                  isSystemSync: true,
+                  notes: "Maturation Sourcing movement population update",
+                  presentPopulation: finalPop.toString(),
+                  presentPopulationF: finalPop.toString(),
+                  presentPopulationM: "0",
+                  originalPop: tankPopulations[tId]?.toString(),
+                  originalPopF: tankPopulations[tId]?.toString(),
+                  originalPopM: "0"
+                }
+              });
+            });
+
+            await Promise.all([...sourcePromises, ...spawnerPromises, ...returnPromises, ...syncPromises]);
           }
 
           // Special bulk save for Spawning (record clearance of spawning tanks and return to source)
@@ -2077,13 +2161,26 @@ const RecordActivity = () => {
               const qty = parseFloat(t.shiftedCount) || 0;
               if (qty <= 0 || !t.tankId) return null;
               
+              const currentPop = tankPopulations[t.tankId] || 0;
+              const newPop = Math.max(0, currentPop - qty);
+
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
               return addActivity({
                 tank_id: t.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'spawning_clearance', movementQty: -qty, role: 'source' }
+                data: { 
+                  ...currentBuildData, 
+                  movementType: 'spawning_clearance', 
+                  movementQty: -qty, 
+                  role: 'source',
+                  presentPopulation: newPop.toString(),
+                  presentPopulationF: newPop.toString(),
+                  presentPopulationM: "0",
+                  newPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString()
+                }
               });
             });
 
@@ -2092,17 +2189,67 @@ const RecordActivity = () => {
               const qty = parseFloat(r.count) || 0;
               if (qty <= 0 || !r.tankId) return null;
               
+              const currentPop = tankPopulations[r.tankId] || 0;
+              const newPop = currentPop + qty;
+
               const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === r.tankId));
               return addActivity({
                 tank_id: r.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'spawning_return', movementQty: qty, role: 'return' }
+                data: { 
+                  ...currentBuildData, 
+                  movementType: 'spawning_return', 
+                  movementQty: qty, 
+                  role: 'return',
+                  presentPopulation: newPop.toString(),
+                  presentPopulationF: newPop.toString(),
+                  presentPopulationM: "0",
+                  newPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString()
+                }
               });
             });
 
-            await Promise.all([...clearPromises, ...returnPromises]);
+            // 3. Record "Ghost" Observations to force population sync
+            const involvedTanks = new Map<string, number>();
+            
+            (spawningTanks || []).forEach((t: any) => {
+              if (t.tankId) {
+                const currentPop = tankPopulations[t.tankId] || 0;
+                involvedTanks.set(t.tankId, Math.max(0, currentPop - (parseFloat(t.shiftedCount) || 0)));
+              }
+            });
+            
+            (returnDestinations || []).forEach((r: any) => {
+              if (r.tankId) {
+                const currentPop = tankPopulations[r.tankId] || 0;
+                involvedTanks.set(r.tankId, currentPop + (parseFloat(r.count) || 0));
+              }
+            });
+
+            const syncPromises = Array.from(involvedTanks.entries()).map(([tId, finalPop]) => {
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === tId));
+              return addActivity({
+                tank_id: tId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: {
+                  isSystemSync: true,
+                  notes: "Maturation Spawning movement population update",
+                  presentPopulation: finalPop.toString(),
+                  presentPopulationF: finalPop.toString(),
+                  presentPopulationM: "0",
+                  originalPop: tankPopulations[tId]?.toString(),
+                  originalPopF: tankPopulations[tId]?.toString(),
+                  originalPopM: "0"
+                }
+              });
+            });
+
+            await Promise.all([...clearPromises, ...returnPromises, ...syncPromises]);
           }
 
           // Special bulk save for Nauplii Harvest (record arrival in Nauplii tanks)
@@ -2113,17 +2260,49 @@ const RecordActivity = () => {
               const qty = parseFloat(d.shiftedMil) || 0;
               if (qty <= 0 || !d.tankId) return null;
               
+              const currentPop = tankPopulations[d.tankId] || 0;
+              const newPop = currentPop + qty;
+
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === d.tankId));
               return addActivity({
                 tank_id: d.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'nauplii_arrival', movementQty: qty, role: 'destination' }
+                data: { 
+                  ...currentBuildData, 
+                  movementType: 'nauplii_arrival', 
+                  movementQty: qty, 
+                  role: 'destination',
+                  presentPopulation: newPop.toFixed(3),
+                  newPopulation: newPop.toFixed(3),
+                  previousPopulation: currentPop.toFixed(3)
+                }
               });
             });
 
-            await Promise.all(destPromises);
+            // 2. Record "Ghost" Observations for Nauplii tanks
+            const syncPromises = (naupliiDestinations || []).map(async (d: any) => {
+              if (!d.tankId) return null;
+              const currentPop = tankPopulations[d.tankId] || 0;
+              const finalPop = currentPop + (parseFloat(d.shiftedMil) || 0);
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((t: any) => t.id === d.tankId));
+              return addActivity({
+                tank_id: d.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: {
+                  isSystemSync: true,
+                  notes: "Maturation Nauplii Harvest population update",
+                  presentPopulation: finalPop.toFixed(3),
+                  originalPop: currentPop.toFixed(3)
+                }
+              });
+            });
+
+            await Promise.all([...destPromises, ...syncPromises]);
           }
 
           // Special bulk save for Nauplii Sale (clear Nauplii tanks)
@@ -2134,17 +2313,50 @@ const RecordActivity = () => {
               const qty = (parseFloat(t.saleMil) || 0) + (parseFloat(t.discardMil) || 0);
               if (qty <= 0 || !t.tankId) return null;
               
+              const currentPop = tankPopulations[t.tankId] || 0;
+              const newPop = Math.max(0, currentPop - qty);
+
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
               return addActivity({
                 tank_id: t.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
                 activity_type: activity as any,
-                data: { ...currentBuildData, movementType: 'nauplii_clearance', movementQty: qty, role: 'source' }
+                data: { 
+                  ...currentBuildData, 
+                  movementType: 'nauplii_clearance', 
+                  movementQty: -qty, 
+                  role: 'source',
+                  presentPopulation: newPop.toFixed(3),
+                  newPopulation: newPop.toFixed(3),
+                  previousPopulation: currentPop.toFixed(3)
+                }
               });
             });
 
-            await Promise.all(salePromises);
+            // 2. Record "Ghost" Observations for Nauplii tank clearance
+            const syncPromises = (saleTanks || []).map(async (t: any) => {
+              if (!t.tankId) return null;
+              const qty = (parseFloat(t.saleMil) || 0) + (parseFloat(t.discardMil) || 0);
+              const currentPop = tankPopulations[t.tankId] || 0;
+              const finalPop = Math.max(0, currentPop - qty);
+              
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
+              return addActivity({
+                tank_id: t.tankId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: {
+                  isSystemSync: true,
+                  notes: "Maturation Nauplii Sale population update",
+                  presentPopulation: finalPop.toFixed(3),
+                  originalPop: currentPop.toFixed(3)
+                }
+              });
+            });
+
+            await Promise.all([...salePromises, ...syncPromises]);
           }
 
           if (activity === 'Tank Shifting') {

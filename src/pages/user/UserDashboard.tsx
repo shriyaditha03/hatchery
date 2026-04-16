@@ -147,7 +147,7 @@ const UserDashboard = () => {
             const { data, error } = await supabase
                 .from('activity_logs')
                 .select('*')
-                .eq('activity_type', 'Stocking')
+                .in('activity_type', ['Stocking', 'Sourcing & Mating'])
                 .eq('farm_id', activeFarmId)
                 .order('created_at', { ascending: false });
 
@@ -587,7 +587,7 @@ const UserDashboard = () => {
                         </div>
                     </div>
                 </div>
-            ) : (!activeBroodstockBatchId && activeModule === 'MATURATION') ? (
+            ) : ((!activeBroodstockBatchId || (activeBroodstockBatchId !== 'new' && !maturationBatches.find(b => b.id === activeBroodstockBatchId))) && activeModule === 'MATURATION') ? (
                 <div className="px-4 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="bg-white/80 backdrop-blur-md p-10 rounded-[2.5rem] border border-white/40 shadow-xl text-center flex flex-col items-center justify-center gap-5">
                         <div className="w-16 h-16 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-200/50">

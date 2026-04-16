@@ -20,7 +20,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera, Eye, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, FileText, Download, Camera, Eye, Info, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, getTodayStr, getDateRangeUTC } from '@/lib/date-utils';
 import { format } from 'date-fns';
@@ -374,7 +374,7 @@ const OwnerConsolidatedReports = () => {
                                         <TableHead className="font-bold">Section</TableHead>
                                         <TableHead className="font-bold">Tank</TableHead>
                                         <TableHead className="font-bold text-center">Variance</TableHead>
-                                        <TableHead className="font-bold text-center w-16">Details</TableHead>
+                                        <TableHead className="font-bold text-center w-24">Actions</TableHead>
                                         <TableHead className="font-bold">Comments</TableHead>
                                         <TableHead className="font-bold">Photo</TableHead>
                                     </TableRow>
@@ -427,18 +427,34 @@ const OwnerConsolidatedReports = () => {
                                                     );
                                                 })()}
                                             </TableCell>
-                                            <TableCell className="text-center w-16">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-7 w-7 p-0 hover:bg-primary/10 hover:text-primary"
-                                                    onClick={() => {
-                                                        setSelectedLog(log);
-                                                        setIsDetailOpen(true);
-                                                    }}
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                </Button>
+                                            <TableCell className="text-center w-24">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 w-7 p-0 hover:bg-primary/10 hover:text-primary"
+                                                        onClick={() => {
+                                                            setSelectedLog(log);
+                                                            setIsDetailOpen(true);
+                                                        }}
+                                                    >
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                    {(user?.role === 'owner' || user?.role === 'supervisor') && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 w-7 p-0 hover:bg-amber-100/50 hover:text-amber-600"
+                                                            onClick={() => {
+                                                                const basePath = user?.role === 'owner' ? '/owner/activity' : '/user/activity';
+                                                                const activityType = log.activity_type.toLowerCase().replace(/ & /g, '%20&%20');
+                                                                navigate(`${basePath}/${activityType}?edit=${log.id}&mode=activity`);
+                                                            }}
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="max-w-xs">
                                                 <span className="text-xs text-muted-foreground italic truncate block">
