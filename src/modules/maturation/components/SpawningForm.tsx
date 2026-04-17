@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface SpawningFormProps {
   data: any;
@@ -213,9 +214,23 @@ const SpawningForm = ({
   const handleSpawningChange = (id: string, updates: any) => {
     const newList = spawningTanks.map(t => {
       if (t.id === id) {
-        const spawned = updates.spawnedCount !== undefined ? (parseFloat(updates.spawnedCount) || 0) : (parseFloat(t.spawnedCount) || 0);
+        let spawnedVal = updates.spawnedCount;
         const original = parseFloat(t.shiftedCount) || 0;
-        return { ...t, ...updates, balanceCount: Math.max(0, original - spawned).toString() };
+
+        if (spawnedVal !== undefined && spawnedVal !== '') {
+          const numValue = parseFloat(spawnedVal);
+          if (numValue > original) {
+            toast.error(`Cannot exceed ${original} females available in ${t.tankName}`);
+          }
+        }
+
+        const spawned = spawnedVal !== undefined ? (parseFloat(spawnedVal) || 0) : (parseFloat(t.spawnedCount) || 0);
+        return { 
+          ...t, 
+          ...updates, 
+          spawnedCount: spawnedVal ?? t.spawnedCount,
+          balanceCount: Math.max(0, original - spawned).toString() 
+        };
       }
       return t;
     });
@@ -236,8 +251,23 @@ const SpawningForm = ({
 
   // Sync summary data for saving
   useEffect(() => {
+    let spawningId = selectedBatchId;
+    
+    if (selectedBatchId && selectedBatchId.includes('_')) {
+      const parts = selectedBatchId.split('_');
+      // Format: NP_FS(S)_FM(M)_YYMMDD_SUFFIX
+      // We want to transform to: NP_SP(SP)_NSP(NSP)_YYMMDD_SUFFIX
+      // Or if it was already updated, just replace the SP/NSP parts
+      
+      const datePart = parts.find(p => /^\d{6}$/.test(p)) || '';
+      const suffixPart = parts[parts.length - 1];
+      
+      spawningId = `NP_SP${totalFemaleSpawned}_NSP${totalFemaleNotSpawned}_${datePart}_${suffixPart}`;
+    }
+
     updateData({
-      batchId: selectedBatchId,
+      batchId: spawningId,
+      sourcingBatchId: selectedBatchId, // Keep reference to original
       stockingId: activeBroodstockBatchId,
       totalSpawned: totalFemaleSpawned,
       totalNotSpawned: totalFemaleNotSpawned,
@@ -316,38 +346,47 @@ const SpawningForm = ({
             
             <div className="space-y-1.5">
               <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-              <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
-                 <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900 focus:ring-indigo-500">
-                   <SelectValue placeholder="Search Batch ID" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   {loadingBatches ? (
-                     <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                   ) : batchLogs.length === 0 ? (
-                     <div className="p-6 text-center space-y-4">
-                        <div className="flex flex-col items-center gap-2 text-amber-600 bg-amber-50 p-4 rounded-2xl border border-amber-100">
-                           <AlertCircle className="w-6 h-6" />
-                           <p className="text-xs font-bold uppercase">No Nauplii Production Batch Found</p>
-                           <p className="text-[10px] text-amber-700/70 font-medium">Please record a "Sourcing & Mating" activity first to create a batch.</p>
-                        </div>
-                        <Button 
-                          onClick={goToSourcingMating}
-                          className="w-full h-11 rounded-xl bg-amber-600 hover:bg-amber-700 text-white gap-2 text-xs font-bold"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                          Record Sourcing & Mating
-                        </Button>
-                     </div>
-                   ) : (
-                     batchLogs.map(log => (
-                       <SelectItem key={log.id} value={log.data?.batchNumber}>
-                         <span className="font-bold">{log.data?.batchNumber}</span>
-                         <span className="ml-2 opacity-50 text-[10px]">({log.data?.totalSourced} F)</span>
-                       </SelectItem>
-                     ))
-                   )}
-                 </SelectContent>
-              </Select>
+                {!loadingBatches && batchLogs.length === 0 ? (
+                  <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full">
+                    <div className="p-3 bg-amber-100 rounded-2xl">
+                      <AlertCircle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-black uppercase tracking-tight">No Batch Found</p>
+                      <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                        Please record a "Sourcing & Mating" activity first to create a batch for this broodstock.
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                       <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
+                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
+                       >
+                         <PlusCircle className="w-3 h-3" /> Record Sourcing
+                       </Button>
+                    </div>
+                  </div>
+                ) : (
+                 <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+                    <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900 focus:ring-indigo-500">
+                      <SelectValue placeholder="Search Batch ID" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingBatches ? (
+                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                      ) : (
+                        batchLogs.map(log => (
+                          <SelectItem key={log.id} value={log.data?.batchId || log.data?.batchNumber}>
+                             <span className="font-bold">{log.data?.batchId || log.data?.batchNumber}</span>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                 </Select>
+               )}
               <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
             </div>
           </div>
@@ -382,8 +421,14 @@ const SpawningForm = ({
                           <Input 
                             type="number" 
                             value={tank.spawnedCount} 
+                            min="0"
                             onChange={e => handleSpawningChange(tank.id, { spawnedCount: e.target.value })} 
-                            className="h-9 rounded-xl font-black bg-white border border-indigo-100 shadow-sm text-center pr-6 text-indigo-950 focus:ring-indigo-500" 
+                            className={cn(
+                              "h-9 rounded-xl font-black bg-white border shadow-sm text-center pr-6 transition-all",
+                              (parseFloat(tank.spawnedCount) > parseFloat(tank.shiftedCount)) 
+                                ? "border-rose-500 text-rose-950 focus:ring-rose-500 bg-rose-50/50" 
+                                : "border-indigo-100 text-indigo-950 focus:ring-indigo-500"
+                            )}
                             placeholder="0"
                           />
                           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400">F</span>

@@ -1041,6 +1041,11 @@ const RecordActivity = () => {
         'tank shifting': 'Tank Shifting',
         'shifting': 'Tank Shifting',
         'sourcing & mating': 'Sourcing & Mating',
+        'spawning': 'Spawning',
+        'egg count': 'Egg Count',
+        'nauplii harvest': 'Nauplii Harvest',
+        'nauplii sale': 'Nauplii Sale',
+        'broodstock discard': 'Broodstock Discard',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
@@ -1721,20 +1726,20 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Nauplii Harvest' && !isPlanningMode) {
-      const { sources, destinations, summary } = naupliiHarvestData;
-      const validSources = sources.filter((s:any) => s.tankId && s.population);
-      const validDestinations = destinations.filter((d:any) => d.tankId && d.population);
+      const { harvestTanks = [], naupliiDestinations = [], summary = {} } = naupliiHarvestData;
+      const totalHarvested = harvestTanks.reduce((sum: number, t: any) => sum + (parseFloat(t.harvestedMil) || 0), 0);
+      const totalShifted = naupliiDestinations.reduce((sum: number, d: any) => sum + (parseFloat(d.shiftedMil) || 0), 0);
       
-      if (validSources.length === 0) {
-        toast.error('Please record at least one source tank');
+      if (totalHarvested === 0) {
+        toast.error('Please record at least one harvested amount');
         return;
       }
-      if (validDestinations.length === 0) {
-        toast.error('Please record at least one destination tank');
+      if (totalShifted === 0) {
+        toast.error('Please record at least one shifted amount');
         return;
       }
-      if (Math.abs(summary.balance) > 0.001) {
-        toast.error(`Population is not balanced. Current balance: ${summary.balance} mil`);
+      if (Math.abs(totalHarvested - totalShifted) > 0.01) {
+        toast.error(`Allocations not balanced. Difference: ${(totalHarvested - totalShifted).toFixed(2)} mil`);
         return;
       }
     }
@@ -1749,10 +1754,17 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Spawning' && !isPlanningMode) {
-      const { spawningTanks, returnDestinations, totalInitialShifted } = spawningData;
+      const { spawningTanks = [], returnDestinations, totalInitialShifted } = spawningData;
       
       if (!spawningTanks || spawningTanks.length === 0) {
         toast.error('Please select a batch with valid spawning tanks');
+        return;
+      }
+
+      // NEW: Check for individual tank exceedance
+      const exceedingTank = spawningTanks.find((t: any) => (parseFloat(t.spawnedCount) || 0) > (parseFloat(t.shiftedCount) || 0));
+      if (exceedingTank) {
+        toast.error(`Spawned count in ${exceedingTank.tankName} exceeds the available ${exceedingTank.shiftedCount} females`);
         return;
       }
       
@@ -1917,6 +1929,11 @@ const RecordActivity = () => {
                 estimatedBiomass: biomassKg,
               };
             }
+          }
+          
+          // CRITICAL: Ensure all MATURATION activities link to the active Broodstock Batch
+          if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId) {
+            currentBuildData.stockingId = activeBroodstockBatchId;
           }
           
           // Apply per-tank allocation for Maturation Stocking
@@ -3475,6 +3492,7 @@ const RecordActivity = () => {
             activeSectionId={selectedSectionId || activeSectionId}
             farmId={selectedFarmId || activeFarmId || ''}
             activeBroodstockBatchId={activeBroodstockBatchId}
+            tankPopulations={tankPopulations}
           />
         )}
 

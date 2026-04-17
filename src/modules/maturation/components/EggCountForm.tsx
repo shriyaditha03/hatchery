@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Database, Calculator, CheckCircle2, FlaskConical, Loader2, AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Database, Calculator, CheckCircle2, FlaskConical, Loader2, AlertCircle, ArrowRight, ShieldAlert, PlusCircle, Plus, Search } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -133,6 +133,14 @@ const EggCountForm = ({
     }
   }, [activeBroodstockBatchId, batchLogs, selectedBatchId, lockedBatchIds]);
 
+  const availableBatches = useMemo(() => {
+    return batchLogs.filter(log => {
+      const bId = log.data?.batchId || log.data?.batchNumber;
+      // Only show if not locked, OR if it's the currently selected one (for editing)
+      return !lockedBatchIds.includes(bId) || bId === data.selectedBatchId;
+    });
+  }, [batchLogs, lockedBatchIds, data.selectedBatchId]);
+
   // When selectedBatchId changes, populate entries from the Spawning log
   const handleBatchSelect = (batchId: string) => {
     setSelectedBatchId(batchId);
@@ -206,11 +214,34 @@ const EggCountForm = ({
       eggsPerAnimal: Math.round(eggsPerAnimal * 100) / 100
     };
 
-    // Only update if summary or entries changed significantly
-    if (JSON.stringify(data.summary) !== JSON.stringify(summary) || JSON.stringify(data.entries) !== JSON.stringify(entries)) {
-      onDataChange({ ...data, entries, summary });
+    // Update cumulative Batch ID with Egg Count result
+    let finalBatchId = selectedBatchId;
+    if (selectedBatchId && selectedBatchId.includes('_')) {
+      const parts = selectedBatchId.split('_');
+      // Format should ideally be: NP_SP(SP)_(NSP)_YYMMDD_SUFFIX
+      // We want to transform to: NP_SP(SP)_EC(TotalEggs)M_YYMMDD_SUFFIX
+      const spPart = parts.find(p => p.startsWith('SP')) || `SP${totalSpawnedInBatch}`;
+      const datePart = parts.find(p => /^\d{6}$/.test(p)) || '';
+      const suffixPart = parts[parts.length - 1];
+      
+      finalBatchId = `NP_${spPart}_EC${summary.totalEggs}M_${datePart}_${suffixPart}`;
     }
-  }, [entries, totalSpawnedInBatch]);
+
+    // Only update if summary, entries, or batchId changed significantly
+    if (
+      JSON.stringify(data.summary) !== JSON.stringify(summary) || 
+      JSON.stringify(data.entries) !== JSON.stringify(entries) ||
+      data.selectedBatchId !== finalBatchId
+    ) {
+      onDataChange({ 
+        ...data, 
+        entries, 
+        summary, 
+        selectedBatchId: finalBatchId,
+        displayBatchId: selectedBatchId // Keep original for reference
+      });
+    }
+  }, [entries, totalSpawnedInBatch, selectedBatchId]);
 
 
 
@@ -299,6 +330,38 @@ const EggCountForm = ({
           ) : (
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="flex-1">
+                {!loadingBatches && availableBatches.length === 0 ? (
+                  <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full">
+                    <div className="p-3 bg-amber-100 rounded-2xl">
+                      <AlertCircle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-black uppercase tracking-tight">No Spawning Batch Found</p>
+                      <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                        Please record a "Spawning" activity first for this broodstock batch.
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                       <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
+                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
+                       >
+                         <PlusCircle className="w-3 h-3" /> Record Sourcing
+                       </Button>
+                       <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
+                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/spawning?farm=${farmId}&category=MATURATION`)}
+                       >
+                         <PlusCircle className="w-3 h-3" /> Record Spawning
+                       </Button>
+                    </div>
+                  </div>
+                ) : (
                   <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
                     <SelectTrigger className="w-full h-11 rounded-xl border-indigo-100 font-bold text-indigo-900 bg-white shadow-sm focus:ring-2 focus:ring-indigo-500">
                       <SelectValue placeholder="Search Spawning Batch" />
@@ -306,49 +369,19 @@ const EggCountForm = ({
                     <SelectContent>
                       {loadingBatches ? (
                         <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                      ) : batchLogs.length === 0 ? (
-                        <div className="p-4 text-center">
-                          <div className="p-4 text-xs text-amber-600 bg-amber-50 rounded-xl mb-4 text-center font-bold">
-                            <AlertCircle className="w-4 h-4 inline mr-2" />
-                            No Nauplii Production Batch updated
-                          </div>
-                          <div className="grid grid-cols-1 gap-2">
-                             <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => navigate(`/${user?.role === 'owner' ? 'owner' : 'user'}/activity?mode=activity&type=Sourcing%20%26%20Mating&category=MATURATION`)}
-                                className="text-[10px] font-bold h-10 border-indigo-100 text-indigo-700 bg-indigo-50/30 hover:bg-indigo-50"
-                             >
-                                <ArrowRight className="w-3 h-3 mr-2" /> Record Sourcing & Mating
-                             </Button>
-                             <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => navigate(`/${user?.role === 'owner' ? 'owner' : 'user'}/activity?mode=activity&type=Spawning&category=MATURATION`)}
-                                className="text-[10px] font-bold h-10 border-indigo-100 text-indigo-700 bg-indigo-50/30 hover:bg-indigo-50"
-                             >
-                                <ArrowRight className="w-3 h-3 mr-2" /> Record Spawning
-                             </Button>
-                          </div>
-                        </div>
                       ) : (
-                        batchLogs
-                          .filter(log => {
-                            const bId = log.data?.batchId || log.data?.batchNumber;
-                            // Only show if not locked, OR if it's the currently selected one (for editing)
-                            return !lockedBatchIds.includes(bId) || bId === data.selectedBatchId;
-                          })
-                          .map(log => {
-                            const bId = log.data?.batchId || log.data?.batchNumber;
-                            return (
-                              <SelectItem key={log.id} value={bId}>
-                                <span className="font-bold">{bId}</span>
-                              </SelectItem>
-                            );
-                          })
+                        availableBatches.map(log => {
+                          const bId = log.data?.batchId || log.data?.batchNumber;
+                          return (
+                            <SelectItem key={log.id} value={bId}>
+                              <span className="font-bold">{bId}</span>
+                            </SelectItem>
+                          );
+                        })
                       )}
                     </SelectContent>
                   </Select>
+                )}
                 </div>
             </div>
           )}
