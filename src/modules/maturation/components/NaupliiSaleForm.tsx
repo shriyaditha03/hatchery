@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -45,23 +45,29 @@ const NaupliiSaleForm = ({
   activeBroodstockBatchId,
 }: NaupliiSaleFormProps) => {
   const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [existingSales, setExistingSales] = useState<any[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
   const [saleTanks, setSaleTanks] = useState<SaleTankEntry[]>(data.saleTanks || []);
   const [bonusPercentage, setBonusPercentage] = useState<string>(data.bonusPercentage || '0');
+  const [netSaleManual, setNetSaleManual] = useState<string>(data.netNauplii?.toString() || '');
   const [packsPacked, setPacksPacked] = useState<string>(data.packsPacked || '');
   const [loadingBatches, setLoadingBatches] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
+  const [totalHarvestedInBatch, setTotalHarvestedInBatch] = useState<number>(data.summary?.totalAvailable || 0);
+  const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalSpawned || 0);
 
   // Fetch and Aggregate Inventory (Harvest - Sale)
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates });
   };
 
-  // Fetch Recent Nauplii Harvest Batches
+  // Fetch Recent Nauplii Harvest Batches and existing Sales
   useEffect(() => {
     const fetchBatches = async () => {
       if (!farmId) return;
       setLoadingBatches(true);
       try {
+        // 1. Fetch Harvest logs (Candidate batches)
         const { data: logs, error } = await supabase
           .from('activity_logs')
           .select('*')
@@ -71,8 +77,18 @@ const NaupliiSaleForm = ({
           .limit(100);
 
         if (error) throw error;
+
+        // 2. Fetch existing Nauplii Sale logs (to find locked batches)
+        const { data: saleLogs } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Nauplii Sale');
+        
+        setExistingSales(saleLogs || []);
+
         // Filter in JS to avoid 400 errors on complex JSON queries
-        const filtered = logs.filter(l => 
+        const filtered = (logs || []).filter(l => 
           l.stockingId === activeBroodstockBatchId || 
           l.data?.stockingId === activeBroodstockBatchId ||
           l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId || '')
@@ -86,6 +102,18 @@ const NaupliiSaleForm = ({
     };
     fetchBatches();
   }, [farmId, activeBroodstockBatchId]);
+
+  const lockedHarvestIds = useMemo(() => {
+    return existingSales.map(l => l.data?.sourceBatchId || l.data?.selectedBatchId).filter(Boolean);
+  }, [existingSales]);
+
+  const availableBatches = useMemo(() => {
+    return batchLogs.filter(log => {
+      const bId = log.data?.selectedBatchId;
+      // Only show if not locked, OR if it's the currently selected one
+      return !lockedHarvestIds.includes(bId) || bId === data.sourceBatchId;
+    });
+  }, [batchLogs, lockedHarvestIds, data.selectedBatchId, data.sourceBatchId]);
 
   // Auto-select batch from dashboard context
   useEffect(() => {
@@ -107,18 +135,35 @@ const NaupliiSaleForm = ({
     const log = batchLogs.find(l => l.data?.selectedBatchId === batchId);
     if (log && log.data) {
       const harvestEntries = log.data.naupliiDestinations || [];
+      const harvestedTotal = log.data.summary?.totalHarvested || 0;
+      const spawnedTotal = log.data.summary?.totalBatchSpawned || 0;
+      
+      // Check 24-hour expiration logic
+      const harvestDate = new Date(log.created_at);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - harvestDate.getTime()) / (1000 * 60 * 60);
+      const expired = hoursDiff > 24;
+      setIsExpired(expired);
+
+      setTotalHarvestedInBatch(harvestedTotal);
+      setTotalSpawnedInBatch(spawnedTotal);
+
       const newSaleTanks = harvestEntries.map((e: any) => ({
         id: e.id,
         tankId: e.tankId,
         tankName: e.tankName,
         harvestedAmount: e.shiftedMil,
-        saleMil: e.shiftedMil, // Default to selling 100%
-        discardMil: '0'
+        saleMil: expired ? '0' : e.shiftedMil, // Auto-discard if expired
+        discardMil: expired ? e.shiftedMil : '0' // Auto-discard if expired
       }));
       setSaleTanks(newSaleTanks);
       updateData({ 
         selectedBatchId: batchId,
-        saleTanks: newSaleTanks
+        saleTanks: newSaleTanks,
+        summary: {
+          totalAvailable: harvestedTotal,
+          totalSpawned: spawnedTotal
+        }
       });
     }
   };
@@ -133,16 +178,31 @@ const NaupliiSaleForm = ({
     const gross = saleTanks.reduce((sum, t) => sum + (parseFloat(t.saleMil) || 0), 0);
     const discards = saleTanks.reduce((sum, t) => sum + (parseFloat(t.discardMil) || 0), 0);
     const bonus = parseFloat(bonusPercentage) || 0;
-    const net = gross * (1 + bonus / 100);
+    
+    // Net = Gross / (1 + Bonus%)
+    const calculatedNet = gross / (1 + (bonus / 100));
+    
+    // Auto-update manual field if it's empty or matching exactly previous auto-value
+    if (!netSaleManual || parseFloat(netSaleManual) === 0) {
+      setNetSaleManual((Math.round(calculatedNet * 100) / 100).toString());
+    }
+
+    const efficiency = totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0;
 
     updateData({
       totalGross: Math.round(gross * 100) / 100,
       totalDiscard: Math.round(discards * 100) / 100,
       bonusPercentage,
       packsPacked,
-      netNauplii: Math.round(net * 100) / 100
+      netNauplii: netSaleManual ? parseFloat(netSaleManual) : Math.round(calculatedNet * 100) / 100,
+      sourceBatchId: selectedBatchId,
+      summary: {
+        totalAvailable: totalHarvestedInBatch,
+        totalSpawned: totalSpawnedInBatch,
+        naupliiPerAnimal: Math.round(efficiency * 100) / 100
+      }
     });
-  }, [saleTanks, bonusPercentage, packsPacked]);
+  }, [saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch]);
 
   // Handle Calculations & State Sync
   return (
@@ -174,7 +234,14 @@ const NaupliiSaleForm = ({
                    <Database className="w-4 h-4 text-indigo-600" />
                 </div>
                 <div>
-                   <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70">Active Harvest Batch</p>
+                   <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70 leading-none">Active Harvest Batch</p>
+                      {isExpired && (
+                        <span className="bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full animate-pulse uppercase tracking-tighter">
+                          Expired (&gt;24h)
+                        </span>
+                      )}
+                   </div>
                    <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
                 </div>
              </div>
@@ -193,39 +260,74 @@ const NaupliiSaleForm = ({
               <div className="p-2 bg-indigo-100 rounded-xl">
                 <Database className="w-4 h-4 text-indigo-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider" id="step-1-title">Step # 1: Choose Batch</h3>
               <p className="text-[10px] text-muted-foreground uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Harvest</p>
             </div>
             
             <div className="space-y-1.5">
               <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-              <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-                 <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900">
-                   <SelectValue placeholder="Search Batch ID" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   {loadingBatches ? (
-                     <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                   ) : batchLogs.length === 0 ? (
-                     <div className="p-4 text-center text-xs text-amber-600 bg-amber-50 rounded-xl">
-                        <AlertCircle className="w-4 h-4 inline mr-2" />
-                        No Harvest batches found. Please record a "Nauplii Harvest" activity first.
-                     </div>
-                   ) : (
-                     batchLogs.map(log => (
-                       <SelectItem key={log.id} value={log.data?.selectedBatchId}>
-                         <span className="font-bold">{log.data?.selectedBatchId}</span>
-                         <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
-                       </SelectItem>
-                     ))
-                   )}
-                 </SelectContent>
-              </Select>
+              {batchLogs.length === 0 && !loadingBatches ? (
+                 <div className="p-8 text-center bg-amber-50 border border-amber-100 rounded-3xl space-y-4 animate-in fade-in zoom-in-95" id="empty-batch-state">
+                    <div className="flex flex-col items-center gap-2">
+                       <AlertCircle className="w-8 h-8 text-amber-600" />
+                       <p className="text-sm font-black uppercase text-amber-900">No Nauplii Production Batch updated</p>
+                       <p className="text-[10px] text-amber-700/70 max-w-[280px]">Please complete previous steps to enable Nauplii Sale.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-w-sm mx-auto">
+                       <Button id="nav-sourcing" variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Sourcing%20%26%20Mating&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Sourcing & Mating</Button>
+                       <Button id="nav-spawning" variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Spawning&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Spawning</Button>
+                       <Button id="nav-egg" variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Egg%20Count&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Egg Count</Button>
+                       <Button id="nav-harvest" variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Nauplii%20Harvest&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Nauplii Harvest</Button>
+                    </div>
+                 </div>
+              ) : (
+                <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+                   <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900" id="batch-select-trigger">
+                     <SelectValue placeholder="Search Batch ID" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {loadingBatches ? (
+                       <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                     ) : (
+                       availableBatches.map(log => (
+                         <SelectItem key={log.id} value={log.data?.selectedBatchId}>
+                           <span className="font-bold">{log.data?.selectedBatchId}</span>
+                           <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
+                         </SelectItem>
+                       ))
+                     )}
+                   </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
         )}
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
+
+         {/* Available Metric */}
+         {selectedBatchId && (
+           <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm animate-in zoom-in-95">
+              <div className="flex items-center gap-3">
+                 <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
+                    <History className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest leading-none mb-1">Total Available for Sale</p>
+                    <p className="text-xl font-black text-emerald-950">{totalHarvestedInBatch.toLocaleString()} mil <span className="text-[10px] opacity-70">(from Harvest)</span></p>
+                 </div>
+              </div>
+              <div className="text-right flex items-center gap-2 bg-white/60 px-3 py-2 rounded-xl border border-emerald-100">
+                 <div className="bg-emerald-500/10 p-1.5 rounded-lg">
+                   <TrendingUp className="w-4 h-4 text-emerald-600" />
+                 </div>
+                 <div>
+                    <p className="text-[8px] font-black text-emerald-800 uppercase opacity-60">Avg. Yield</p>
+                    <p className="text-xs font-black text-emerald-900">{(totalHarvestedInBatch / (totalSpawnedInBatch || 1)).toFixed(2)}M / Fem</p>
+                 </div>
+              </div>
+           </div>
+         )}
 
         {/* Step 2: Sale vs. Discard */}
         <div className="space-y-6">
@@ -286,53 +388,58 @@ const NaupliiSaleForm = ({
           </div>
         </div>
 
-        {/* Calculations Section */}
-        <div className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-dashed border-amber-200 space-y-8">
+         {/* Consolidated Data (a-f) */}
+         <div className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-dashed border-amber-200 space-y-8">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Summary Metrics */}
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                    <Label className="text-[9px] font-black uppercase text-amber-600 tracking-widest ml-1">Gross Sale (mil)</Label>
-                    <div className="h-12 bg-white rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950">
-                       {data.totalGross?.toLocaleString()}M
-                    </div>
-                 </div>
-                 <div className="space-y-1">
-                    <Label className="text-[9px] font-black uppercase text-rose-600 tracking-widest ml-1">Total Discard (mil)</Label>
-                    <div className="h-12 bg-white rounded-2xl border border-rose-100 flex items-center justify-center font-black text-rose-950">
-                       {data.totalDiscard?.toLocaleString()}M
-                    </div>
-                 </div>
-              </div>
-
-              {/* Bonus % Input */}
+              {/* a. Bonus % Offered */}
               <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1">Step # 4 Bonus % *</Label>
+                 <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1">a. Bonus % Offered *</Label>
                  <div className="relative">
                     <Input 
+                      id="input-bonus-percentage"
                       type="number" 
                       value={bonusPercentage} 
                       onChange={e => setBonusPercentage(e.target.value)} 
-                      className="h-12 rounded-2xl font-black bg-amber-50/30 border-amber-100 text-xl text-amber-950 shadow-sm pr-12 text-center focus:ring-amber-500" 
+                      className="h-12 rounded-2xl font-black bg-white border-amber-100 text-xl text-amber-950 shadow-sm pr-12 text-center focus:ring-amber-500" 
                       placeholder="0"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">%</span>
                  </div>
               </div>
+
+              {/* b. Total Gross Sold */}
+              <div className="space-y-1.5">
+                 <Label className="text-[10px] font-black uppercase text-amber-600 tracking-widest ml-1">b. Total Nauplii Sold Gross (mil)</Label>
+                 <div className="h-12 bg-white rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950 text-xl shadow-sm">
+                    {data.totalGross?.toLocaleString()}M
+                 </div>
+              </div>
            </div>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-              {/* Net Sale Display */}
-              <div className="p-6 bg-amber-600 rounded-[2rem] text-white shadow-xl shadow-amber-100 overflow-hidden relative group">
-                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Step # 7: Net nauplii sold</p>
-                 <p className="text-4xl font-black mt-1 leading-none">{data.netNauplii?.toLocaleString()}<span className="text-sm opacity-50 ml-2 uppercase">Millions</span></p>
-                 <p className="text-[8px] mt-2 opacity-50 italic animate-pulse tracking-tight">Auto-calculated: Gross * (1 + Bonus%)</p>
-                 <ShoppingCart className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10" />
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* c. Total Net Sold */}
+              <div className="space-y-1.5">
+                 <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1 flex justify-between">
+                   <span>c. Total Nauplii Sold Net (mil) *</span>
+                   <span className="text-[8px] opacity-50 lowercase tracking-normal bg-amber-100 px-1.5 rounded-full">Editable</span>
+                 </Label>
+                 <div className="relative">
+                    <Input 
+                      id="input-net-sale"
+                      type="number" 
+                      step="0.01"
+                      value={netSaleManual} 
+                      onChange={e => setNetSaleManual(e.target.value)} 
+                      className="h-16 rounded-[2rem] font-black bg-amber-600 text-white border-none text-3xl shadow-lg shadow-amber-200 pr-12 text-center focus:ring-amber-500" 
+                    />
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">M</span>
+                 </div>
+                 <p className="text-[8px] text-amber-600/60 ml-3 italic">Formula: Gross / (1 + Bonus%)</p>
               </div>
 
-              {/* No of Packets */}
-              <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1 leading-none">Step # 5: Nos. of packets packed *</Label>
+              {/* d. Total No Packets */}
+              <div className="space-y-1.5 self-end">
+                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1 leading-none">d. Total No Packets packed *</Label>
                  <div className="relative">
                     <Input 
                        type="number" 
@@ -348,7 +455,33 @@ const NaupliiSaleForm = ({
                  </div>
               </div>
            </div>
-        </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* e. Total Discarded */}
+              <div className="space-y-1.5">
+                 <Label className="text-[10px] font-black uppercase text-rose-600 tracking-widest ml-1">e. Total Nauplii Discarded (mil)</Label>
+                 <div className="h-14 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-center justify-center font-black text-rose-950 text-xl">
+                    {data.totalDiscard?.toLocaleString()}M
+                 </div>
+              </div>
+
+              {/* f. No. of Nauplii per Animal */}
+              <div className="space-y-1.5">
+                 <div className="flex items-center gap-1.5 ml-1">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                    <Label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">f. No. of Nauplii per Animal (mil)</Label>
+                 </div>
+                 <div className="h-14 bg-emerald-50 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center relative overflow-hidden group">
+                    <span className="text-xl font-black text-emerald-950 z-10">
+                      {data.summary?.naupliiPerAnimal || '0'}M
+                    </span>
+                    <span className="text-[8px] font-bold text-emerald-600/50 uppercase leading-none z-10">Per Female</span>
+                    <div className="absolute inset-0 bg-emerald-100/30 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
+                 </div>
+              </div>
+           </div>
+
+         </div>
 
         {/* Points 9 & 10: Media & Comments */}
         <div className="space-y-6 pt-4 border-t border-dashed">

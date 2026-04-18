@@ -33,6 +33,8 @@ interface HarvestTankEntry {
   tankName: string;
   spawnedCount: string;
   harvestedMil: string;
+  totalEggsMil?: string;
+  fertilizedEggsMil?: string;
 }
 
 interface NaupliiDestEntry {
@@ -73,6 +75,7 @@ const NaupliiHarvestForm = ({
   const { user } = useAuth();
   
   const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [existingHarvests, setExistingHarvests] = useState<any[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
   const [harvestTanks, setHarvestTanks] = useState<HarvestTankEntry[]>(data.harvestTanks || []);
   const [naupliiDestinations, setNaupliiDestinations] = useState<NaupliiDestEntry[]>(data.naupliiDestinations || []);
@@ -87,24 +90,34 @@ const NaupliiHarvestForm = ({
     onDataChange({ ...data, ...updates });
   };
 
-  // Fetch Recent Egg Count Batches for this farm
+  // Fetch Recent Egg Count Batches and existing Harvests
   useEffect(() => {
     const fetchBatches = async () => {
       if (!farmId) return;
       setLoadingBatches(true);
       try {
+        // 1. Fetch Egg Count logs (Candidate batches)
         const { data: logs, error } = await supabase
           .from('activity_logs')
           .select('*')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Egg Count')
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (error) throw error;
         
+        // 2. Fetch existing Nauplii Harvest logs (to find locked batches)
+        const { data: harvestLogs } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Nauplii Harvest');
+        
+        setExistingHarvests(harvestLogs || []);
+
         // Filter in JS for batch/stocking alignment
-        const filtered = logs.filter(l => 
+        const filtered = (logs || []).filter(l => 
           l.stockingId === activeBroodstockBatchId || 
           l.data?.stockingId === activeBroodstockBatchId ||
           l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId || '')
@@ -119,9 +132,17 @@ const NaupliiHarvestForm = ({
     fetchBatches();
   }, [farmId, activeBroodstockBatchId]);
 
+  const lockedBatchIds = useMemo(() => {
+    return existingHarvests.map(l => l.data?.sourceBatchId || l.data?.selectedBatchId).filter(Boolean);
+  }, [existingHarvests]);
+
   const availableBatches = useMemo(() => {
-    return batchLogs; // Currently no extra filtering for Harvest
-  }, [batchLogs]);
+    return batchLogs.filter(log => {
+      const bId = log.data?.selectedBatchId;
+      // Only show if not locked, OR if it's the currently selected one (for editing/viewing)
+      return !lockedBatchIds.includes(bId) || bId === data.sourceBatchId;
+    });
+  }, [batchLogs, lockedBatchIds, data.sourceBatchId]);
 
   // Handle batch selection and population of tanks
   const handleBatchSelect = (batchId: string) => {
@@ -139,13 +160,21 @@ const NaupliiHarvestForm = ({
       const totalSpawned = log.data.summary?.totalBatchSpawned || 0;
       setTotalSpawnedInBatch(totalSpawned);
 
-      const newHarvestTanks = eggEntries.map((e: any) => ({
-        id: e.id || Math.random().toString(36).substr(2, 9),
-        tankId: e.tankId,
-        tankName: e.tankName,
-        spawnedCount: e.spawnedCount,
-        harvestedMil: ''
-      }));
+      const newHarvestTanks = eggEntries.map((e: any) => {
+        const eggs = parseFloat(e.totalEggsMillions) || 0;
+        const fert = parseFloat(e.fertilizationPercent) || 0;
+        const fertilized = eggs * (fert / 100);
+        
+        return {
+          id: e.id || Math.random().toString(36).substr(2, 9),
+          tankId: e.tankId,
+          tankName: e.tankName,
+          spawnedCount: e.spawnedCount,
+          totalEggsMil: eggs.toString(),
+          fertilizedEggsMil: fertilized.toFixed(2),
+          harvestedMil: ''
+        };
+      });
       setHarvestTanks(newHarvestTanks);
       
       updateData({ 
@@ -449,10 +478,31 @@ const NaupliiHarvestForm = ({
                   <div className="flex items-center justify-between gap-4">
                      <div className="flex-1">
                         <p className="text-xs font-black text-indigo-950">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60">Spawning Tank ({tank.spawnedCount} F)</p>
+                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                          <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60 leading-none">Spawn: {tank.spawnedCount} F</p>
+                          {tank.totalEggsMil && (
+                            <>
+                              <span className="text-[8px] text-indigo-200">|</span>
+                              <p className="text-[9px] font-bold text-amber-600 uppercase leading-none">Eggs: {tank.totalEggsMil}M</p>
+                            </>
+                          )}
+                          {tank.fertilizedEggsMil && (
+                            <>
+                              <span className="text-[8px] text-indigo-200">|</span>
+                              <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter leading-none">Target: {tank.fertilizedEggsMil}M</p>
+                            </>
+                          )}
+                        </div>
                      </div>
                      <div className="w-44 text-right">
-                        <Label className="text-[8px] font-black uppercase text-indigo-600 block mb-1 pr-1">No. Nauplii Harvested (mil) *</Label>
+                        <div className="flex items-center justify-end gap-2 mb-1">
+                           {parseFloat(tank.harvestedMil) > 0 && tank.fertilizedEggsMil && (
+                             <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md animate-in fade-in zoom-in-95 leading-none">
+                               Yield: {((parseFloat(tank.harvestedMil) / parseFloat(tank.fertilizedEggsMil)) * 100).toFixed(1)}%
+                             </span>
+                           )}
+                           <Label className="text-[8px] font-black uppercase text-indigo-600 block leading-none pt-0.5">Harvested (mil) *</Label>
+                        </div>
                         <div className="relative">
                           <Input 
                             type="number" 

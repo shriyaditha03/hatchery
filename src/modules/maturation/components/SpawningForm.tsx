@@ -81,7 +81,7 @@ const SpawningForm = ({
           .eq('farm_id', farmId)
           .eq('activity_type', 'Spawning');
 
-        const spawnedBatchNumbers = new Set((spawnLogs || []).map(l => l.data?.batchId || l.data?.batchNumber));
+        const spawnedBatchNumbers = new Set((spawnLogs || []).map(l => l.data?.sourcingBatchId || l.data?.selectedBatchId).filter(Boolean));
 
         // Filter to logs belonging to the active broodstock batch
         const filtered = (logs || []).filter(l => {

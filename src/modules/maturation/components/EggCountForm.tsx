@@ -65,7 +65,7 @@ const EggCountForm = ({
   const canEdit = isSupervisor || !isEditing;
 
   const lockedBatchIds = useMemo(() => {
-    return existingEggCounts.map(l => l.data?.batchId || l.data?.selectedBatchId).filter(Boolean);
+    return existingEggCounts.map(l => l.data?.displayBatchId || l.data?.selectedBatchId || l.data?.batchId).filter(Boolean);
   }, [existingEggCounts]);
 
   const updateData = (updates: any) => {

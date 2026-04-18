@@ -188,19 +188,7 @@ const SourcingMatingForm = ({
   }, [tankPopulations]);
 
   const handleSourceChange = (id: string, sourcedCount: string) => {
-    const tank = sourceTanks.find(s => s.id === id);
-    if (!tank) return;
-
-    const available = tank.available || 0;
-    const numValue = parseFloat(sourcedCount);
-    
-    // Cap at available
-    let finalValue = sourcedCount;
-    if (!isNaN(numValue) && numValue > available) {
-      finalValue = available.toString();
-    }
-
-    const newList = sourceTanks.map(s => s.id === id ? { ...s, femaleCount: finalValue } : s);
+    const newList = sourceTanks.map(s => s.id === id ? { ...s, femaleCount: sourcedCount } : s);
     setSourceTanks(newList);
     updateData({ sourceTanks: newList });
   };
@@ -229,14 +217,16 @@ const SourcingMatingForm = ({
     const newList = matingTanks.map(t => {
       if (t.id === id) {
         const updated = { ...t, ...updates };
-        // Sync male count if tank changes
-        if (updates.tankId) {
-          updated.maleCount = tankPopulations[updates.tankId] || 0;
-        }
+        
         // Auto-calculate balance: femalesAdded - femalesMated
         const added = parseFloat(updated.femalesAdded) || 0;
         const mated = parseFloat(updated.femalesMated) || 0;
         updated.balance = Math.max(0, added - mated);
+
+        // Sync male count if tank changes
+        if (updates.tankId) {
+          updated.maleCount = tankPopulations[updates.tankId] || 0;
+        }
         return updated;
       }
       return t;
@@ -298,6 +288,7 @@ const SourcingMatingForm = ({
   };
 
   const totalSourcedFromStep1 = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
+  const totalFemalesAddedAcrossTanks = matingTanks.reduce((sum, t) => sum + (parseFloat(t.femalesAdded) || 0), 0);
   const totalFemalesMatedAcrossTanks = matingTanks.reduce((sum, t) => sum + (parseFloat(t.femalesMated) || 0), 0);
   const totalBalanceNonMated = matingTanks.reduce((sum, t) => sum + (t.balance || 0), 0);
 
@@ -549,12 +540,20 @@ const SourcingMatingForm = ({
                           type="number" 
                           value={source.femaleCount} 
                           onChange={e => handleSourceChange(source.id, e.target.value)} 
-                          className="h-10 rounded-xl text-sm font-bold pr-8 focus:ring-rose-500/20" 
+                          className={cn(
+                            "h-10 rounded-xl text-sm font-bold pr-8 focus:ring-rose-500/20",
+                            (parseFloat(source.femaleCount) || 0) > (source.available || 0) && "border-red-500 bg-red-50 text-red-900 focus:ring-red-500/20"
+                          )}
                           placeholder="0"
-                          max={source.available}
+                          min="0"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-rose-600/40 pointer-events-none">F</span>
                       </div>
+                      {(parseFloat(source.femaleCount) || 0) > (source.available || 0) && (
+                        <p className="text-[8px] font-bold text-red-600 mt-1 ml-1 animate-pulse">
+                          Cannot exceed available females ({source.available})
+                        </p>
+                      )}
                     </div>
                     <div className="w-16 flex flex-col items-center justify-center pb-0.5">
                        <Label className="text-[8px] font-bold uppercase text-muted-foreground mb-1 block">Balance</Label>
@@ -619,11 +618,18 @@ const SourcingMatingForm = ({
                         type="number" 
                         value={mating.femalesAdded} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
-                        className="h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8 shadow-sm focus:border-blue-500" 
+                        className={cn(
+                          "h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8 shadow-sm focus:border-blue-500",
+                          totalFemalesAddedAcrossTanks > totalSourcedFromStep1 && "border-red-500 bg-red-50 text-red-900"
+                        )}
                         placeholder="0"
+                        min="0"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">F</span>
                     </div>
+                    {totalFemalesAddedAcrossTanks > totalSourcedFromStep1 && idx === 0 && (
+                      <p className="text-[8px] font-bold text-red-600 mt-1 ml-1">Total added exceeds sourced count</p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-black uppercase text-indigo-900/60 ml-1">(F) Mated</Label>
@@ -632,11 +638,18 @@ const SourcingMatingForm = ({
                         type="number" 
                         value={mating.femalesMated} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesMated: e.target.value })} 
-                        className="h-11 rounded-xl font-black bg-white border-indigo-100 text-indigo-950 pr-8 shadow-sm focus:border-indigo-500" 
+                        className={cn(
+                          "h-11 rounded-xl font-black bg-white border-indigo-100 text-indigo-950 pr-8 shadow-sm focus:border-indigo-500",
+                          (parseFloat(mating.femalesMated) || 0) > (parseFloat(mating.femalesAdded) || 0) && "border-red-500 bg-red-50 text-red-900"
+                        )}
                         placeholder="0"
+                        min="0"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400">F</span>
                     </div>
+                    {(parseFloat(mating.femalesMated) || 0) > (parseFloat(mating.femalesAdded) || 0) && (
+                      <p className="text-[8px] font-bold text-red-600 mt-1 ml-1">Cannot exceed added count</p>
+                    )}
                   </div>
                 </div>
 
@@ -652,16 +665,40 @@ const SourcingMatingForm = ({
           </div>
 
           {matingTanks.length > 0 && (
-            <div className="flex justify-between items-center px-4 py-4 bg-muted/20 rounded-2xl border border-dashed">
-              <div className="flex items-center gap-6">
-                <div>
-                  <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-70">Total Mated</p>
-                  <p className="text-lg font-black text-foreground">{totalFemalesMatedAcrossTanks} <span className="text-xs font-normal text-muted-foreground">F</span></p>
+            <div className="flex flex-col gap-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-70">Total Added</p>
+                    <p className={`text-lg font-black ${totalFemalesAddedAcrossTanks === totalSourcedFromStep1 ? 'text-blue-600' : 'text-amber-600'}`}>
+                      {totalFemalesAddedAcrossTanks} / {totalSourcedFromStep1}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-70">Total Mated</p>
+                    <p className="text-lg font-black text-foreground">{totalFemalesMatedAcrossTanks} <span className="text-xs font-normal text-muted-foreground">F</span></p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-70">Total Non-Mated</p>
+                    <p className="text-lg font-black text-foreground">{totalBalanceNonMated} <span className="text-xs font-normal text-muted-foreground">F</span></p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-70">Total Non-Mated</p>
-                  <p className="text-lg font-black text-foreground">{totalBalanceNonMated} <span className="text-xs font-normal text-muted-foreground">F</span></p>
-                </div>
+                
+                {totalFemalesAddedAcrossTanks < totalSourcedFromStep1 && totalSourcedFromStep1 > 0 && (
+                  <div className="flex items-center gap-2 text-amber-600 bg-white/50 px-3 py-1.5 rounded-full border border-amber-200 text-[9px] font-black uppercase">
+                    <span>⚠️ {totalSourcedFromStep1 - totalFemalesAddedAcrossTanks} Left to add</span>
+                  </div>
+                )}
+                {totalFemalesAddedAcrossTanks > totalSourcedFromStep1 && (
+                  <div className="flex items-center gap-2 text-red-600 bg-red-50 px-3 py-1.5 rounded-full border border-red-200 text-[9px] font-black uppercase animate-bounce">
+                    <span>❌ {totalFemalesAddedAcrossTanks - totalSourcedFromStep1} Over Sourced</span>
+                  </div>
+                )}
+                {totalFemalesAddedAcrossTanks === totalSourcedFromStep1 && totalSourcedFromStep1 > 0 && (
+                  <div className="flex items-center gap-2 text-emerald-600 bg-white/50 px-3 py-1.5 rounded-full border border-emerald-200 text-[9px] font-black uppercase">
+                    <span>✅ All Sourced Added</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
