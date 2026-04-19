@@ -147,23 +147,32 @@ const UserDashboard = () => {
             const { data, error } = await supabase
                 .from('activity_logs')
                 .select('*')
-                .in('activity_type', ['Stocking', 'Sourcing & Mating'])
+                .in('activity_type', ['Stocking', 'Sourcing & Mating', 'Broodstock Discard'])
                 .eq('farm_id', activeFarmId)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
             
-            // Extract unique batch IDs from data.stockingId or data.data.stockingId
+            // Extract unique batch IDs and check for closure
             const batchesList: any[] = [];
             const seenIds = new Set();
+            const closedIds = new Set();
+
+            (data || []).forEach(log => {
+                if (log.activity_type === 'Broodstock Discard' && (log.data?.isCompleteDiscard || log.data?.is_complete_discard)) {
+                    const sId = log.stockingId || log.data?.stockingId;
+                    if (sId) closedIds.add(sId);
+                }
+            });
 
             (data || []).forEach(log => {
                 const sId = log.data?.stockingId || log.stockingId;
-                if (sId && !seenIds.has(sId)) {
+                if (sId && !seenIds.has(sId) && (log.activity_type === 'Stocking' || log.activity_type === 'Sourcing & Mating')) {
                     seenIds.add(sId);
                     batchesList.push({
                         id: sId,
                         name: sId,
+                        is_closed: closedIds.has(sId),
                         log: log
                     });
                 }
@@ -359,7 +368,8 @@ const UserDashboard = () => {
         'Spawning': Sparkles,
         'Egg Count': Database,
         'Nauplii Harvest': ArrowUpRight,
-        'Nauplii Sale': ShoppingCart
+        'Nauplii Sale': ShoppingCart,
+        'Broodstock Discard': Trash2
     };
 
     const activities = useMemo(() => {
@@ -386,7 +396,8 @@ const UserDashboard = () => {
                 { name: 'Spawning', icon: Sparkles, route: '/user/activity/spawning', color: 'bg-amber-100 text-amber-600' },
                 { name: 'Egg Count', icon: Database, route: '/user/activity/egg-count', color: 'bg-indigo-100 text-indigo-600' },
                 { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/user/activity/nauplii-harvest', color: 'bg-emerald-100 text-emerald-600' },
-                { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' }
+                { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' },
+                { name: 'Broodstock Discard', icon: Trash2, route: '/user/activity/broodstock-discard', color: 'bg-red-100 text-red-600' }
             ];
         }
         return base;
@@ -487,7 +498,10 @@ const UserDashboard = () => {
                                 <Button variant="outline" className="flex-1 justify-between bg-white/10 text-white border-0 h-10 font-bold backdrop-blur-sm">
                                     <div className="flex items-center gap-2 truncate">
                                         <Database className="w-4 h-4 opacity-70" />
-                                        <span>{batchesLoading ? 'Loading Batches...' : displayBatchLabel}</span>
+                                        <span className="truncate">{batchesLoading ? 'Loading Batches...' : displayBatchLabel}</span>
+                                        {activeBatch?.is_closed && (
+                                            <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm flex-shrink-0 animate-pulse">Closed</span>
+                                        )}
                                     </div>
                                     <ChevronDown className="w-4 h-4" />
                                 </Button>
@@ -522,13 +536,18 @@ const UserDashboard = () => {
                                     </div>
                                 </DropdownMenuItem>
                                 {maturationBatches.map(b => (
-                                    <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={`flex items-center gap-3 py-3 px-3 transition-colors ${activeBroodstockBatchId === b.id ? "bg-muted/50 font-black border-l-4 border-primary" : "hover:bg-muted/30"}`}>
-                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
+                                    <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={`flex items-center gap-3 py-3 px-3 transition-colors ${activeBroodstockBatchId === b.id ? "bg-muted/50 font-black border-l-4 border-primary" : b.is_closed ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-muted/30"}`}>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.is_closed ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-400"}`}>
                                             <Database className="w-4 h-4" />
                                         </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs">{b.name}</span>
-                                            <span className="text-[9px] font-medium text-muted-foreground">
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                            <div className="flex items-center justify-between">
+                                                <span className={`text-xs ${b.is_closed ? "text-red-700 font-bold" : ""}`}>{b.name}</span>
+                                                {b.is_closed && (
+                                                    <span className="text-[8px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-full uppercase tracking-tighter shadow-sm">Closed</span>
+                                                )}
+                                            </div>
+                                            <span className="text-[9px] font-medium text-muted-foreground truncate">
                                                 ID: {b.id.slice(0, 15)}...
                                             </span>
                                         </div>

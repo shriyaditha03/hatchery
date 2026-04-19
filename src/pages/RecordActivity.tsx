@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -108,6 +108,7 @@ const RecordActivity = () => {
   const [tankId, setTankId] = useState('');
   const [activity, setActivity] = useState<ActivityType | ''>('');
   const [availableBatches, setAvailableBatches] = useState<string[]>([]);
+  const [closedBatchIds, setClosedBatchIds] = useState<Set<string>>(new Set());
   const [batchRelatedTankIds, setBatchRelatedTankIds] = useState<string[]>([]);
   const [isBatchLoading, setIsBatchLoading] = useState(false);
   const [activeInstructions, setActiveInstructions] = useState<any[]>([]);
@@ -239,6 +240,38 @@ const RecordActivity = () => {
 
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
+  const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && closedBatchIds.has(activeBroodstockBatchId);
+  
+  const currentSelectedTanks = useMemo(() => {
+    if (activeFarmCategory === 'MATURATION' && !editId) {
+      let effectiveTankIds: string[] = [];
+      const sectionId = selectedSectionId || activeSectionId;
+      const currentFarmId = selectedFarmId || activeFarmId;
+
+      if (selectionScope === 'all') {
+        const allSectionTanks = sectionId
+          ? (availableTanks.find(s => s.id === sectionId)?.tanks || []).map((t: any) => t.id)
+          : availableTanks.filter(s => s.farm_id === currentFarmId).flatMap(s => s.tanks || []).map((t: any) => t.id);
+        
+        effectiveTankIds = batchRelatedTankIds.length > 0
+          ? allSectionTanks.filter((id: string) => batchRelatedTankIds.includes(id))
+          : allSectionTanks;
+      } else if (selectionScope === 'custom') {
+        effectiveTankIds = selectedTankIds;
+      } else {
+        effectiveTankIds = tankId ? [tankId] : [];
+      }
+
+      return effectiveTankIds
+        .map(tid => {
+          const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
+          const tank = section?.tanks.find((t: any) => t.id === tid);
+          return tank ? { ...tank, sectionName: section?.name } : null;
+        })
+        .filter(Boolean);
+    }
+    return [];
+  }, [activeFarmCategory, editId, selectionScope, selectedTankIds, tankId, selectedSectionId, activeSectionId, availableTanks, batchRelatedTankIds, activeFarmId, selectedFarmId]);
 
   // For Maturation farms, filter sections by type based on the selected activity
   const getMaturationSectionFilter = (act: string): string[] | null => {
@@ -372,11 +405,26 @@ const RecordActivity = () => {
         .from('activity_logs')
         .select('*')
         .eq('farm_id', farmIdToUse)
-        .eq('activity_type', 'Stocking');
+        .in('activity_type', ['Stocking', 'Broodstock Discard']);
       
       if (!error && data) {
-        const ids = data.map((d: any) => d.stockingId || d.data?.stockingId || d.data?.batchId).filter(Boolean);
+        const ids: string[] = [];
+        const closed = new Set<string>();
+
+        data.forEach((d: any) => {
+          const sId = d.stockingId || d.data?.stockingId || d.data?.batchId;
+          if (sId) {
+            if (d.activity_type === 'Stocking') {
+                ids.push(sId);
+            }
+            if (d.activity_type === 'Broodstock Discard' && (d.data?.isCompleteDiscard || d.data?.is_complete_discard)) {
+                closed.add(sId);
+            }
+          }
+        });
+
         setAvailableBatches(Array.from(new Set(ids)));
+        setClosedBatchIds(closed);
       }
     } catch (err) {
       console.error('Error fetching batches:', err);
@@ -1246,6 +1294,7 @@ const RecordActivity = () => {
       case 'Egg Count': return { ...baseData, ...eggCountData };
       case 'Nauplii Harvest': return { ...baseData, ...naupliiHarvestData };
       case 'Nauplii Sale': return { ...baseData, ...naupliiSaleData };
+      case 'Broodstock Discard': return { ...baseData, ...broodstockDiscardData };
       default: return baseData;
     }
   };
@@ -1438,7 +1487,8 @@ const RecordActivity = () => {
           observationData: activity === 'Observation' ? observationData : undefined,
           artemiaData: activity === 'Artemia' ? artemiaData : undefined,
           algaeData: activity === 'Algae' ? algaeData : undefined,
-          sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined
+          sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined,
+          broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined
         };
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
@@ -2376,6 +2426,65 @@ const RecordActivity = () => {
             await Promise.all([...salePromises, ...syncPromises]);
           }
 
+          if (activity === 'Broodstock Discard') {
+            const { tankDiscards = {}, discardType } = currentBuildData;
+            const isComplete = discardType === 'complete';
+            
+            // For complete discard, identify all tanks in the batch
+            const tanksToProcess = isComplete ? batchRelatedTankIds : Object.keys(tankDiscards);
+            
+            const discardPromises = tanksToProcess.map(async (tId) => {
+              const currentPop = tankPopulations[tId] || 0;
+              const qty = isComplete ? currentPop : (parseFloat(tankDiscards[tId] as string) || 0);
+              
+              if (qty <= 0 && !isComplete) return null;
+              
+              const newPop = Math.max(0, currentPop - qty);
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === tId));
+              
+              return addActivity({
+                tank_id: tId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: activity as any,
+                data: { 
+                  ...currentBuildData, 
+                  is_complete_discard: isComplete,
+                  movementQty: -qty,
+                  presentPopulation: newPop.toString(),
+                  previousPopulation: currentPop.toString(),
+                  stockingId: activeBroodstockBatchId
+                }
+              });
+            });
+
+            const syncPromises = tanksToProcess.map(async (tId) => {
+              const currentPop = tankPopulations[tId] || 0;
+              const qty = isComplete ? currentPop : (parseFloat(tankDiscards[tId] as string) || 0);
+              
+              if (qty <= 0 && !isComplete) return null;
+              
+              const finalPop = Math.max(0, currentPop - qty);
+              const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === tId));
+              
+              return addActivity({
+                tank_id: tId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: {
+                  isSystemSync: true,
+                  notes: isComplete ? "Complete Batch Discard Sync" : "Partial Broodstock Discard Sync",
+                  presentPopulation: finalPop.toString(),
+                  originalPop: currentPop.toString(),
+                  stockingId: activeBroodstockBatchId
+                }
+              });
+            });
+
+            await Promise.all([...discardPromises, ...syncPromises]);
+          }
+
           if (activity === 'Tank Shifting') {
             const dests = currentBuildData.destinations || [];
             const destPromises = dests.map(async (dest: any) => {
@@ -2715,6 +2824,17 @@ const RecordActivity = () => {
 
         {(activity || !type) && !isSpecialActivity && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
           <div className="glass-card rounded-2xl p-4 space-y-4">
+            {isBatchClosed && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-4 mb-2 animate-pulse">
+                   <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                   <div>
+                       <h3 className="text-sm font-black text-red-800 uppercase tracking-tight">Batch Permanently Closed</h3>
+                       <p className="text-[11px] text-red-700 font-medium leading-tight mt-1">
+                           This batch has been marked as fully discarded. No further activities can be recorded for this batch.
+                       </p>
+                   </div>
+                </div>
+            )}
 
             {true && (
               <>
@@ -3380,19 +3500,7 @@ const RecordActivity = () => {
               setActivity('Stocking');
               setIsRedirectedFromObservation(true);
             }}
-            selectedTanks={(() => {
-              if (activeFarmCategory === 'MATURATION' && !editId) {
-                // Build tank objects from selectedTankIds
-                return selectedTankIds
-                  .map(tid => {
-                    const section = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
-                    const tank = section?.tanks.find((t: any) => t.id === tid);
-                    return tank ? { ...tank, sectionName: section?.name } : null;
-                  })
-                  .filter(Boolean);
-              }
-              return [];
-            })()}
+            selectedTanks={currentSelectedTanks}
           />
         )}
 
@@ -3517,6 +3625,7 @@ const RecordActivity = () => {
             onChange={setBroodstockDiscardData}
             activeBroodstockBatchId={activeBroodstockBatchId}
             farmId={selectedFarmId || activeFarmId || ''}
+            selectedTanks={currentSelectedTanks}
           />
         )}
 
@@ -3524,8 +3633,8 @@ const RecordActivity = () => {
         {activity && (
           <Button 
             onClick={isPlanningMode ? handleSaveInstruction : handleSave} 
-            className="w-full h-14 text-base font-semibold rounded-2xl gap-2 animate-fade-in-up" 
-            disabled={loading}
+            className={`w-full h-14 text-base font-semibold rounded-2xl gap-2 animate-fade-in-up ${isBatchClosed ? 'opacity-50 grayscale cursor-not-allowed shadow-none' : ''}`}
+            disabled={loading || (isBatchClosed && !isPlanningMode && !editId)}
             data-testid="save-activity-button"
           >
             {loading ? (

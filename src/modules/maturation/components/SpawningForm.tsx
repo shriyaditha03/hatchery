@@ -116,14 +116,7 @@ const SpawningForm = ({
       return self.findIndex(t => (t.data?.batchNumber || t.data?.batchId) === bn) === index;
     });
   }, [batchLogs, lockedBatchIds, activeBroodstockBatchId, data.batchId]);
-      } catch (err) {
-        console.error('Error fetching batches:', err);
-      } finally {
-        setLoadingBatches(false);
-      }
-    };
-    fetchBatches();
-  }, [farmId, activeBroodstockBatchId]);
+
 
   // Auto-select batch from dashboard context
   useEffect(() => {
