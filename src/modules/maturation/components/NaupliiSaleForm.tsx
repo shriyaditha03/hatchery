@@ -4,11 +4,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info } from 'lucide-react';
+import { Plus, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from '@/components/ui/alert-dialog';
 
 interface SaleTankEntry {
   id: string;
@@ -17,6 +27,7 @@ interface SaleTankEntry {
   harvestedAmount: string; // From the Harvest log
   saleMil: string;
   discardMil: string;
+  isExceedingConfirmed?: boolean;
 }
 
 interface NaupliiSaleFormProps {
@@ -55,6 +66,8 @@ const NaupliiSaleForm = ({
   const [isExpired, setIsExpired] = useState(false);
   const [totalHarvestedInBatch, setTotalHarvestedInBatch] = useState<number>(data.summary?.totalAvailable || 0);
   const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalSpawned || 0);
+  const [showOverSaleWarning, setShowOverSaleWarning] = useState(false);
+  const [pendingSaleUpdate, setPendingSaleUpdate] = useState<{ id: string, value: string } | null>(null);
 
   // Fetch and Aggregate Inventory (Harvest - Sale)
   const updateData = (updates: any) => {
@@ -104,14 +117,20 @@ const NaupliiSaleForm = ({
   }, [farmId, activeBroodstockBatchId]);
 
   const lockedHarvestIds = useMemo(() => {
-    return existingSales.map(l => l.data?.sourceBatchId || l.data?.selectedBatchId).filter(Boolean);
+    return (existingSales || []).map(l => 
+      l.data?.sourceBatchId || l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber
+    ).filter(Boolean);
   }, [existingSales]);
 
   const availableBatches = useMemo(() => {
     return batchLogs.filter(log => {
-      const bId = log.data?.selectedBatchId;
+      const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
       // Only show if not locked, OR if it's the currently selected one
-      return !lockedHarvestIds.includes(bId) || bId === data.sourceBatchId;
+      return !lockedHarvestIds.includes(bId) || bId === data.sourceBatchId || bId === data.selectedBatchId;
+    }).filter((l, index, self) => {
+      // De-duplicate
+      const bn = l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber;
+      return self.findIndex(t => (t.data?.selectedBatchId || t.data?.batchId || t.data?.batchNumber) === bn) === index;
     });
   }, [batchLogs, lockedHarvestIds, data.selectedBatchId, data.sourceBatchId]);
 
@@ -169,9 +188,77 @@ const NaupliiSaleForm = ({
   };
 
   const handleTankUpdate = (id: string, updates: any) => {
-    const newList = saleTanks.map(t => t.id === id ? { ...t, ...updates } : t);
+    const tank = saleTanks.find(t => t.id === id);
+    if (!tank) return;
+
+    let finalUpdates = { ...updates };
+    const harvested = parseFloat(tank.harvestedAmount) || 0;
+
+    // A. Interdependence Logic: Sale updates Discard
+    if ('saleMil' in updates) {
+      const newSale = parseFloat(updates.saleMil) || 0;
+      // Discard = Available - Sale (clamped at 0)
+      const newDiscard = Math.max(0, harvested - newSale);
+      finalUpdates.discardMil = newDiscard.toFixed(2);
+      
+      // Reset confirmation if value changes back to below/equal harvested
+      if (newSale <= harvested) {
+        finalUpdates.isExceedingConfirmed = false;
+      }
+    }
+
+    // B. Interdependence Logic: Discard updates Sale (Optional but logical for "based on available")
+    if ('discardMil' in updates) {
+      const newDiscard = parseFloat(updates.discardMil) || 0;
+      // Sale = Available - Discard (clamped at 0)
+      const newSale = Math.max(0, harvested - newDiscard);
+      finalUpdates.saleMil = newSale.toFixed(2);
+      finalUpdates.isExceedingConfirmed = false;
+    }
+
+    const newList = saleTanks.map(t => t.id === id ? { ...t, ...finalUpdates } : t);
     setSaleTanks(newList);
     updateData({ saleTanks: newList });
+  };
+
+  const handleSaleInputBlur = (id: string, value: string) => {
+    const tank = saleTanks.find(t => t.id === id);
+    if (!tank) return;
+
+    const harvested = parseFloat(tank.harvestedAmount) || 0;
+    const sale = parseFloat(value) || 0;
+
+    if (sale > harvested && !tank.isExceedingConfirmed) {
+      setPendingSaleUpdate({ id, value });
+      setShowOverSaleWarning(true);
+    }
+  };
+
+  const confirmOverSale = () => {
+    if (pendingSaleUpdate) {
+      handleTankUpdate(pendingSaleUpdate.id, { 
+        saleMil: pendingSaleUpdate.value, 
+        isExceedingConfirmed: true 
+      });
+    }
+    setShowOverSaleWarning(false);
+    setPendingSaleUpdate(null);
+  };
+
+  const cancelOverSale = () => {
+    if (pendingSaleUpdate) {
+      const tank = saleTanks.find(t => t.id === pendingSaleUpdate.id);
+      if (tank) {
+        // Revert to harvested amount or original? 
+        // User said "it should still allow", but if they cancel, we revert to harvested amount
+        handleTankUpdate(pendingSaleUpdate.id, { 
+          saleMil: tank.harvestedAmount,
+          isExceedingConfirmed: false 
+        });
+      }
+    }
+    setShowOverSaleWarning(false);
+    setPendingSaleUpdate(null);
   };
 
   useEffect(() => {
@@ -227,34 +314,6 @@ const NaupliiSaleForm = ({
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
         {/* Batch Selection */}
-        {selectedBatchId && activeBroodstockBatchId ? (
-          <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 rounded-xl">
-                   <Database className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div>
-                   <div className="flex items-center gap-2">
-                      <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70 leading-none">Active Harvest Batch</p>
-                      {isExpired && (
-                        <span className="bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full animate-pulse uppercase tracking-tighter">
-                          Expired (&gt;24h)
-                        </span>
-                      )}
-                   </div>
-                   <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
-                </div>
-             </div>
-             <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setSelectedBatchId('')} 
-                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100"
-             >
-                Change Batch
-             </Button>
-          </div>
-        ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-2 bg-indigo-100 rounded-xl">
@@ -282,7 +341,7 @@ const NaupliiSaleForm = ({
                  </div>
               ) : (
                 <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-                   <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900" id="batch-select-trigger">
+                   <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500" id="batch-select-trigger">
                      <SelectValue placeholder="Search Batch ID" />
                    </SelectTrigger>
                    <SelectContent>
@@ -301,7 +360,6 @@ const NaupliiSaleForm = ({
               )}
             </div>
           </div>
-        )}
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
 
@@ -339,12 +397,26 @@ const NaupliiSaleForm = ({
           </div>
           
           <div className="space-y-4">
-             {saleTanks.map((tank) => (
-               <Card key={tank.id} className="p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors">
+              {saleTanks.map((tank) => (
+                <Card 
+                  key={tank.id} 
+                  className={cn(
+                    "p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors overflow-hidden",
+                    (parseFloat(tank.saleMil) > (parseFloat(tank.harvestedAmount) || 0)) && "border-rose-400 bg-rose-50/20"
+                  )}
+                >
+                  {/* Over-sale Badge */}
+                  {parseFloat(tank.saleMil) > (parseFloat(tank.harvestedAmount) || 0) && (
+                    <div className="absolute top-4 right-4 bg-rose-600 text-white text-[8px] font-black px-2 py-1 rounded-full flex items-center gap-1 animate-in zoom-in-95">
+                      <AlertTriangle className="w-2.5 h-2.5" />
+                      EXCEEDS AVAILABLE
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between px-2">
                      <div>
                         <p className="text-xs font-black text-amber-950">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-amber-600 uppercase opacity-60">Harvested: {tank.harvestedAmount} mil</p>
+                        <p className="text-[9px] font-bold text-amber-600 uppercase opacity-60">Available: {tank.harvestedAmount} mil</p>
                      </div>
                   </div>
 
@@ -357,7 +429,11 @@ const NaupliiSaleForm = ({
                             step="0.01"
                             value={tank.saleMil} 
                             onChange={e => handleTankUpdate(tank.id, { saleMil: e.target.value })} 
-                            className="h-11 rounded-xl font-black bg-white border border-amber-100 shadow-sm text-lg text-amber-950 pr-10 focus:ring-amber-500" 
+                            onBlur={e => handleSaleInputBlur(tank.id, e.target.value)}
+                            className={cn(
+                              "h-11 rounded-xl font-black bg-white border border-amber-100 shadow-sm text-lg text-amber-950 pr-10 focus:ring-amber-500",
+                              (parseFloat(tank.saleMil) > (parseFloat(tank.harvestedAmount) || 0)) && "border-rose-500 ring-rose-500 focus:ring-rose-500"
+                            )}
                             placeholder="0.0"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-amber-400">MIL</span>
@@ -508,6 +584,40 @@ const NaupliiSaleForm = ({
           </div>
         </div>
       </div>
+
+      <AlertDialog open={showOverSaleWarning} onOpenChange={setShowOverSaleWarning}>
+        <AlertDialogContent className="rounded-[2rem] border-rose-100">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 text-rose-600 mb-2">
+              <div className="p-3 bg-rose-100 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">Over-Sale Warning</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base font-bold text-rose-900/70">
+              The amount of Nauplii for sale (<span className="text-rose-600 font-black">{pendingSaleUpdate?.value}M</span>) is above the available amount (<span className="text-amber-600 font-black">
+                {saleTanks.find(t => t.id === pendingSaleUpdate?.id)?.harvestedAmount}M
+              </span>).
+              <br /><br />
+              Do you still want to go ahead?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-3">
+            <AlertDialogCancel 
+              onClick={cancelOverSale}
+              className="rounded-xl font-bold h-12 border-rose-100 text-rose-900 hover:bg-rose-50"
+            >
+              No, Correct Amount
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmOverSale}
+              className="rounded-xl font-black h-12 bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-200"
+            >
+              Yes, Continue Sale
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

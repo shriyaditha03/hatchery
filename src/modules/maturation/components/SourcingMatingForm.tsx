@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { getTodayStr } from '@/lib/date-utils';
+import { supabase } from '@/lib/supabase';
 
 interface SourcingMatingFormProps {
   data: any;
@@ -52,14 +53,50 @@ const SourcingMatingForm = ({
   const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
   const [batchNumber, setBatchNumber] = useState<string>(data.batchNumber || '');
   const [isBatchIdManuallyEdited, setIsBatchIdManuallyEdited] = useState(data.batchNumber ? true : false);
-  const [uniqueSuffix] = useState(() => Math.random().toString(36).substring(2, 6).toUpperCase());
+  const [batchNo, setBatchNo] = useState<string>(data.batchNo || 'B1');
+
+  // Auto-fetch next batch number for today
+  useEffect(() => {
+    const fetchNextBatchNo = async () => {
+      // If we already have a batchNo (e.g. from saved data or editing), don't overwrite
+      if (data.batchNo || !farmId) return;
+      
+      try {
+        const today = getTodayStr();
+        // Get "Sourcing & Mating" records for today at this farm
+        // We fetch the data because one submission creates multiple log entries (one per tank + sync logs)
+        const { data: logs, error } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('activity_type', 'Sourcing & Mating')
+          .eq('farm_id', farmId)
+          .gte('created_at', `${today}T00:00:00`)
+          .lte('created_at', `${today}T23:59:59`);
+        
+        if (!error && logs) {
+          // Extract unique batch numbers from the logs
+          const uniqueBatches = new Set(
+            logs.map(log => log.data?.batchNumber || log.data?.naupliiBatchId)
+               .filter(Boolean)
+          );
+          const nextNo = `B${uniqueBatches.size + 1}`;
+          setBatchNo(nextNo);
+          // We don't call updateData here yet, it will happen in the batch generator effect
+        }
+      } catch (err) {
+        console.error('Error fetching batch count:', err);
+      }
+    };
+
+    fetchNextBatchNo();
+  }, [farmId, data.batchNo]);
 
   // Auto-fill tracking state
   const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
 
   const generateBatchId = (totalSourcedCount: number = 0, totalMatedCount: number = 0) => {
     const dateStr = getTodayStr().replace(/-/g, '').slice(2); // YYMMDD
-    return `NP_FS${totalSourcedCount}_FM${totalMatedCount}_${dateStr}_${uniqueSuffix}`;
+    return `NP_FS${totalSourcedCount}_FM${totalMatedCount}_${dateStr}_${batchNo}`;
   };
 
   // Auto-generate Batch ID if not present or if totals change
@@ -76,7 +113,12 @@ const SourcingMatingForm = ({
   }, [sourceTanks, matingTanks, farmId]);
 
   const updateData = (updates: any) => {
-    onDataChange({ ...data, ...updates, batchNumber: updates.batchNumber !== undefined ? updates.batchNumber : batchNumber });
+    onDataChange({ 
+      ...data, 
+      ...updates, 
+      batchNumber: updates.batchNumber !== undefined ? updates.batchNumber : batchNumber,
+      batchNo: updates.batchNo !== undefined ? updates.batchNo : batchNo
+    });
   };
 
   // 1. Automatically populate Field 1 with female tanks from the active Broodstock Batch

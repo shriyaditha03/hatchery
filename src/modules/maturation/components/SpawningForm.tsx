@@ -74,6 +74,7 @@ const SpawningForm = ({
 
         if (error) throw error;
 
+        setBatchLogs(logs || []);
         // Fetch Spawning logs to check for completed batches
         const { data: spawnLogs } = await supabase
           .from('activity_logs')
@@ -81,31 +82,40 @@ const SpawningForm = ({
           .eq('farm_id', farmId)
           .eq('activity_type', 'Spawning');
 
-        const spawnedBatchNumbers = new Set((spawnLogs || []).map(l => l.data?.sourcingBatchId || l.data?.selectedBatchId).filter(Boolean));
+        setExistingSpawning(spawnLogs || []);
+      } catch (err) {
+        console.error('Error fetching batches:', err);
+      } finally {
+        setLoadingBatches(false);
+      }
+    };
+    fetchBatches();
+  }, [farmId]);
 
-        // Filter to logs belonging to the active broodstock batch
-        const filtered = (logs || []).filter(l => {
-          const logStockingId = l.data?.stockingId || l.stockingId;
-          const bn = l.data?.batchNumber || l.data?.batchId;
-          
-          // Filter by active broodstock batch
-          if (activeBroodstockBatchId && logStockingId !== activeBroodstockBatchId) return false;
-          
-          // Filter out already spawned batches (unless we are in edit mode for one)
-          if (spawnedBatchNumbers.has(bn) && data.batchId !== bn) return false;
-          
-          return true;
-        });
-        
-        // De-duplicate by batchNumber
-        const seen = new Set<string>();
-        const unique = filtered.filter(l => {
-          const bn = l.data?.batchNumber || l.data?.naupliiBatchId;
-          if (!bn || seen.has(bn)) return false;
-          seen.add(bn);
-          return true;
-        });
-        setBatchLogs(unique);
+  const [existingSpawning, setExistingSpawning] = useState<any[]>([]);
+
+  const lockedBatchIds = useMemo(() => {
+    return existingSpawning.map(l => l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber).filter(Boolean);
+  }, [existingSpawning]);
+
+  const availableBatches = useMemo(() => {
+    return batchLogs.filter(l => {
+      const bn = l.data?.batchNumber || l.data?.batchId;
+      const logStockingId = l.data?.stockingId || l.stockingId;
+
+      // Filter by active broodstock batch
+      if (activeBroodstockBatchId && logStockingId !== activeBroodstockBatchId) return false;
+
+      // Filter out already spawned batches (unless we are in edit mode for one)
+      if (lockedBatchIds.includes(bn) && data.batchId !== bn) return false;
+
+      return true;
+    }).filter((l, index, self) => {
+      // De-duplicate
+      const bn = l.data?.batchNumber || l.data?.batchId;
+      return self.findIndex(t => (t.data?.batchNumber || t.data?.batchId) === bn) === index;
+    });
+  }, [batchLogs, lockedBatchIds, activeBroodstockBatchId, data.batchId]);
       } catch (err) {
         console.error('Error fetching batches:', err);
       } finally {
@@ -117,18 +127,10 @@ const SpawningForm = ({
 
   // Auto-select batch from dashboard context
   useEffect(() => {
-    if (activeBroodstockBatchId && batchLogs.length > 0 && !selectedBatchId) {
-      const matches = batchLogs.filter(l => 
-        l.stockingId === activeBroodstockBatchId || 
-        l.data?.stockingId === activeBroodstockBatchId ||
-        l.data?.batchNumber?.startsWith(activeBroodstockBatchId)
-      );
-      
-      if (matches.length > 0) {
-        setSelectedBatchId(matches[0].data?.batchNumber);
-      }
+    if (activeBroodstockBatchId && availableBatches.length > 0 && !selectedBatchId) {
+      setSelectedBatchId(availableBatches[0].data?.batchNumber || availableBatches[0].data?.batchId);
     }
-  }, [activeBroodstockBatchId, batchLogs, selectedBatchId]);
+  }, [activeBroodstockBatchId, availableBatches, selectedBatchId]);
 
   // When selectedBatchId changes, populate tank lists from the log
   useEffect(() => {
@@ -251,22 +253,8 @@ const SpawningForm = ({
 
   // Sync summary data for saving
   useEffect(() => {
-    let spawningId = selectedBatchId;
-    
-    if (selectedBatchId && selectedBatchId.includes('_')) {
-      const parts = selectedBatchId.split('_');
-      // Format: NP_FS(S)_FM(M)_YYMMDD_SUFFIX
-      // We want to transform to: NP_SP(SP)_NSP(NSP)_YYMMDD_SUFFIX
-      // Or if it was already updated, just replace the SP/NSP parts
-      
-      const datePart = parts.find(p => /^\d{6}$/.test(p)) || '';
-      const suffixPart = parts[parts.length - 1];
-      
-      spawningId = `NP_SP${totalFemaleSpawned}_NSP${totalFemaleNotSpawned}_${datePart}_${suffixPart}`;
-    }
-
     updateData({
-      batchId: spawningId,
+      batchId: selectedBatchId,
       sourcingBatchId: selectedBatchId, // Keep reference to original
       stockingId: activeBroodstockBatchId,
       totalSpawned: totalFemaleSpawned,
@@ -314,83 +302,61 @@ const SpawningForm = ({
       )}
 
       <div className={cn("glass-card rounded-3xl p-6 border shadow-sm space-y-8", !canEdit && "opacity-80 pointer-events-none select-none")}>
-        {selectedBatchId && activeBroodstockBatchId ? (
-          <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-4 animate-in fade-in slide-in-from-top-2">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 rounded-xl">
-                   <Database className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div>
-                   <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70">Active Spawning Batch</p>
-                   <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
-                </div>
-             </div>
-             <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setSelectedBatchId('')} 
-                className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100"
-             >
-                Change Batch
-             </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 bg-indigo-100 rounded-xl">
-                <Database className="w-4 h-4 text-indigo-600" />
-              </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
-              <p className="text-[10px] text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Sourcing & Mating</p>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 bg-indigo-100 rounded-xl">
+              <Database className="w-4 h-4 text-indigo-600" />
             </div>
-            
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-                {!loadingBatches && batchLogs.length === 0 ? (
-                  <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full">
-                    <div className="p-3 bg-amber-100 rounded-2xl">
-                      <AlertCircle className="w-8 h-8 text-amber-600" />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-sm font-black uppercase tracking-tight">No Batch Found</p>
-                      <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
-                        Please record a "Sourcing & Mating" activity first to create a batch for this broodstock.
-                      </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-2 w-full mt-2">
-                       <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
-                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
-                       >
-                         <PlusCircle className="w-3 h-3" /> Record Sourcing
-                       </Button>
-                    </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
+            <p className="text-[10px] text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Sourcing & Mating</p>
+          </div>
+          
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
+              {!loadingBatches && availableBatches.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full">
+                  <div className="p-3 bg-amber-100 rounded-2xl">
+                    <AlertCircle className="w-8 h-8 text-amber-600" />
                   </div>
-                ) : (
-                 <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
-                    <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900 focus:ring-indigo-500">
-                      <SelectValue placeholder="Search Batch ID" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {loadingBatches ? (
-                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                      ) : (
-                        batchLogs.map(log => (
-                          <SelectItem key={log.id} value={log.data?.batchId || log.data?.batchNumber}>
-                             <span className="font-bold">{log.data?.batchId || log.data?.batchNumber}</span>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                 </Select>
-               )}
-              <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
-            </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-black uppercase tracking-tight">No Batch Found</p>
+                    <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                      Please record a "Sourcing & Mating" activity first to create a batch for this broodstock.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                     <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
+                      onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
+                     >
+                       <PlusCircle className="w-3 h-3" /> Record Sourcing
+                     </Button>
+                  </div>
+                </div>
+              ) : (
+                <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+                   <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
+                     <SelectValue placeholder="Search Batch ID" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {loadingBatches ? (
+                       <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                     ) : (
+                       batchLogs.map(log => (
+                         <SelectItem key={log.id} value={log.data?.batchId || log.data?.batchNumber}>
+                            <span className="font-bold">{log.data?.batchId || log.data?.batchNumber}</span>
+                         </SelectItem>
+                       ))
+                     )}
+                   </SelectContent>
+                </Select>
+             )}
+            <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
           </div>
-        )}
+        </div>
 
         <div className="h-px bg-muted-foreground/10 mx-4" />
 

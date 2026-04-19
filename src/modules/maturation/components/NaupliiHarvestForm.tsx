@@ -133,16 +133,22 @@ const NaupliiHarvestForm = ({
   }, [farmId, activeBroodstockBatchId]);
 
   const lockedBatchIds = useMemo(() => {
-    return existingHarvests.map(l => l.data?.sourceBatchId || l.data?.selectedBatchId).filter(Boolean);
+    return (existingHarvests || []).map(l => 
+      l.data?.sourceBatchId || l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber
+    ).filter(Boolean);
   }, [existingHarvests]);
 
   const availableBatches = useMemo(() => {
     return batchLogs.filter(log => {
-      const bId = log.data?.selectedBatchId;
+      const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
       // Only show if not locked, OR if it's the currently selected one (for editing/viewing)
-      return !lockedBatchIds.includes(bId) || bId === data.sourceBatchId;
+      return !lockedBatchIds.includes(bId) || bId === data.sourceBatchId || bId === data.selectedBatchId;
+    }).filter((l, index, self) => {
+      // De-duplicate
+      const bn = l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber;
+      return self.findIndex(t => (t.data?.selectedBatchId || t.data?.batchId || t.data?.batchNumber) === bn) === index;
     });
-  }, [batchLogs, lockedBatchIds, data.sourceBatchId]);
+  }, [batchLogs, lockedBatchIds, data.sourceBatchId, data.selectedBatchId]);
 
   // Handle batch selection and population of tanks
   const handleBatchSelect = (batchId: string) => {
@@ -323,26 +329,12 @@ const NaupliiHarvestForm = ({
       naupliiPerAnimal: yieldPerAnimal
     };
 
-    // Evolve Batch ID with Harvest result (NH)
-    let evolvedId = selectedBatchId;
-    if (selectedBatchId && selectedBatchId.includes('_')) {
-      const parts = selectedBatchId.split('_');
-      // Source example: NP_SP22_EC3.3M_260417_980S
-      // Target: NP_SP22_NH3.0M_260417_980S
-      const spPart = parts.find(p => p.startsWith('SP')) || '';
-      const datePart = parts.find(p => /^\d{6}$/.test(p)) || '';
-      const suffixPart = parts[parts.length - 1];
-      
-      evolvedId = `NP_${spPart}_NH${summary.totalHarvested.toFixed(1)}M_${datePart}_${suffixPart}`;
-    }
-
     if (
-      JSON.stringify(data.summary) !== JSON.stringify(summary) || 
-      data.selectedBatchId !== evolvedId
+      JSON.stringify(data.summary) !== JSON.stringify(summary)
     ) {
       updateData({ 
         summary,
-        selectedBatchId: evolvedId,
+        selectedBatchId: selectedBatchId,
         sourceBatchId: selectedBatchId // Keep reference to Egg Count ID
       });
     }
@@ -368,100 +360,74 @@ const NaupliiHarvestForm = ({
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         
         {/* Step 1: Choose Batch */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-indigo-100 rounded-xl">
-              <Database className="w-4 h-4 text-indigo-600" />
-            </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Nauplii Production Batch</h3>
-          </div>
-
-          <div className="space-y-3">
-            {selectedBatchId ? (
-              <div className="flex items-center justify-between px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 animate-in fade-in slide-in-from-top-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-100 rounded-xl">
-                    <Database className="w-4 h-4 text-indigo-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-widest opacity-70">Active Production Batch</p>
-                    <p className="text-sm font-black text-indigo-900">{selectedBatchId}</p>
-                  </div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => handleBatchSelect('')} 
-                  className="h-8 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100"
-                >
-                  Change Batch
-                </Button>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-indigo-100 rounded-xl">
+                <Database className="w-4 h-4 text-indigo-600" />
               </div>
-            ) : (
-              <div className="space-y-4">
-                {!loadingBatches && availableBatches.length === 0 ? (
-                  <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 mb-4">
-                    <div className="p-3 bg-amber-100 rounded-2xl">
-                      <AlertCircle className="w-8 h-8 text-amber-600" />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-sm font-black uppercase tracking-tight">No Egg Count Batch Found</p>
-                      <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
-                        Please record an "Egg Count" activity first for this broodstock batch.
-                      </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-2 w-full mt-2">
-                       <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
-                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
-                       >
-                         <PlusCircle className="w-3 h-3" /> Record Sourcing
-                       </Button>
-                       <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
-                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/spawning?farm=${farmId}&category=MATURATION`)}
-                       >
-                         <PlusCircle className="w-3 h-3" /> Record Spawning
-                       </Button>
-                       <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
-                        onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/egg count?farm=${farmId}&category=MATURATION`)}
-                       >
-                         <PlusCircle className="w-3 h-3" /> Record Egg Count
-                       </Button>
-                    </div>
-                  </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Nauplii Production Batch</h3>
+            </div>
+
+            <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+              <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
+                <SelectValue placeholder="Search Batch ID" />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingBatches ? (
+                  <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
                 ) : (
-                  <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-                    <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-base font-black text-indigo-900">
-                      <SelectValue placeholder="Search Batch ID" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {loadingBatches ? (
-                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                      ) : (
-                        availableBatches.map(log => (
-                          <SelectItem key={log.id} value={log.data?.selectedBatchId}>
-                            <span className="font-bold">{log.data?.selectedBatchId}</span>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  availableBatches.map(log => (
+                    <SelectItem key={log.id} value={log.data?.selectedBatchId}>
+                      <span className="font-bold">{log.data?.selectedBatchId}</span>
+                    </SelectItem>
+                  ))
                 )}
+              </SelectContent>
+            </Select>
+
+            {!loadingBatches && availableBatches.length === 0 && (
+              <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 mb-4 mt-4">
+                <div className="p-3 bg-amber-100 rounded-2xl">
+                  <AlertCircle className="w-8 h-8 text-amber-600" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-black uppercase tracking-tight">No Egg Count Batch Found</p>
+                  <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                    Please record an "Egg Count" activity first for this broodstock batch.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                   <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
+                    onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
+                   >
+                     <PlusCircle className="w-3 h-3" /> Record Sourcing
+                   </Button>
+                   <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
+                    onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/spawning?farm=${farmId}&category=MATURATION`)}
+                   >
+                     <PlusCircle className="w-3 h-3" /> Record Spawning
+                   </Button>
+                   <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2"
+                    onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/egg count?farm=${farmId}&category=MATURATION`)}
+                   >
+                     <PlusCircle className="w-3 h-3" /> Record Egg Count
+                   </Button>
+                </div>
               </div>
             )}
           </div>
-        </div>
 
-        <div className="h-px bg-muted-foreground/10 mx-4" />
+          <div className="h-px bg-muted-foreground/10 mx-4" />
 
         {/* Step 2: Nauplii Harvest Details */}
         <div className="space-y-6">
