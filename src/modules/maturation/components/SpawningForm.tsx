@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
@@ -266,7 +266,7 @@ const SpawningForm = ({
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {activeBroodstockBatchId && (
+      {activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
            <div className="flex items-center gap-3">
               <div className="bg-red-100 p-2 rounded-xl text-red-600">

@@ -521,20 +521,7 @@ const UserDashboard = () => {
                                     </Button>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                    onClick={() => {
-                                        setActiveBroodstockBatchId('new');
-                                        navigate('/user/activity/stocking?category=MATURATION&mode=activity');
-                                    }}
-                                    className={`flex items-center gap-2 py-2.5 px-3 border-b border-muted/30 ${activeBroodstockBatchId === 'new' ? 'bg-primary/10 text-primary font-black' : 'font-bold text-primary/80'}`}>
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeBroodstockBatchId === 'new' ? 'bg-primary text-white' : 'bg-primary/10'}`}>
-                                        <Plus className="w-4 h-4" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-xs">+ Start New BS Batch</span>
-                                        <span className="text-[9px] font-medium opacity-60">Initialize a new stocking session</span>
-                                    </div>
-                                </DropdownMenuItem>
+                                {/* Removed redundant 'new' batch option - the '+ Create New' button above is sufficient */}
                                 {maturationBatches.map(b => (
                                     <DropdownMenuItem key={b.id} onClick={() => setActiveBroodstockBatchId(b.id)} className={`flex items-center gap-3 py-3 px-3 transition-colors ${activeBroodstockBatchId === b.id ? "bg-muted/50 font-black border-l-4 border-primary" : b.is_closed ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-muted/30"}`}>
                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.is_closed ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-400"}`}>

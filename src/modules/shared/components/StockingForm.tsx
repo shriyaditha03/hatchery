@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +22,8 @@ interface StockingFormProps {
   activeFarmCategory?: string;
   selectedTanks?: any[];
   selectionScope?: 'single' | 'all' | 'custom';
+  farmId?: string;
+  currentDate?: string;
 }
 
 const StockingForm = ({
@@ -33,11 +36,57 @@ const StockingForm = ({
   isPlanningMode = false,
   activeFarmCategory = 'LRT',
   selectedTanks = [],
-  selectionScope = 'single'
+  selectionScope = 'single',
+  farmId,
+  currentDate
 }: StockingFormProps) => {
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
+  const [todayBatchCount, setTodayBatchCount] = useState(0);
+
+  // Fetch count of batches already created today to determine the B# suffix
+  useEffect(() => {
+    if (activeFarmCategory === 'MATURATION' && farmId && currentDate) {
+      fetchTodayBatchCount();
+    }
+  }, [farmId, currentDate, activeFarmCategory]);
+
+  const fetchTodayBatchCount = async () => {
+    try {
+      const { data: logs, error } = await supabase
+        .from('activity_logs')
+        .select('data')
+        .eq('farm_id', farmId)
+        .eq('activity_type', 'Stocking');
+      
+      if (!error && logs) {
+        // Convert YYYY-MM-DD to YYMMDD
+        const parts = currentDate?.split('-') || [];
+        if (parts.length < 3) return;
+        const targetYYMMDD = `${parts[0].slice(-2)}${parts[1]}${parts[2]}`;
+
+        const todaysStockings = logs.filter(l => {
+          const sId = l.data?.stockingId || '';
+          return sId.includes(`_${targetYYMMDD}_B`);
+        });
+
+        // Find max B#
+        let maxB = 0;
+        todaysStockings.forEach(l => {
+          const sId = l.data?.stockingId || '';
+          const match = sId.match(/_B(\d+)$/);
+          if (match) {
+             const bNum = parseInt(match[1]);
+             if (bNum > maxB) maxB = bNum;
+          }
+        });
+        setTodayBatchCount(maxB);
+      }
+    } catch (err) {
+      console.error('Error fetching today batch count:', err);
+    }
+  };
   const [stockingStep, setStockingStep] = useState<1 | 2>(1); // For Maturation two-step flow
 
   const handleChange = (field: string, value: any) => {
@@ -47,7 +96,7 @@ const StockingForm = ({
     }
   };
 
-  // Generate Stocking ID: BS_{SUPPLIER}_{VARIANT}_{YYMMDD}
+  // Generate Stocking ID: BS_BS-{SUPPLIER}_{VARIANT}_{YYMMDD}
   const generateStockingId = (supplier: string, variant: string) => {
     const d = new Date();
     const yy = d.getFullYear().toString().slice(-2);
@@ -59,7 +108,8 @@ const StockingForm = ({
     const variantPrefix = variant ? variant.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'VARIANT';
 
     if (activeFarmCategory === 'MATURATION') {
-        return `BS_${supplierPrefix}_${variantPrefix}_${yymmdd}`;
+        const batchSuffix = `_B${todayBatchCount + 1}`;
+        return `BS_BS-${supplierPrefix}_${variantPrefix}_${yymmdd}${batchSuffix}`;
     }
     return `BS_${supplierPrefix}_HN_${yymmdd}`; // Fallback for LRT or others
   };

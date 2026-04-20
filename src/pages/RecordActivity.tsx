@@ -210,6 +210,7 @@ const RecordActivity = () => {
   });
   const [broodstockDiscardData, setBroodstockDiscardData] = useState<any>({
     stockingId: '',
+    discardType: 'partial',
     discardReason: '',
     summary: {
       initialCount: 0,
@@ -240,7 +241,7 @@ const RecordActivity = () => {
 
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
-  const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && closedBatchIds.has(activeBroodstockBatchId);
+  const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && closedBatchIds.has(activeBroodstockBatchId) && activity !== 'Stocking';
   
   const currentSelectedTanks = useMemo(() => {
     if (activeFarmCategory === 'MATURATION' && !editId) {
@@ -298,7 +299,7 @@ const RecordActivity = () => {
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
-  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || (activity === 'Broodstock Discard' && broodstockDiscardData.discardType === 'complete') || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
 
   // Live Time Update Effect
   useEffect(() => {
@@ -1306,7 +1307,7 @@ const RecordActivity = () => {
     }
 
     let targets = [];
-    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia';
+    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'].includes(activity);
 
     if (selectionScope === 'all') {
       targets = [null]; // One record for the whole section
@@ -1537,7 +1538,7 @@ const RecordActivity = () => {
         toast.error('Please select a section for this activity');
         return;
       }
-      if (!isSpecialActivity) {
+      if (!isSpecialActivity && !activitiesWithInternalSelection.includes(activity)) {
         toast.error('Please select a tank');
         return;
       }
@@ -1982,7 +1983,7 @@ const RecordActivity = () => {
           }
           
           // CRITICAL: Ensure all MATURATION activities link to the active Broodstock Batch
-          if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId) {
+          if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new') {
             currentBuildData.stockingId = activeBroodstockBatchId;
           }
           
@@ -2467,18 +2468,38 @@ const RecordActivity = () => {
               const finalPop = Math.max(0, currentPop - qty);
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === tId));
               
-              return addActivity({
-                tank_id: tId,
-                section_id: sec?.id,
-                farm_id: sec?.farm_id || fId,
-                activity_type: 'Observation',
-                data: {
+              const isMaturation = activeFarmCategory === 'MATURATION';
+              const tank = sec?.tanks.find((tk: any) => tk.id === tId);
+              const gender = tank?.gender;
+              
+              const syncData: any = {
                   isSystemSync: true,
                   notes: isComplete ? "Complete Batch Discard Sync" : "Partial Broodstock Discard Sync",
                   presentPopulation: finalPop.toString(),
                   originalPop: currentPop.toString(),
                   stockingId: activeBroodstockBatchId
-                }
+              };
+
+              if (isMaturation) {
+                  if (gender === 'Male' || gender === 'MALE') {
+                      syncData.presentPopulationM = finalPop.toString();
+                      syncData.presentPopulationF = "0";
+                      syncData.originalPopM = currentPop.toString();
+                      syncData.originalPopF = "0";
+                  } else {
+                      syncData.presentPopulationF = finalPop.toString();
+                      syncData.presentPopulationM = "0";
+                      syncData.originalPopF = currentPop.toString();
+                      syncData.originalPopM = "0";
+                  }
+              }
+
+              return addActivity({
+                tank_id: tId,
+                section_id: sec?.id,
+                farm_id: sec?.farm_id || fId,
+                activity_type: 'Observation',
+                data: syncData
               });
             });
 
@@ -2633,6 +2654,11 @@ const RecordActivity = () => {
         } else {
           toast.success(savedCount > 1 ? `${savedCount} activities recorded!` : 'Activity recorded!');
         }
+
+        // AUTO-SELECT newly created batch for Maturation Stocking
+        if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && stockingData?.stockingId) {
+          setActiveBroodstockBatchId(stockingData.stockingId);
+        }
       }
 
       if (activity === 'Stocking' && isRedirectedFromObservation) {
@@ -2713,7 +2739,25 @@ const RecordActivity = () => {
                   {activeFarmCategory}
                 </span>
               </div>
-              <p className="text-xs text-white/70 font-medium">{activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}</p>
+              <p className="text-xs text-white/70 font-medium">
+                {activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}
+                {activeFarmCategory === 'MATURATION' && (
+                  (() => {
+                    const displayId = (activeBroodstockBatchId === 'new' && activity === 'Stocking' && stockingData?.stockingId)
+                      ? stockingData.stockingId
+                      : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId);
+                    
+                    if (!displayId) return null;
+
+                    return (
+                      <span className="ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold">
+                        <Database className="w-3 h-3" />
+                        BS ID: {displayId}
+                      </span>
+                    );
+                  })()
+                )}
+              </p>
             </div>
           </div>
         </div>
@@ -3421,6 +3465,8 @@ const RecordActivity = () => {
             isPlanningMode={isPlanningMode}
             activeFarmCategory={activeFarmCategory}
             selectionScope={selectionScope}
+            farmId={selectedFarmId || activeFarmId}
+            currentDate={date}
             selectedTanks={(() => {
               // For Maturation Stocking, always show ALL tanks from ALL animal sections for THE SELECTED FARM
               if (activeFarmCategory === 'MATURATION' && activity === 'Stocking') {

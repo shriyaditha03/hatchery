@@ -224,7 +224,9 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
                             </div>
                             <div>
                                 <CardTitle className="text-xl font-black text-red-900 tracking-tight">Broodstock Discard</CardTitle>
-                                <p className="text-[10px] uppercase font-black text-red-600/60 tracking-widest leading-none">Batch: {activeBroodstockBatchId}</p>
+                                {activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && (
+                                  <p className="text-[10px] uppercase font-black text-red-600/60 tracking-widest leading-none">Batch: {activeBroodstockBatchId}</p>
+                                )}
                             </div>
                         </div>
 
@@ -461,6 +463,7 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
                                         <SelectValue placeholder="Select a reason..." />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-2xl border-slate-200 shadow-2xl">
+                                        <SelectItem value="End of cycle">End of cycle</SelectItem>
                                         <SelectItem value="Lifecycle Complete">Production Lifecycle Complete</SelectItem>
                                         <SelectItem value="Low Nauplii Yield">Low Nauplii Yield</SelectItem>
                                         <SelectItem value="Disease/Health Issues">Disease / Health Issues</SelectItem>
