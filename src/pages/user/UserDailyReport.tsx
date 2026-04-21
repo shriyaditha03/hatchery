@@ -48,6 +48,33 @@ const UserDailyReport = () => {
 
     const todayActivities = activities.filter(a => isTodayLocal(a.created_at));
 
+    // Consolidate activities by Batch ID
+    const consolidatedActivities = todayActivities.reduce((acc: any[], log: any) => {
+        const batchId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.batchNumber || log.data?.batchId;
+        const type = log.activity_type;
+        const shouldGroup = batchId && ['Stocking', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale'].includes(type);
+
+        if (shouldGroup) {
+            const key = `${type}_${batchId}`;
+            const existing = acc.find(a => `${a.activity_type}_${a.data?.stockingId || a.data?.batchNumber || a.data?.batchId}` === key);
+            
+            if (existing) {
+                existing._count = (existing._count || 1) + 1;
+                const tankName = log.tanks?.name || 'N/A';
+                if (!existing._tanks.includes(tankName)) {
+                    existing._tanks.push(tankName);
+                }
+                return acc;
+            } else {
+                const tankName = log.tanks?.name || 'N/A';
+                acc.push({ ...log, _count: 1, _tanks: [tankName] });
+                return acc;
+            }
+        }
+        acc.push(log);
+        return acc;
+    }, []);
+
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
@@ -107,7 +134,7 @@ const UserDailyReport = () => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {todayActivities.map((act) => (
+                                    {consolidatedActivities.map((act) => (
                                         <TableRow key={act.id} className="hover:bg-muted/30">
                                             <TableCell className="whitespace-nowrap font-medium text-xs">
                                                 {formatDate(new Date(act.created_at), 'hh:mm a')}
@@ -129,9 +156,15 @@ const UserDailyReport = () => {
                                                     <span className="text-xs font-semibold truncate capitalize">
                                                         {act.farms?.name || 'N/A'}
                                                     </span>
-                                                    <span className="text-[10px] text-muted-foreground truncate uppercase">
-                                                        {act.sections?.name || act.tanks?.sections?.name || 'N/A'} - {act.tanks?.name || 'N/A'}
-                                                    </span>
+                                                    {act._count > 1 ? (
+                                                        <span className="text-[10px] text-primary font-bold truncate">
+                                                            Multiple Tanks ({act._count}): {act._tanks.join(', ')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-muted-foreground truncate uppercase">
+                                                            {act.sections?.name || act.tanks?.sections?.name || 'N/A'} - {act.tanks?.name || 'N/A'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-center">

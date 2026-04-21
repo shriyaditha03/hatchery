@@ -87,6 +87,7 @@ export function useActivities() {
     tank_id?: string;
     section_id?: string;
     farm_id?: string;
+    stocking_id?: string;
     activity_type: string;
     data: any;
   }) => {

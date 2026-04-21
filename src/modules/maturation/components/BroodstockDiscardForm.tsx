@@ -36,14 +36,14 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
     
     // Initializing state with default values if not present
     useEffect(() => {
-        if (!data.discardType) {
+        if (!data.discardType || !data.tankDiscards) {
             onChange({
                 ...data,
-                discardType: 'partial',
-                tankDiscards: {},
-                discardReason: '',
-                avgBodyWeight: '',
-                isCompleteDiscard: false
+                discardType: data.discardType || 'partial',
+                tankDiscards: data.tankDiscards || {},
+                discardReason: data.discardReason || '',
+                avgBodyWeight: data.avgBodyWeight || '',
+                isCompleteDiscard: data.discardType === 'complete' || false
             });
         }
     }, []);
@@ -268,7 +268,7 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
 
                                 {populatedTanks.length > 0 ? populatedTanks.map(tank => {
                                     const isMale = tank.gender === 'Male' || tank.gender === 'MALE';
-                                    const hasDiscard = !!data.tankDiscards[tank.id];
+                                    const hasDiscard = !!(data.tankDiscards && data.tankDiscards[tank.id]);
                                     
                                     return (
                                         <div 
@@ -299,10 +299,10 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
                                                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest pl-1">Animals to Discard</Label>
                                                     <Input 
                                                         type="number"
-                                                        value={data.tankDiscards[tank.id] || ''}
+                                                        value={(data.tankDiscards && data.tankDiscards[tank.id]) || ''}
                                                         onChange={(e) => handleTankDiscardValue(tank.id, e.target.value)}
                                                         placeholder="0"
-                                                        className={`h-12 text-base font-black rounded-2xl bg-white/80 border-2 transition-all focus:bg-white
+                                                        className={`h-12 text-base font-black rounded-2xl bg-white/80 border-2 transition-all focus:bg-white placeholder:font-medium placeholder:opacity-30
                                                             ${isMale 
                                                                 ? 'border-blue-100 focus:border-blue-500 focus:ring-blue-500/20' 
                                                                 : 'border-pink-100 focus:border-pink-500 focus:ring-pink-500/20'}`}
@@ -481,8 +481,8 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
                                     step="0.1"
                                     value={data.avgBodyWeight}
                                     onChange={(e) => onChange({ ...data, avgBodyWeight: e.target.value })}
-                                    placeholder="Enter weight in grams"
-                                    className="h-14 rounded-3xl border-slate-200 focus:border-red-500 focus:ring-red-500/20 font-black text-lg bg-white shadow-sm"
+                                    placeholder="0"
+                                    className="h-14 rounded-3xl border-slate-200 focus:border-red-500 focus:ring-red-500/20 font-black text-lg bg-white shadow-sm placeholder:font-medium placeholder:opacity-30"
                                 />
                             </div>
                         </div>

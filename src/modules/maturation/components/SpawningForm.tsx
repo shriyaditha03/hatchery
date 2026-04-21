@@ -6,12 +6,28 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ArrowRightLeft, Sparkles, Search, CheckCircle2, AlertCircle, CheckCircle, Database, Loader2, PlusCircle, ShieldAlert } from 'lucide-react';
+import { Database, PlusCircle, CheckCircle2, Loader2, AlertCircle, Sparkles, ArrowRightLeft, History, Database as DatabaseIcon, ShieldAlert, Camera, ClipboardList } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+
+interface SpawningTankEntry {
+  id: string;
+  tankId: string;
+  tankName: string;
+  shiftedCount: string;
+  spawnedCount: string;
+  balanceCount: string;
+}
+
+interface ReturnDestination {
+  id: string;
+  tankId: string;
+  tankName: string;
+  count: string;
+  initialPopulation?: number;
+}
 
 interface SpawningFormProps {
   data: any;
@@ -21,11 +37,10 @@ interface SpawningFormProps {
   photoUrl: string;
   onPhotoUrlChange: (val: string) => void;
   availableTanks: any[];
-  isPlanningMode?: boolean;
-  farmId?: string;
-  activeBroodstockBatchId?: string | null;
   activeSectionId?: string;
-  tankPopulations?: Record<string, number>;
+  farmId?: string;
+  hatcheryId?: string;
+  activeBroodstockBatchId?: string | null;
 }
 
 const SpawningForm = ({
@@ -37,20 +52,20 @@ const SpawningForm = ({
   onPhotoUrlChange,
   availableTanks,
   activeSectionId,
-  tankPopulations = {},
-  isPlanningMode = false,
   farmId,
+  hatcheryId,
   activeBroodstockBatchId,
 }: SpawningFormProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [spawningTanks, setSpawningTanks] = useState<SpawningTankEntry[]>(data.spawningTanks || []);
+  const [returnDestinations, setReturnDestinations] = useState<ReturnDestination[]>(data.returnDestinations || []);
   const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [existingSpawning, setExistingSpawning] = useState<any[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.batchId || '');
-  const [spawningTanks, setSpawningTanks] = useState<any[]>(data.spawningTanks || []);
-  const [returnDestinations, setReturnDestinations] = useState<any[]>(data.returnDestinations || []);
   const [loadingBatches, setLoadingBatches] = useState(false);
-  
-  const isSupervisor = user?.role === 'supervisor' || user?.role === 'owner';
+
+  const isSupervisor = user?.role === 'owner' || user?.role === 'supervisor';
   const isEditing = !!data.id;
   const canEdit = isSupervisor || !isEditing;
 
@@ -58,13 +73,46 @@ const SpawningForm = ({
     onDataChange({ ...data, ...updates });
   };
 
-  // Fetch Recent Sourcing & Mating Batches for this farm
+  const lockedBatchIds = useMemo(() => {
+    return (existingSpawning || []).map(l => 
+      l.data?.batchId || l.data?.batchNumber || l.data?.selectedBatchId || l.data?.displayBatchId
+    ).filter(Boolean);
+  }, [existingSpawning]);
+
+  const availableBatches = useMemo(() => {
+    const filtered = batchLogs.filter(l => {
+      const bn = l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber;
+      const logStockingId = l.stocking_id || l.data?.stockingId || l.stockingId;
+
+      // Filter by active broodstock batch
+      if (activeBroodstockBatchId && logStockingId && logStockingId !== activeBroodstockBatchId) return false;
+
+      // Filter out already spawned batches (unless we are in edit mode for one)
+      if (lockedBatchIds.includes(bn) && data.batchId !== bn) return false;
+
+      return true;
+    });
+
+    // De-duplicate by batch ID
+    const uniqueMap = new Map();
+    filtered.forEach(log => {
+      const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      if (bn && !uniqueMap.has(bn)) {
+        uniqueMap.set(bn, log);
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [batchLogs, lockedBatchIds, activeBroodstockBatchId, data.batchId]);
+
+  // Fetch candidate batches from Sourcing & Mating
   useEffect(() => {
     const fetchBatches = async () => {
       if (!farmId) return;
       setLoadingBatches(true);
       try {
-        const { data: logs, error } = await supabase
+        // 1. Fetch Sourcing & Mating logs - ONLY for this broodstock batch
+        let sourcingQuery = supabase
           .from('activity_logs')
           .select('*')
           .eq('farm_id', farmId)
@@ -72,17 +120,29 @@ const SpawningForm = ({
           .order('created_at', { ascending: false })
           .limit(100);
 
+        if (activeBroodstockBatchId) {
+          sourcingQuery = sourcingQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const { data: logs, error } = await sourcingQuery;
+
         if (error) throw error;
 
-        setBatchLogs(logs || []);
-        // Fetch Spawning logs to check for completed batches
-        const { data: spawnLogs } = await supabase
+        // 2. Fetch existing Spawning logs to find locked batches - ONLY for this broodstock batch
+        let spawnQuery = supabase
           .from('activity_logs')
           .select('data')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Spawning');
 
+        if (activeBroodstockBatchId) {
+          spawnQuery = spawnQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+        
+        const { data: spawnLogs } = await spawnQuery;
         setExistingSpawning(spawnLogs || []);
+
+        setBatchLogs(logs || []);
       } catch (err) {
         console.error('Error fetching batches:', err);
       } finally {
@@ -90,142 +150,63 @@ const SpawningForm = ({
       }
     };
     fetchBatches();
-  }, [farmId]);
-
-  const [existingSpawning, setExistingSpawning] = useState<any[]>([]);
-
-  const lockedBatchIds = useMemo(() => {
-    return existingSpawning.map(l => l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber).filter(Boolean);
-  }, [existingSpawning]);
-
-  const availableBatches = useMemo(() => {
-    return batchLogs.filter(l => {
-      const bn = l.data?.batchNumber || l.data?.batchId;
-      const logStockingId = l.data?.stockingId || l.stockingId;
-
-      // Filter by active broodstock batch
-      if (activeBroodstockBatchId && logStockingId !== activeBroodstockBatchId) return false;
-
-      // Filter out already spawned batches (unless we are in edit mode for one)
-      if (lockedBatchIds.includes(bn) && data.batchId !== bn) return false;
-
-      return true;
-    }).filter((l, index, self) => {
-      // De-duplicate
-      const bn = l.data?.batchNumber || l.data?.batchId;
-      return self.findIndex(t => (t.data?.batchNumber || t.data?.batchId) === bn) === index;
-    });
-  }, [batchLogs, lockedBatchIds, activeBroodstockBatchId, data.batchId]);
-
+  }, [farmId, activeBroodstockBatchId]);
 
   // Auto-select batch from dashboard context
   useEffect(() => {
-    if (activeBroodstockBatchId && availableBatches.length > 0 && !selectedBatchId) {
-      setSelectedBatchId(availableBatches[0].data?.batchNumber || availableBatches[0].data?.batchId);
-    }
-  }, [activeBroodstockBatchId, availableBatches, selectedBatchId]);
-
-  // When selectedBatchId changes, populate tank lists from the log
-  useEffect(() => {
-    if (!selectedBatchId) return;
-    
-    // Only auto-populate if we haven't loaded this batch yet or if data is totally empty
-    const isNewBatch = data.batchId !== selectedBatchId;
-    const isEmpty = spawningTanks.length === 0;
-    
-    if (!isNewBatch && !isEmpty) {
-      // Update names if availableTanks arrived late
-      if (spawningTanks.some(t => t.tankName === 'Unknown Tank' || t.tankName === 'Unknown')) {
-        const updatedTanks = spawningTanks.map(t => {
-          let tName = t.tankName;
-          availableTanks.forEach(s => {
-            const tk = s.tanks.find((tk: any) => tk.id === t.tankId);
-            if (tk) tName = `${s.name} - ${tk.name}`;
-          });
-          return { ...t, tankName: tName };
-        });
-        setSpawningTanks(updatedTanks);
-        
-        const updatedReturns = returnDestinations.map(r => {
-          let tName = r.tankName;
-          availableTanks.forEach(s => {
-            const tk = s.tanks.find((tk: any) => tk.id === r.tankId);
-            if (tk) tName = `${s.name} - ${tk.name}`;
-          });
-          return { ...r, tankName: tName };
-        });
-        setReturnDestinations(updatedReturns);
+    if (activeBroodstockBatchId && batchLogs.length > 0 && !selectedBatchId) {
+      const matches = batchLogs.filter(l => {
+        const sId = l.stocking_id || l.data?.stockingId;
+        const bId = l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber;
+        return (sId === activeBroodstockBatchId || (bId && bId.startsWith(activeBroodstockBatchId))) && !lockedBatchIds.includes(bId);
+      });
+      
+      if (matches.length > 0) {
+        setSelectedBatchId(matches[0].data?.selectedBatchId || matches[0].data?.batchId || matches[0].data?.batchNumber);
       }
-      return;
     }
+  }, [activeBroodstockBatchId, batchLogs, selectedBatchId, lockedBatchIds]);
 
-    const log = batchLogs.find(l => l.data?.batchNumber === selectedBatchId);
-    if (log && log.data) {
-      // 1. Spawning Tanks (Destinations from Mating) - ONLY those with animals shifted in
-      const matDests = (log.data.matedDestinations || []).filter((d: any) => (parseFloat(d.count) || 0) > 0);
-      const newSpawningTanks = matDests.map((d: any) => {
-        let tName = 'Unknown Tank';
-        availableTanks.forEach(s => {
-          const t = s.tanks.find((tk: any) => tk.id === d.tankId);
-          if (t) tName = `${s.name} - ${t.name}`;
-        });
-        return {
+  // Sync entries based on selected Sourcing batch
+  useEffect(() => {
+    if (selectedBatchId && !isEditing) {
+      const log = batchLogs.find(l => (l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber) === selectedBatchId);
+      if (log && log.data) {
+        const matedDests = log.data.matedDestinations || [];
+        const sourceTanksFromLog = log.data.sourceTanks || [];
+
+        const newSpawningTanks = matedDests.map((d: any) => ({
           id: d.id,
           tankId: d.tankId,
-          tankName: tName,
-          shiftedCount: d.count || '0',
+          tankName: d.tankName,
+          shiftedCount: d.count,
           spawnedCount: '',
-          balanceCount: d.count || '0'
-        };
-      });
-      setSpawningTanks(newSpawningTanks);
+          balanceCount: d.count
+        }));
+        setSpawningTanks(newSpawningTanks);
 
-      // 2. Return Source Tanks (Source tanks from Sourcing)
-      const sources = log.data.sourceTanks || [];
-      const newReturns = sources.map((s: any) => {
-        let tName = 'Unknown Tank';
-        availableTanks.forEach(sect => {
-          const t = sect.tanks.find((tk: any) => tk.id === s.tankId);
-          if (t) tName = `${sect.name} - ${t.name}`;
-        });
-        return {
+        const newReturns = sourceTanksFromLog.map((s: any) => ({
           id: s.id,
           tankId: s.tankId,
-          tankName: tName,
+          tankName: s.tankName,
           count: '',
-          initialPopulation: tankPopulations[s.tankId] || 0
-        };
-      });
-      setReturnDestinations(newReturns);
-      
-      updateData({ 
-        batchId: selectedBatchId,
-        spawningTanks: newSpawningTanks,
-        returnDestinations: newReturns
-      });
+          initialPopulation: s.available // reference
+        }));
+        setReturnDestinations(newReturns);
+      }
     }
-  }, [selectedBatchId, batchLogs, availableTanks]);
+  }, [selectedBatchId, isEditing, batchLogs]);
 
   const handleSpawningChange = (id: string, updates: any) => {
     const newList = spawningTanks.map(t => {
       if (t.id === id) {
-        let spawnedVal = updates.spawnedCount;
-        const original = parseFloat(t.shiftedCount) || 0;
-
-        if (spawnedVal !== undefined && spawnedVal !== '') {
-          const numValue = parseFloat(spawnedVal);
-          if (numValue > original) {
-            toast.error(`Cannot exceed ${original} females available in ${t.tankName}`);
-          }
+        const updated = { ...t, ...updates };
+        if (updates.spawnedCount !== undefined) {
+          const shifted = parseFloat(t.shiftedCount) || 0;
+          const spawned = parseFloat(updates.spawnedCount) || 0;
+          updated.balanceCount = (shifted - spawned).toString();
         }
-
-        const spawned = spawnedVal !== undefined ? (parseFloat(spawnedVal) || 0) : (parseFloat(t.spawnedCount) || 0);
-        return { 
-          ...t, 
-          ...updates, 
-          spawnedCount: spawnedVal ?? t.spawnedCount,
-          balanceCount: Math.max(0, original - spawned).toString() 
-        };
+        return updated;
       }
       return t;
     });
@@ -270,7 +251,7 @@ const SpawningForm = ({
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
            <div className="flex items-center gap-3">
               <div className="bg-red-100 p-2 rounded-xl text-red-600">
-                 <Database className="w-5 h-5" />
+                 <DatabaseIcon className="w-5 h-5" />
               </div>
               <div>
                  <p className="text-[10px] font-bold text-red-800 uppercase tracking-widest opacity-70">Active Broodstock Batch</p>
@@ -285,7 +266,7 @@ const SpawningForm = ({
       )}
 
       {!canEdit && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-in zoom-in-95">
           <ShieldAlert className="w-5 h-5 text-amber-600" />
           <div>
             <p className="text-xs font-black uppercase tracking-widest">Read-Only Mode</p>
@@ -294,40 +275,37 @@ const SpawningForm = ({
         </div>
       )}
 
-      <div className={cn("glass-card rounded-3xl p-6 border shadow-sm space-y-8", !canEdit && "opacity-80 pointer-events-none select-none")}>
+      <div className={cn("glass-card rounded-3xl p-6 border shadow-sm space-y-8 relative", !canEdit && "opacity-80 pointer-events-none select-none")}>
+        
+        {/* 1. Batch Connection */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 bg-indigo-100 rounded-xl">
-              <Database className="w-4 h-4 text-indigo-600" />
+              <DatabaseIcon className="w-4 h-4 text-indigo-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Batch</h3>
-            <p className="text-[10px] text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Sourcing & Mating</p>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1 Choose Mating Batch</h3>
           </div>
           
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-              {!loadingBatches && availableBatches.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full">
-                  <div className="p-3 bg-amber-100 rounded-2xl">
-                    <AlertCircle className="w-8 h-8 text-amber-600" />
-                  </div>
-                  <div className="text-center space-y-1">
-                    <p className="text-sm font-black uppercase tracking-tight">No Batch Found</p>
-                    <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
-                      Please record a "Sourcing & Mating" activity first to create a batch for this broodstock.
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-2 w-full mt-2">
-                     <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full"
-                      onClick={() => navigate(`${user?.role === 'owner' ? '/owner' : '/user'}/activity/sourcing & mating?farm=${farmId}&category=MATURATION`)}
-                     >
-                       <PlusCircle className="w-3 h-3" /> Record Sourcing
-                     </Button>
-                  </div>
+          <div className="space-y-1 text-[10px] text-muted-foreground italic -mt-2 px-1">
+            Connect this spawning record to a previous sourcing activity.
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+              {batchLogs.length === 0 && !loadingBatches ? (
+                <div className="p-8 text-center bg-amber-50 border border-amber-100 rounded-[2rem] space-y-4 animate-in fade-in zoom-in-95">
+                   <div className="flex flex-col items-center gap-2">
+                      <AlertCircle className="w-8 h-8 text-amber-600" />
+                      <p className="text-sm font-black uppercase text-amber-900">No Mating Batch Found</p>
+                      <p className="text-[10px] text-amber-700/70 max-w-[280px]">Please complete "Sourcing & Mating" for this broodstock batch first.</p>
+                   </div>
+                   <Button 
+                     variant="outline" 
+                     size="sm" 
+                     onClick={goToSourcingMating}
+                     className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full max-w-[200px] mx-auto"
+                   >
+                     <PlusCircle className="w-3.5 h-3.5" /> Record Sourcing
+                   </Button>
                 </div>
               ) : (
                 <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
@@ -338,16 +316,18 @@ const SpawningForm = ({
                      {loadingBatches ? (
                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
                      ) : (
-                       batchLogs.map(log => (
-                         <SelectItem key={log.id} value={log.data?.batchId || log.data?.batchNumber}>
-                            <span className="font-bold">{log.data?.batchId || log.data?.batchNumber}</span>
-                         </SelectItem>
-                       ))
+                       availableBatches.map(log => {
+                         const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+                         return (
+                           <SelectItem key={log.id} value={bn}>
+                              <span className="font-bold">{bn}</span>
+                           </SelectItem>
+                         );
+                       })
                      )}
                    </SelectContent>
                 </Select>
-             )}
-            <p className="text-[10px] text-muted-foreground ml-2 italic">Selecting a batch will automatically load associated tanks.</p>
+              )}
           </div>
         </div>
 
@@ -383,7 +363,7 @@ const SpawningForm = ({
                             min="0"
                             onChange={e => handleSpawningChange(tank.id, { spawnedCount: e.target.value })} 
                             className={cn(
-                              "h-9 rounded-xl font-black bg-white border shadow-sm text-center pr-6 transition-all",
+                              "h-9 rounded-xl font-black bg-white border shadow-sm text-center pr-6 transition-all placeholder:font-medium placeholder:opacity-30",
                               (parseFloat(tank.spawnedCount) > parseFloat(tank.shiftedCount)) 
                                 ? "border-rose-500 text-rose-950 focus:ring-rose-500 bg-rose-50/50" 
                                 : "border-indigo-100 text-indigo-950 focus:ring-indigo-500"
@@ -461,7 +441,7 @@ const SpawningForm = ({
                              type="number" 
                              value={dest.count} 
                              onChange={e => handleReturnChange(dest.id, { count: e.target.value })} 
-                             className="h-9 rounded-xl text-sm font-black pr-8 border border-rose-100 bg-white shadow-sm focus:ring-rose-500 text-rose-950" 
+                             className="h-9 rounded-xl text-sm font-black pr-8 border border-rose-100 bg-white shadow-sm focus:ring-rose-500 text-rose-950 placeholder:font-medium placeholder:opacity-30" 
                              placeholder="0"
                          />
                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-300">F</span>
@@ -479,45 +459,35 @@ const SpawningForm = ({
             ))}
             {returnDestinations.length === 0 && (
                <div className="p-8 text-center bg-muted/5 border border-dashed rounded-2xl text-[10px] font-bold text-muted-foreground uppercase opacity-40">
-                  Select a batch to load source tanks
+                  Select a batch to load return tanks
                </div>
             )}
           </div>
-
-          <div className={`mt-2 p-4 rounded-2xl border transition-all duration-500 ${totalReturned === totalOriginalShifted && totalOriginalShifted > 0 ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-muted/10 border-dashed'}`}>
-            <div className="flex justify-between items-center">
-              <div className="space-y-0.5">
-                <p className={`text-[9px] font-black uppercase tracking-widest ${totalReturned === totalOriginalShifted && totalOriginalShifted > 0 ? 'text-rose-100' : 'text-rose-600'}`}>Total Females Shifted</p>
-                <p className="text-xl font-black">
-                  {totalReturned} <span className="text-xs font-normal opacity-70">/ {totalOriginalShifted} Females</span>
-                </p>
-              </div>
-              {totalReturned === totalOriginalShifted && totalOriginalShifted > 0 ? (
-                <div className="bg-white/20 p-2 rounded-xl">
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-              ) : (
-                <p className="text-[10px] font-bold italic opacity-60">Cross-check totals</p>
-              )}
-            </div>
-          </div>
         </div>
 
-        {!isPlanningMode && (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Activity Photo (Optional)</Label>
-            <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
+        {/* Media & Comments */}
+        <div className="space-y-6 pt-4 border-t border-dashed">
+          <div className="space-y-3">
+             <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-muted-foreground" />
+                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Photos (Optional)</Label>
+             </div>
+             <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
           </div>
-        )}
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
-          <Textarea
-            value={comments}
-            onChange={e => onCommentsChange(e.target.value)}
-            placeholder="Add notes..."
-            rows={3}
-          />
+          <div className="space-y-3">
+             <div className="flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Comments</Label>
+             </div>
+             <Textarea
+               value={comments}
+               onChange={e => onCommentsChange(e.target.value)}
+               placeholder="Add spawning notes..."
+               rows={3}
+               className="rounded-2xl border-muted-foreground/10 bg-muted/5 font-medium"
+             />
+          </div>
         </div>
       </div>
     </div>

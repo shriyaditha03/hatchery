@@ -80,8 +80,8 @@ const NaupliiSaleForm = ({
       if (!farmId) return;
       setLoadingBatches(true);
       try {
-        // 1. Fetch Harvest logs (Candidate batches)
-        const { data: logs, error } = await supabase
+        // 1. Fetch Harvest logs (Candidate batches) - ONLY for this broodstock batch
+        let harvestQuery = supabase
           .from('activity_logs')
           .select('*')
           .eq('farm_id', farmId)
@@ -89,19 +89,31 @@ const NaupliiSaleForm = ({
           .order('created_at', { ascending: false })
           .limit(100);
 
+        if (activeBroodstockBatchId) {
+          harvestQuery = harvestQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const { data: logs, error } = await harvestQuery;
+
         if (error) throw error;
 
-        // 2. Fetch existing Nauplii Sale logs (to find locked batches)
-        const { data: saleLogs } = await supabase
+        // 2. Fetch existing Nauplii Sale logs (to find locked batches) - ONLY for this broodstock batch
+        let saleQuery = supabase
           .from('activity_logs')
           .select('data')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Nauplii Sale');
         
+        if (activeBroodstockBatchId) {
+          saleQuery = saleQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+        
+        const { data: saleLogs } = await saleQuery;
         setExistingSales(saleLogs || []);
 
-        // Filter in JS to avoid 400 errors on complex JSON queries
+        // Filter in JS for batch/stocking alignment
         const filtered = (logs || []).filter(l => 
+          l.stocking_id === activeBroodstockBatchId || 
           l.stockingId === activeBroodstockBatchId || 
           l.data?.stockingId === activeBroodstockBatchId ||
           l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId || '')
@@ -118,21 +130,33 @@ const NaupliiSaleForm = ({
 
   const lockedHarvestIds = useMemo(() => {
     return (existingSales || []).map(l => 
-      l.data?.sourceBatchId || l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber
+      l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber || l.data?.sourceBatchId || l.data?.displayBatchId
     ).filter(Boolean);
   }, [existingSales]);
 
   const availableBatches = useMemo(() => {
-    return batchLogs.filter(log => {
+    const filtered = batchLogs.filter(log => {
       const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      const logStockingId = log.stocking_id || log.data?.stockingId || log.stockingId;
+
+      // Filter by active broodstock batch
+      if (activeBroodstockBatchId && logStockingId && logStockingId !== activeBroodstockBatchId) return false;
+
       // Only show if not locked, OR if it's the currently selected one
       return !lockedHarvestIds.includes(bId) || bId === data.sourceBatchId || bId === data.selectedBatchId;
-    }).filter((l, index, self) => {
-      // De-duplicate
-      const bn = l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber;
-      return self.findIndex(t => (t.data?.selectedBatchId || t.data?.batchId || t.data?.batchNumber) === bn) === index;
     });
-  }, [batchLogs, lockedHarvestIds, data.selectedBatchId, data.sourceBatchId]);
+
+    // De-duplicate by batch ID
+    const uniqueMap = new Map();
+    filtered.forEach(log => {
+      const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      if (bn && !uniqueMap.has(bn)) {
+        uniqueMap.set(bn, log);
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [batchLogs, lockedHarvestIds, data.selectedBatchId, data.sourceBatchId, activeBroodstockBatchId]);
 
   // Auto-select batch from dashboard context
   useEffect(() => {
@@ -144,14 +168,14 @@ const NaupliiSaleForm = ({
       );
       
       if (matches.length > 0) {
-        handleBatchSelect(matches[0].data?.selectedBatchId);
+        handleBatchSelect(matches[0].data?.selectedBatchId || matches[0].data?.batchId || matches[0].data?.batchNumber);
       }
     }
   }, [activeBroodstockBatchId, batchLogs, selectedBatchId]);
 
   const handleBatchSelect = (batchId: string) => {
     setSelectedBatchId(batchId);
-    const log = batchLogs.find(l => l.data?.selectedBatchId === batchId);
+    const log = batchLogs.find(l => (l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber) === batchId);
     if (log && log.data) {
       const harvestEntries = log.data.naupliiDestinations || [];
       const harvestedTotal = log.data.summary?.totalHarvested || 0;
@@ -348,12 +372,15 @@ const NaupliiSaleForm = ({
                      {loadingBatches ? (
                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
                      ) : (
-                       availableBatches.map(log => (
-                         <SelectItem key={log.id} value={log.data?.selectedBatchId}>
-                           <span className="font-bold">{log.data?.selectedBatchId}</span>
-                           <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
-                         </SelectItem>
-                       ))
+                       availableBatches.map(log => {
+                         const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+                         return (
+                           <SelectItem key={log.id} value={bn}>
+                             <span className="font-bold">{bn}</span>
+                             <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
+                           </SelectItem>
+                         );
+                       })
                      )}
                    </SelectContent>
                 </Select>
@@ -431,10 +458,10 @@ const NaupliiSaleForm = ({
                             onChange={e => handleTankUpdate(tank.id, { saleMil: e.target.value })} 
                             onBlur={e => handleSaleInputBlur(tank.id, e.target.value)}
                             className={cn(
-                              "h-11 rounded-xl font-black bg-white border border-amber-100 shadow-sm text-lg text-amber-950 pr-10 focus:ring-amber-500",
+                              "h-11 rounded-xl font-black bg-white border border-amber-100 shadow-sm text-lg text-amber-950 pr-10 focus:ring-amber-500 placeholder:font-medium placeholder:opacity-30",
                               (parseFloat(tank.saleMil) > (parseFloat(tank.harvestedAmount) || 0)) && "border-rose-500 ring-rose-500 focus:ring-rose-500"
                             )}
-                            placeholder="0.0"
+                            placeholder="0"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-amber-400">MIL</span>
                         </div>
@@ -447,8 +474,8 @@ const NaupliiSaleForm = ({
                             step="0.01"
                             value={tank.discardMil} 
                             onChange={e => handleTankUpdate(tank.id, { discardMil: e.target.value })} 
-                            className="h-11 rounded-xl font-black bg-white border border-rose-100 shadow-sm text-lg text-rose-950 pr-10 focus:ring-rose-500" 
-                            placeholder="0.0"
+                            className="h-11 rounded-xl font-black bg-white border border-rose-100 shadow-sm text-lg text-rose-950 pr-10 focus:ring-rose-500 placeholder:font-medium placeholder:opacity-30" 
+                            placeholder="0"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-300">MIL</span>
                         </div>
@@ -476,7 +503,7 @@ const NaupliiSaleForm = ({
                       type="number" 
                       value={bonusPercentage} 
                       onChange={e => setBonusPercentage(e.target.value)} 
-                      className="h-12 rounded-2xl font-black bg-white border-amber-100 text-xl text-amber-950 shadow-sm pr-12 text-center focus:ring-amber-500" 
+                      className="h-12 rounded-2xl font-black bg-white border-amber-100 text-xl text-amber-950 shadow-sm pr-12 text-center focus:ring-amber-500 placeholder:font-medium placeholder:opacity-30" 
                       placeholder="0"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">%</span>
@@ -506,7 +533,8 @@ const NaupliiSaleForm = ({
                       step="0.01"
                       value={netSaleManual} 
                       onChange={e => setNetSaleManual(e.target.value)} 
-                      className="h-16 rounded-[2rem] font-black bg-amber-600 text-white border-none text-3xl shadow-lg shadow-amber-200 pr-12 text-center focus:ring-amber-500" 
+                      className="h-16 rounded-[2rem] font-black bg-amber-600 text-white border-none text-3xl shadow-lg shadow-amber-200 pr-12 text-center focus:ring-amber-500 placeholder:font-medium placeholder:opacity-30" 
+                      placeholder="0"
                     />
                     <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">M</span>
                  </div>
@@ -521,7 +549,7 @@ const NaupliiSaleForm = ({
                        type="number" 
                        value={packsPacked} 
                        onChange={e => setPacksPacked(e.target.value)} 
-                       className="h-16 rounded-[2rem] font-black bg-white border-muted-foreground/10 text-2xl shadow-sm pr-20 text-center focus:ring-amber-500" 
+                       className="h-16 rounded-[2rem] font-black bg-white border-muted-foreground/10 text-2xl shadow-sm pr-20 text-center focus:ring-amber-500 placeholder:font-medium placeholder:opacity-30" 
                        placeholder="0"
                     />
                     <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
@@ -623,6 +651,3 @@ const NaupliiSaleForm = ({
 };
 
 export default NaupliiSaleForm;
-
-
-

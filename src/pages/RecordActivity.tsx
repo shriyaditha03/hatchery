@@ -62,6 +62,7 @@ const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'
 const FEED_UNITS = ['kg', 'gms', 'L', 'ml'];
 const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
+const MAINTENANCE_ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Observation'];
 
 
 
@@ -212,6 +213,8 @@ const RecordActivity = () => {
     stockingId: '',
     discardType: 'partial',
     discardReason: '',
+    tankDiscards: {},
+    avgBodyWeight: '',
     summary: {
       initialCount: 0,
       totalMated: 0,
@@ -242,7 +245,6 @@ const RecordActivity = () => {
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
   const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && closedBatchIds.has(activeBroodstockBatchId) && activity !== 'Stocking';
-  
   const currentSelectedTanks = useMemo(() => {
     if (activeFarmCategory === 'MATURATION' && !editId) {
       let effectiveTankIds: string[] = [];
@@ -431,6 +433,22 @@ const RecordActivity = () => {
       console.error('Error fetching batches:', err);
     }
   };
+
+  // Set default section for maintenance activities in Maturation
+  useEffect(() => {
+    const isMaintenance = activity && MAINTENANCE_ACTIVITIES.includes(activity);
+    if (isMaintenance && activeFarmCategory === 'MATURATION' && availableTanks.length > 0 && !selectedSectionId && !editId) {
+      const currentFarmId = selectedFarmId || activeFarmId;
+      const farmSections = availableTanks.filter(s => s.farm_id === currentFarmId);
+      
+      // Prefer ANIMAL section, fallback to first section of the farm
+      const defaultSec = farmSections.find(s => s.section_type === 'ANIMAL') || farmSections[0];
+      if (defaultSec) {
+        setSelectedSectionId(defaultSec.id);
+        console.log(`RecordActivity: Defaulted section to ${defaultSec.name} for ${activity}`);
+      }
+    }
+  }, [activity, availableTanks, activeFarmCategory, selectedFarmId, activeFarmId]);
   
   // Fetch tanks related to the active batch for filtering
   useEffect(() => {
@@ -1884,8 +1902,8 @@ const RecordActivity = () => {
 
         await updateActivity(editId, {
           tank_id: tankId,
-          section_id: sectionId || undefined,
-          farm_id: farmId || undefined,
+          section_id: sectionId || null,
+          farm_id: farmId || null,
           activity_type: activity as any,
           data: buildData()
         });
@@ -2038,12 +2056,12 @@ const RecordActivity = () => {
               let suffix = '';
               if (sId) {
                 const sec = availableTanks.find(s => s.id === sId);
-                if (sec) suffix += `_${sec.name.replace(/\s+/g, '')}`;
+                if (sec) suffix += `_${sec.name.replace(/s+/g, '')}`;
               }
               if (tId && sId) {
                 const sec = availableTanks.find(s => s.id === sId);
                 const tnk = sec?.tanks.find((t: any) => t.id === tId);
-                if (tnk) suffix += `_${tnk.name.replace(/\s+/g, '')}`;
+                if (tnk) suffix += `_${tnk.name.replace(/s+/g, '')}`;
               }
               currentBuildData.stockingId = `${currentBuildData.stockingId}${suffix}`;
             }
@@ -2062,8 +2080,8 @@ const RecordActivity = () => {
                  const logData = { ...currentBuildData, linkedSampleId: sid, linkedSampleIds: [sid] };
                  return addActivity({
                     tank_id: tId,
-                    section_id: sId || undefined,
-                    farm_id: fId || undefined,
+                    section_id: sId || null,
+                    farm_id: fId || null,
                     activity_type: activity as any,
                     data: logData
                  });
@@ -2101,6 +2119,7 @@ const RecordActivity = () => {
                 tank_id: s.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2131,6 +2150,7 @@ const RecordActivity = () => {
                 tank_id: d.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2163,6 +2183,7 @@ const RecordActivity = () => {
                 tank_id: r.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2203,6 +2224,7 @@ const RecordActivity = () => {
                 tank_id: tId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: 'Observation',
                 data: {
                   isSystemSync: true,
@@ -2237,6 +2259,7 @@ const RecordActivity = () => {
                 tank_id: t.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2265,6 +2288,7 @@ const RecordActivity = () => {
                 tank_id: r.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2303,6 +2327,7 @@ const RecordActivity = () => {
                 tank_id: tId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: 'Observation',
                 data: {
                   isSystemSync: true,
@@ -2336,6 +2361,7 @@ const RecordActivity = () => {
                 tank_id: d.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2360,6 +2386,7 @@ const RecordActivity = () => {
                 tank_id: d.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: 'Observation',
                 data: {
                   isSystemSync: true,
@@ -2389,6 +2416,7 @@ const RecordActivity = () => {
                 tank_id: t.tankId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: activity as any,
                 data: { 
                   ...currentBuildData, 
@@ -2498,6 +2526,7 @@ const RecordActivity = () => {
                 tank_id: tId,
                 section_id: sec?.id,
                 farm_id: sec?.farm_id || fId,
+                stocking_id: activeBroodstockBatchId || null,
                 activity_type: 'Observation',
                 data: syncData
               });
@@ -2542,8 +2571,9 @@ const RecordActivity = () => {
 
           const logId = await addActivity({
             tank_id: tId,
-            section_id: sId || undefined,
-            farm_id: fId || undefined,
+            section_id: sId || null,
+            farm_id: fId || null,
+            stocking_id: activeBroodstockBatchId || null,
             activity_type: activity as any,
             data: currentBuildData
           });
@@ -2790,7 +2820,7 @@ const RecordActivity = () => {
               1. Assign To (Optional)
             </Label>
             <Select value={assignedTo || 'anyone'} onValueChange={(val) => setAssignedTo(val === 'anyone' ? null : val)}>
-              <SelectTrigger className="h-11 bg-background border-muted-foreground/30">
+              <SelectTrigger className="h-11 bg-background border-muted-foreground/20 focus:border-primary/50">
                 <SelectValue placeholder="Anyone" />
               </SelectTrigger>
               <SelectContent>
@@ -2898,51 +2928,28 @@ const RecordActivity = () => {
                   )}
                 </div>
                 
-                <div className={`grid grid-cols-1 ${activeSectionId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
-                  {activeFarmCategory === 'MATURATION' ? (
-                    !activeBroodstockBatchId && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Choose Batch (Stocking ID) *</Label>
-                        <Select 
-                          value={activeBroodstockBatchId || ''} 
-                          onValueChange={(val) => {
-                            setActiveBroodstockBatchId(val);
-                            setTankId('');
-                            setSelectedTankIds([]);
-                          }}
-                        >
-                          <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/30 ring-offset-background focus:ring-2 focus:ring-primary shadow-sm">
-                            <SelectValue placeholder="Select batch" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableBatches.length === 0 ? (
-                               <div className="p-4 text-center text-xs text-muted-foreground">No active batches found for this farm.</div>
-                            ) : availableBatches.map(batchId => (
-                              <SelectItem key={batchId} value={batchId}>
-                                <span className="font-bold">{batchId}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )
-                  ) : !activeSectionId && (
+                <div className={`grid grid-cols-1 ${activeSectionId || activity === 'Broodstock Discard' ? 'sm:grid-cols-1' : 'sm:grid-cols-2'} gap-4`}>
+                  {/* Normal Section Select (Visible if no active section in URL/context) */}
+                  {!activeSectionId && activity !== 'Broodstock Discard' && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">Section {isSpecialActivity ? '(Optional)' : '*'}</Label>
                       <Select 
                         value={selectedSectionId} 
                         onValueChange={(val) => {
                           setSelectedSectionId(val);
-                          setTankId(''); // reset tank when section changes
+                          setTankId(''); 
                           setSelectedTankIds([]);
                         }}
                       >
-                        <SelectTrigger className="h-11" data-testid="section-select">
+                        <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50" data-testid="section-select">
                           <SelectValue placeholder="Select section" />
                         </SelectTrigger>
                         <SelectContent>
-                          {filteredSections
-                            .filter(s => activeFarmId ? s.farm_id === activeFarmId : true)
+                          {availableTanks
+                            .filter(s => {
+                              const currentFarmId = selectedFarmId || activeFarmId;
+                              return currentFarmId ? s.farm_id === currentFarmId : true;
+                            })
                             .map(section => (
                               <SelectItem key={section.id} value={section.id}>
                                 {section.farm_name} - {section.name}{section.section_type ? ` (${section.section_type})` : ''}
@@ -2951,6 +2958,68 @@ const RecordActivity = () => {
                           }
                         </SelectContent>
                       </Select>
+                    </div>
+                  )}
+
+                  {/* Batch Select (Maturation only, visible if no active batch) */}
+                  {activeFarmCategory === 'MATURATION' && !activeBroodstockBatchId && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Choose Batch (Stocking ID) *</Label>
+                      <Select 
+                        value={activeBroodstockBatchId || ''} 
+                        onValueChange={(val) => {
+                          setActiveBroodstockBatchId(val);
+                          setTankId('');
+                          setSelectedTankIds([]);
+                        }}
+                      >
+                        <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/20 ring-offset-background focus:ring-2 focus:ring-primary/50 shadow-sm">
+                          <SelectValue placeholder="Select batch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableBatches.length === 0 ? (
+                             <div className="p-4 text-center text-xs text-muted-foreground">No active batches found for this farm.</div>
+                          ) : availableBatches.map(batchId => (
+                            <SelectItem key={batchId} value={batchId}>
+                              <span className="font-bold">{batchId}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Maintenance Activity Section Choice (Visible when activeSectionId is set) */}
+                  {activity && MAINTENANCE_ACTIVITIES.includes(activity) && activeSectionId && (
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Change Section (Optional)</Label>
+                       <Select 
+                        value={selectedSectionId || activeSectionId || ''} 
+                        onValueChange={(val) => {
+                          setSelectedSectionId(val);
+                          setTankId(''); 
+                          setSelectedTankIds([]);
+                        }}
+                      >
+                        <SelectTrigger className="h-11 border-primary/20 bg-primary/5 focus:ring-primary shadow-sm rounded-xl">
+                          <SelectValue placeholder="Select section" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTanks
+                            .filter(s => {
+                              const currentFarmId = selectedFarmId || activeFarmId;
+                              return currentFarmId ? s.farm_id === currentFarmId : true;
+                            })
+                            .map(section => (
+                              <SelectItem key={section.id} value={section.id}>
+                                <span className="font-medium">{section.name}</span>
+                                {section.section_type && <span className="ml-2 text-[10px] opacity-70 uppercase">({section.section_type})</span>}
+                              </SelectItem>
+                            ))
+                          }
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground ml-1 italic">Switch section to record {activity.toLowerCase()} for different tank types.</p>
                     </div>
                   )}
 
@@ -2969,7 +3038,7 @@ const RecordActivity = () => {
                           }}
                           disabled={!selectedSectionId && !activeSectionId && activeFarmCategory !== 'MATURATION'}
                         >
-                          <SelectTrigger className="h-11" data-testid="tank-select">
+                          <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50" data-testid="tank-select">
                             <SelectValue placeholder="Select tank" />
                           </SelectTrigger>
                           <SelectContent>
@@ -2985,7 +3054,7 @@ const RecordActivity = () => {
                                 .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
                                 .filter((t: any) => {
                                   if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
-                                    const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality'];
+                                    const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality', 'Broodstock Discard'];
                                     if (generalActivities.includes(activity)) {
                                       return batchRelatedTankIds.includes(t.id);
                                     }
@@ -3038,7 +3107,7 @@ const RecordActivity = () => {
                           .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
                           .filter((t: any) => {
                             if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
-                              const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality'];
+                              const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality', 'Broodstock Discard'];
                               if (generalActivities.includes(activity)) {
                                 return batchRelatedTankIds.includes(t.id);
                               }
@@ -3083,7 +3152,7 @@ const RecordActivity = () => {
                   value={activity}
                   onValueChange={v => setActivity(v as ActivityType)}
                 >
-                  <SelectTrigger className="h-11" data-testid="activity-select">
+                  <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50" data-testid="activity-select">
                     <SelectValue placeholder="Select activity" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3140,7 +3209,7 @@ const RecordActivity = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Feed Type *</Label>
               <Select value={feedType} onValueChange={setFeedType}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50"><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
                   {dbFeedTypes.map(t => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
@@ -3164,10 +3233,10 @@ const RecordActivity = () => {
                     }
                   }}
                   placeholder="0"
-                  className="h-11 flex-1"
+                  className="h-11 flex-1 border-muted-foreground/20 focus:border-primary/50"
                 />
                 <Select value={feedUnit} onValueChange={setFeedUnit}>
-                  <SelectTrigger className="w-24 h-11"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-24 h-11 border-muted-foreground/20 focus:border-primary/50"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {FEED_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>) /* 25: FEED_UNITS */}
                   </SelectContent>
@@ -3193,7 +3262,7 @@ const RecordActivity = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Treatment Type *</Label>
               <Select value={treatmentType} onValueChange={setTreatmentType}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50"><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
                   {dbTreatmentTypes.map(t => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
@@ -3216,10 +3285,10 @@ const RecordActivity = () => {
                     }
                   }}
                   placeholder="0"
-                  className="h-11 flex-1"
+                  className="h-11 flex-1 border-muted-foreground/20 focus:border-primary/50"
                 />
                 <Select value={treatmentUnit} onValueChange={setTreatmentUnit}>
-                  <SelectTrigger className="w-24 h-11"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-24 h-11 border-muted-foreground/20 focus:border-primary/50"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TREATMENT_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>) /* 27: TREATMENT_UNITS */}
                   </SelectContent>
@@ -3261,7 +3330,7 @@ const RecordActivity = () => {
                           value={waterData[field] || ''}
                           onChange={e => setWaterData(prev => ({ ...prev, [field]: e.target.value }))}
                           placeholder=""
-                          className="h-10 text-sm"
+                          className="h-10 text-sm border-muted-foreground/20 focus:border-primary/50"
                         />
                       </div>
                     );
@@ -3288,15 +3357,15 @@ const RecordActivity = () => {
                     } else if (range === '[Nil]') {
                       isOk = val === 0;
                     } else if (range.includes(' - ')) {
-                      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
+                      const matches = range.match(/(d+.?d*)s*-s*(d+.?d*)/);
                       if (matches) {
                         isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]);
                       }
                     } else if (range.includes('>')) {
-                      const matches = range.match(/>\s*(\d+\.?\d*)/);
+                      const matches = range.match(/>s*(d+.?d*)/);
                       if (matches) isOk = val > parseFloat(matches[1]);
                     } else if (range.includes('<')) {
-                      const matches = range.match(/<\s*(\d+\.?\d*)/);
+                      const matches = range.match(/<s*(d+.?d*)/);
                       if (matches) isOk = val < parseFloat(matches[1]);
                     }
                     return isOk ? 10 : 0;
@@ -3343,7 +3412,7 @@ const RecordActivity = () => {
                       value={animalStage}
                       onChange={e => setAnimalStage(e.target.value)}
                       placeholder="Enter Stage"
-                      className="h-11"
+                      className="h-11 border-muted-foreground/20 focus:border-primary/50"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -3354,7 +3423,7 @@ const RecordActivity = () => {
                       value={animalDoc}
                       onChange={e => setAnimalDoc(e.target.value)}
                       placeholder="Enter DOC"
-                      className="h-11"
+                      className="h-11 border-muted-foreground/20 focus:border-primary/50"
                     />
                   </div>
                 </div>
@@ -3371,7 +3440,7 @@ const RecordActivity = () => {
                       }
                     }}
                     placeholder="Enter size / avg weight (e.g. 10/12)"
-                    className="h-11"
+                    className="h-11 border-muted-foreground/20 focus:border-primary/50"
                   />
                   <p className="text-[10px] text-muted-foreground">Only numbers, '.', and '/' allowed</p>
                 </div>
@@ -3406,7 +3475,7 @@ const RecordActivity = () => {
                 <div className="space-y-1.5 pt-2 border-t border-dashed">
                   <Label className="text-xs">Any identification of disease? *</Label>
                   <Select value={hasDiseaseIdentified} onValueChange={v => setHasDiseaseIdentified(v as any)}>
-                    <SelectTrigger className="h-11">
+                    <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
                       <SelectValue placeholder="Select Yes/No" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3431,7 +3500,7 @@ const RecordActivity = () => {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Additional Observations</Label>
-                  <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11" />
+                  <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11 border-muted-foreground/20 focus:border-primary/50" />
                 </div>
               </>
             ) : null}
@@ -3448,7 +3517,7 @@ const RecordActivity = () => {
                 onChange={e => setComments(e.target.value)} 
                 placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."} 
                 rows={3} 
-                className="rounded-xl"
+                className="rounded-xl border-muted-foreground/20 focus:border-primary/50"
               />
             </div>
           </div>

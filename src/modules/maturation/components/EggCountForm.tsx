@@ -66,7 +66,7 @@ const EggCountForm = ({
 
   const lockedBatchIds = useMemo(() => {
     return (existingEggCounts || []).map(l => 
-      l.data?.displayBatchId || l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber
+      l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber || l.data?.displayBatchId
     ).filter(Boolean);
   }, [existingEggCounts]);
 
@@ -80,8 +80,8 @@ const EggCountForm = ({
       if (!farmId) return;
       setLoadingBatches(true);
       try {
-        // 1. Fetch Spawning logs (candidate batches)
-        const { data: logs, error } = await supabase
+        // 1. Fetch Spawning logs (candidate batches) - ONLY for this broodstock batch
+        let spawnQuery = supabase
           .from('activity_logs')
           .select('*')
           .eq('farm_id', farmId)
@@ -89,24 +89,35 @@ const EggCountForm = ({
           .order('created_at', { ascending: false })
           .limit(100);
 
+        if (activeBroodstockBatchId) {
+          spawnQuery = spawnQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const { data: logs, error } = await spawnQuery;
+
         if (error) throw error;
 
-        // 2. Fetch existing Egg Count logs (to find locked batches)
-        const { data: eggLogs } = await supabase
+        // 2. Fetch existing Egg Count logs (to find locked batches) - ONLY for this broodstock batch
+        let eggQuery = supabase
           .from('activity_logs')
           .select('data')
           .eq('farm_id', farmId)
           .eq('activity_type', 'Egg Count');
         
+        if (activeBroodstockBatchId) {
+          eggQuery = eggQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+        
+        const { data: eggLogs } = await eggQuery;
         setExistingEggCounts(eggLogs || []);
         
-        // Filter in JS to avoid 400 errors on complex JSON queries
+        // Final sanity filter in JS
         const filtered = (logs || []).filter(l => {
-          const sId = l.stockingId || l.data?.stockingId;
+          const sId = l.stocking_id || l.stockingId || l.data?.stockingId;
           const bId = l.data?.batchId || l.data?.batchNumber;
           
-          return sId === activeBroodstockBatchId || 
-                 (bId && bId.startsWith(activeBroodstockBatchId || ''));
+          return !activeBroodstockBatchId || sId === activeBroodstockBatchId || 
+                 (bId && bId.startsWith(activeBroodstockBatchId));
         });
         setBatchLogs(filtered || []);
       } catch (err) {
@@ -136,21 +147,28 @@ const EggCountForm = ({
   }, [activeBroodstockBatchId, batchLogs, selectedBatchId, lockedBatchIds]);
 
   const availableBatches = useMemo(() => {
-    return batchLogs.filter(log => {
-      const bId = log.data?.batchId || log.data?.batchNumber || log.data?.selectedBatchId;
-      const logStockingId = log.data?.stockingId || log.stockingId;
+    const filtered = batchLogs.filter(log => {
+      const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      const logStockingId = log.stocking_id || log.data?.stockingId || log.stockingId;
 
       // Filter by active broodstock batch
-      if (activeBroodstockBatchId && logStockingId !== activeBroodstockBatchId) return false;
+      if (activeBroodstockBatchId && logStockingId && logStockingId !== activeBroodstockBatchId) return false;
 
       // Only show if not locked, OR if it's the currently selected one (for editing)
-      return !lockedBatchIds.includes(bId) || bId === data.selectedBatchId;
-    }).filter((l, index, self) => {
-      // De-duplicate
-      const bn = l.data?.batchId || l.data?.batchNumber || l.data?.selectedBatchId;
-      return self.findIndex(t => (t.data?.batchNumber || t.data?.batchId || t.data?.selectedBatchId) === bn) === index;
+      return !lockedBatchIds.includes(bId) || bId === selectedBatchId || bId === data.selectedBatchId;
     });
-  }, [batchLogs, lockedBatchIds, data.selectedBatchId, activeBroodstockBatchId]);
+
+    // De-duplicate by batch ID
+    const uniqueMap = new Map();
+    filtered.forEach(log => {
+      const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      if (bn && !uniqueMap.has(bn)) {
+        uniqueMap.set(bn, log);
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [batchLogs, lockedBatchIds, data.selectedBatchId, selectedBatchId, activeBroodstockBatchId]);
 
   // When selectedBatchId changes, populate entries from the Spawning log
   const handleBatchSelect = (batchId: string) => {
@@ -312,11 +330,14 @@ const EggCountForm = ({
                      {loadingBatches ? (
                        <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
                      ) : (
-                       availableBatches.map(log => (
-                         <SelectItem key={log.id} value={log.data?.batchId || log.data?.batchNumber}>
-                            <span className="font-bold">{log.data?.batchId || log.data?.batchNumber}</span>
-                         </SelectItem>
-                       ))
+                       availableBatches.map(log => {
+                         const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+                         return (
+                           <SelectItem key={log.id} value={bn}>
+                              <span className="font-bold">{bn}</span>
+                           </SelectItem>
+                         );
+                       })
                      )}
                    </SelectContent>
                 </Select>
@@ -423,8 +444,8 @@ const EggCountForm = ({
                                 step="0.01"
                                 value={entry.totalEggsMillions} 
                                 onChange={e => updateEntry(entry.id, { totalEggsMillions: e.target.value })} 
-                                className="h-14 rounded-2xl font-black bg-white border-indigo-100 text-xl text-indigo-900 focus:border-indigo-500 shadow-sm pr-12" 
-                                placeholder="0.0"
+                                className="h-14 rounded-2xl font-black bg-white border-indigo-100 text-xl text-indigo-900 focus:border-indigo-500 shadow-sm pr-12 placeholder:font-medium placeholder:opacity-30" 
+                                placeholder="0"
                               />
                               <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-300">MILL</div>
                             </div>
@@ -437,8 +458,8 @@ const EggCountForm = ({
                                 type="number" 
                                 value={entry.fertilizationPercent} 
                                 onChange={e => updateEntry(entry.id, { fertilizationPercent: e.target.value })} 
-                                className="h-14 rounded-2xl font-black bg-white border-indigo-100 text-xl text-indigo-950 focus:border-indigo-500 shadow-sm pr-12" 
-                                placeholder="95"
+                                className="h-14 rounded-2xl font-black bg-white border-indigo-100 text-xl text-indigo-950 focus:border-indigo-500 shadow-sm pr-12 placeholder:font-medium placeholder:opacity-30" 
+                                placeholder="0"
                               />
                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-indigo-300 opacity-40">%</span>
                             </div>

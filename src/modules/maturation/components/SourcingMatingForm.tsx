@@ -526,7 +526,7 @@ const SourcingMatingForm = ({
                   setIsBatchIdManuallyEdited(true);
                   updateData({ batchNumber: e.target.value });
                 }}
-                className="h-14 rounded-2xl font-black bg-white border-primary/10 text-xl text-primary tracking-tight shadow-sm text-center uppercase"
+                className="h-14 rounded-2xl font-black bg-white border-primary/10 text-xl text-primary tracking-tight shadow-sm text-center uppercase placeholder:font-medium placeholder:opacity-30"
                 placeholder="BATCH-ID"
               />
            </div>
@@ -583,7 +583,7 @@ const SourcingMatingForm = ({
                           value={source.femaleCount} 
                           onChange={e => handleSourceChange(source.id, e.target.value)} 
                           className={cn(
-                            "h-10 rounded-xl text-sm font-bold pr-8 focus:ring-rose-500/20",
+                            "h-10 rounded-xl text-sm font-bold pr-8 focus:ring-rose-500/20 placeholder:font-medium placeholder:opacity-30",
                             (parseFloat(source.femaleCount) || 0) > (source.available || 0) && "border-red-500 bg-red-50 text-red-900 focus:ring-red-500/20"
                           )}
                           placeholder="0"
@@ -661,7 +661,7 @@ const SourcingMatingForm = ({
                         value={mating.femalesAdded} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesAdded: e.target.value }, true)} 
                         className={cn(
-                          "h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8 shadow-sm focus:border-blue-500",
+                          "h-11 rounded-xl font-black bg-white border-blue-100 text-blue-950 pr-8 shadow-sm focus:border-blue-500 placeholder:font-medium placeholder:opacity-30",
                           totalFemalesAddedAcrossTanks > totalSourcedFromStep1 && "border-red-500 bg-red-50 text-red-900"
                         )}
                         placeholder="0"
@@ -681,7 +681,7 @@ const SourcingMatingForm = ({
                         value={mating.femalesMated} 
                         onChange={e => handleMatingTankChange(mating.id, { femalesMated: e.target.value })} 
                         className={cn(
-                          "h-11 rounded-xl font-black bg-white border-indigo-100 text-indigo-950 pr-8 shadow-sm focus:border-indigo-500",
+                          "h-11 rounded-xl font-black bg-white border-indigo-100 text-indigo-950 pr-8 shadow-sm focus:border-indigo-500 placeholder:font-medium placeholder:opacity-30",
                           (parseFloat(mating.femalesMated) || 0) > (parseFloat(mating.femalesAdded) || 0) && "border-red-500 bg-red-50 text-red-900"
                         )}
                         placeholder="0"
@@ -785,7 +785,7 @@ const SourcingMatingForm = ({
                       min="0"
                       value={dest.count}
                       onChange={e => handleMatedDestinationChange(dest.tankId, { count: e.target.value }, true)}
-                      className="h-9 rounded-xl text-center font-bold border-indigo-200 bg-white text-indigo-900 pr-6 text-sm focus:border-indigo-500 shadow-sm"
+                      className="h-9 rounded-xl text-center font-bold border-indigo-200 bg-white text-indigo-900 pr-6 text-sm focus:border-indigo-500 shadow-sm placeholder:font-medium placeholder:opacity-30"
                       placeholder="0"
                     />
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400">F</span>
@@ -799,93 +799,74 @@ const SourcingMatingForm = ({
 
           {/* 3b: Return to Female Source Tanks - Auto-populated */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 bg-rose-100 rounded-lg">
-                <ArrowRightLeft className="w-3.5 h-3.5 text-rose-500" />
-              </div>
-              <Label className="text-[10px] font-black uppercase text-rose-700">Non-Mated Animals → Female Tanks</Label>
-            </div>
-            <div className="px-1 text-[8px] text-rose-400 font-bold mb-1">From Ripe Females Sourced above</div>
-            {returnDestinations.length === 0 && (
-              <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
-                Enter females sourced above first
-              </p>
-            )}
-            {returnDestinations.map(dest => {
-              const currentPop = tankPopulations[dest.tankId] || 0;
-              const sourcedFromThisTank = parseFloat(sourceTanks.find(s => s.tankId === dest.tankId)?.femaleCount || '0');
-              const returnedCount = parseFloat(dest.count) || 0;
-              const newPop = Math.max(0, currentPop - sourcedFromThisTank + returnedCount);
-              return (
-                <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-rose-50/60 border border-rose-100 rounded-xl">
-                  <div>
-                    <p className="text-xs font-black text-rose-900 leading-none">{dest.tankName}</p>
-                    {returnedCount > 0 && (
-                      <p className="text-[9px] text-rose-500 font-bold mt-0.5">New pop: {newPop} F</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-24">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={dest.count}
-                        onChange={e => handleReturnDestinationChange(dest.tankId, { count: e.target.value }, true)}
-                        className="h-9 rounded-xl text-center font-bold border-rose-200 bg-white text-rose-900 pr-6 text-sm focus:border-rose-500 shadow-sm"
-                        placeholder="0"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-400">F</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+             <div className="flex items-center gap-2 mb-1">
+               <div className="p-1.5 bg-rose-100 rounded-lg">
+                 <RefreshCw className="w-3.5 h-3.5 text-rose-600" />
+               </div>
+               <Label className="text-[10px] font-black uppercase text-rose-700">Non-Mated (Balance) → Return to Source</Label>
+             </div>
+             {returnDestinations.length === 0 && (
+               <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
+                 No return destinations selected — sourcing data missing.
+               </p>
+             )}
+             {returnDestinations.map(dest => (
+               <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-rose-50/40 border border-rose-100 rounded-xl">
+                 <div>
+                   <p className="text-xs font-black text-rose-950 leading-none">{dest.tankName}</p>
+                   <p className="text-[9px] text-rose-400 font-bold uppercase mt-0.5">Female Source Tank</p>
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <div className="relative w-24">
+                     <Input
+                       type="number"
+                       min="0"
+                       value={dest.count}
+                       onChange={e => handleReturnDestinationChange(dest.tankId, { count: e.target.value }, true)}
+                       className="h-9 rounded-xl text-center font-bold border-rose-200 bg-white text-rose-900 pr-6 text-sm focus:border-rose-500 shadow-sm placeholder:font-medium placeholder:opacity-30"
+                       placeholder="0"
+                     />
+                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-400">F</span>
+                   </div>
+                 </div>
+               </div>
+             ))}
           </div>
 
-          {/* Validation Status Card */}
-          <div className={`mt-4 p-4 rounded-2xl border transition-all duration-500 ${totalShifted === totalSourcedFromStep1 ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-            <div className="flex justify-between items-center">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Females Shifted (a+b)</p>
-                <p className={`text-xl font-black ${totalShifted === totalSourcedFromStep1 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {totalShifted} / {totalSourcedFromStep1}
-                </p>
-              </div>
-              {totalShifted !== totalSourcedFromStep1 && totalSourcedFromStep1 > 0 && (
-                <div className="flex items-center gap-2 text-amber-600 bg-white/50 px-3 py-1.5 rounded-full border border-amber-200 animate-pulse">
-                  <span className="text-[10px] font-black uppercase">⚠️ Totals do not match</span>
+          <div className="bg-indigo-600 rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-indigo-100">
+             <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-xl">
+                   <Wand2 className="w-4 h-4 text-white" />
                 </div>
-              )}
-              {totalShifted === totalSourcedFromStep1 && totalSourcedFromStep1 > 0 && (
-                <div className="flex items-center gap-2 text-emerald-600 bg-white/50 px-3 py-1.5 rounded-full border border-emerald-200">
-                  <span className="text-[10px] font-black uppercase">✅ Allocation Balanced</span>
+                <div>
+                   <p className="text-[10px] font-black text-white/60 uppercase tracking-widest leading-none mb-1">Total Allocated</p>
+                   <p className="text-lg font-black text-white">{totalShifted} <span className="text-xs opacity-50">Females</span></p>
                 </div>
-              )}
-            </div>
-            <div className="w-full h-1.5 bg-muted rounded-full mt-3 overflow-hidden">
-               <div 
-                 className={`h-full transition-all duration-1000 ${totalShifted > totalSourcedFromStep1 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                 style={{ width: `${Math.min(100, (totalShifted / (totalSourcedFromStep1 || 1)) * 100)}%` }} 
-               />
-            </div>
+             </div>
+             <div className="text-right">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Target</p>
+                <p className="text-lg font-black text-white">{totalSourcedFromStep1}</p>
+             </div>
           </div>
         </div>
 
-        {!isPlanningMode && (
-          <div className="space-y-1.5 pt-4 border-t border-dashed">
-            <Label className="text-xs">Activity Photo (Optional)</Label>
-            <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
+        {/* Photos & Comments */}
+        <div className="space-y-6 pt-4 border-t border-dashed">
+          <div className="space-y-3">
+             <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest ml-1">Activity Photo (Optional)</Label>
+             <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
           </div>
-        )}
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
-          <Textarea
-            value={comments}
-            onChange={e => onCommentsChange(e.target.value)}
-            placeholder="Add notes..."
-            rows={3}
-          />
+          <div className="space-y-3">
+             <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest ml-1">Comments</Label>
+             <Textarea
+               value={comments}
+               onChange={e => onCommentsChange(e.target.value)}
+               placeholder="Add mating notes..."
+               rows={3}
+               className="rounded-[1.5rem] border-muted-foreground/10 bg-muted/5 font-medium"
+             />
+          </div>
         </div>
       </div>
     </div>

@@ -51,6 +51,24 @@ const OwnerConsolidatedReports = () => {
     const [fromDate, setFromDate] = useState(getTodayStr());
     const [toDate, setToDate] = useState(getTodayStr());
 
+    const handleFromDateChange = (val: string) => {
+        if (toDate && val > toDate) {
+            toast.error('From Date should be earlier than To Date');
+            setFromDate(toDate); // Set to toDate instead of allowing invalid
+            return;
+        }
+        setFromDate(val);
+    };
+
+    const handleToDateChange = (val: string) => {
+        if (fromDate && val < fromDate) {
+            toast.error('To Date should be later than From Date');
+            setToDate(fromDate); // Set to fromDate instead of allowing invalid
+            return;
+        }
+        setToDate(val);
+    };
+
     useEffect(() => {
         if (user?.hatchery_id) {
             fetchLogs();
@@ -126,7 +144,36 @@ const OwnerConsolidatedReports = () => {
                 );
             }
 
-            setLogs(filteredData);
+            // Consolidate logs by Batch ID / Stocking ID
+            const consolidated: any[] = [];
+            const groups = new Map<string, any>();
+
+            filteredData.forEach(log => {
+                const batchId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.batchNumber || log.data?.batchId;
+                const type = log.activity_type;
+                const date = formatDate(log.created_at, 'yyyy-MM-dd');
+                
+                const shouldGroup = batchId && ['Stocking', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale'].includes(type);
+
+                if (shouldGroup) {
+                    const key = `${type}_${batchId}_${date}`;
+                    if (groups.has(key)) {
+                        const existing = groups.get(key);
+                        existing._count = (existing._count || 1) + 1;
+                        if (log.tanks?.name && !existing._tanks.includes(log.tanks.name)) {
+                            existing._tanks.push(log.tanks.name);
+                        }
+                    } else {
+                        const logClone = { ...log, _count: 1, _tanks: log.tanks?.name ? [log.tanks.name] : [] };
+                        groups.set(key, logClone);
+                        consolidated.push(logClone);
+                    }
+                } else {
+                    consolidated.push(log);
+                }
+            });
+
+            setLogs(consolidated);
         } catch (err: any) {
             console.error('Error fetching logs:', err);
             toast.error('Failed to load activity logs');
@@ -147,13 +194,29 @@ const OwnerConsolidatedReports = () => {
         } else if (typeLower === 'stocking') {
             return (
                 <div className="space-y-0.5">
-                    <div>Nauplii: {data.naupliiStocked || '0'}M, Source: {data.broodstockSource || 'N/A'}</div>
+                    <div>
+                        {data.stockingId ? (
+                            <span className="font-bold text-primary">Batch: {data.stockingId.split('_').pop()}</span>
+                        ) : (
+                            `Nauplii: ${data.naupliiStocked || '0'}M`
+                        )}
+                        {data.broodstockSource && `, Source: ${data.broodstockSource}`}
+                    </div>
                     <div className="text-[9px] text-muted-foreground">
-                        Pop: {data.tankStockingNumber || '0'}, Hatchery: {data.hatcheryName || 'N/A'}
+                        {data.totalMalesReceived || data.totalMales ? (
+                             <span className="font-semibold text-foreground">
+                                M: {data.totalMalesReceived || data.totalMales} | F: {data.totalFemalesReceived || data.totalFemales}
+                             </span>
+                        ) : (
+                             `Pop: ${data.tankStockingNumber || '0'}`
+                        )}
+                        {data.hatcheryName && `, Hatchery: ${data.hatcheryName}`}
                     </div>
-                    <div className="text-[9px] text-primary/70 font-semibold">
-                        Animal Score: {data.animalConditionScore}/5, Water Score: {data.waterQualityScore}/5
-                    </div>
+                    {(data.animalConditionScore || data.waterQualityScore) && (
+                        <div className="text-[9px] text-primary/70 font-semibold">
+                            Qual: {data.animalConditionScore || data.animalQualityScore}/10, Water: {data.waterQualityScore || data.waterDataAvg}/10
+                        </div>
+                    )}
                 </div>
             );
         } else if (typeLower === 'observation') {
@@ -301,7 +364,7 @@ const OwnerConsolidatedReports = () => {
                             <Input
                                 type="date"
                                 value={fromDate}
-                                onChange={(e) => setFromDate(e.target.value)}
+                                onChange={(e) => handleFromDateChange(e.target.value)}
                                 className="h-10"
                             />
                         </div>
@@ -310,14 +373,14 @@ const OwnerConsolidatedReports = () => {
                             <Input
                                 type="date"
                                 value={toDate}
-                                onChange={(e) => setToDate(e.target.value)}
+                                onChange={(e) => handleToDateChange(e.target.value)}
                                 className="h-10"
                             />
                         </div>
                         <Button
                             onClick={fetchLogs}
                             className="h-10 gap-2"
-                            disabled={loading}
+                            disabled={loading || fromDate > toDate}
                         >
                             <Calendar className="w-4 h-4" />
                             Apply Filter
@@ -408,7 +471,16 @@ const OwnerConsolidatedReports = () => {
                                                 {log.sections?.name || 'N/A'}
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {log.tanks?.name || 'N/A'}
+                                                {log._count > 1 ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-primary font-bold text-xs">Multiple Tanks ({log._count})</span>
+                                                        <span className="text-[9px] text-muted-foreground truncate max-w-[120px]" title={log._tanks?.join(', ')}>
+                                                            {log._tanks?.join(', ')}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    log.tanks?.name || 'N/A'
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {(() => {

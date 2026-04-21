@@ -630,7 +630,7 @@ const StockingForm = ({
               value={data.broodstockSource || ''}
               onChange={e => handleChange('broodstockSource', e.target.value)}
               placeholder="Enter broodstock source"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
 
@@ -640,7 +640,7 @@ const StockingForm = ({
               value={data.hatcheryName || ''}
               onChange={e => handleChange('hatcheryName', e.target.value)}
               placeholder="Enter hatchery / section name"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
 
@@ -657,7 +657,7 @@ const StockingForm = ({
                 }
               }}
               placeholder="0"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
 
@@ -675,7 +675,7 @@ const StockingForm = ({
                 }
               }}
               placeholder="0"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
         </>

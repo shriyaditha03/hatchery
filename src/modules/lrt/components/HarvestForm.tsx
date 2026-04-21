@@ -99,7 +99,7 @@ const HarvestForm = ({
               value={data.spoonBagSize || ''}
               onChange={e => handleChange('spoonBagSize', e.target.value)}
               placeholder="Qty per bag"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
           <div className="space-y-1.5">
@@ -110,7 +110,7 @@ const HarvestForm = ({
               value={data.spoonBagCount || ''}
               onChange={e => handleChange('spoonBagCount', e.target.value)}
               placeholder="Total bags"
-              className="h-11"
+              className="h-11 border-2 border-slate-500"
             />
           </div>
         </div>
@@ -123,7 +123,7 @@ const HarvestForm = ({
             value={data.harvestedPopulation || ''}
             onChange={e => handleChange('harvestedPopulation', e.target.value)}
             placeholder="Enter harvested number"
-            className="h-11"
+            className="h-11 border-2 border-slate-500"
           />
         </div>
       )}

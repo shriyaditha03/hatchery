@@ -604,7 +604,7 @@ const ObservationForm = ({
                   if (val === '' || parseInt(val) >= 0) { handleChange('presentPopulation', val); }
                 }}
                 placeholder="0"
-                className="h-11"
+                className="h-11 border-2 border-slate-500"
               />
             </div>
           )}
