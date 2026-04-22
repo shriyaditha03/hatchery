@@ -37,10 +37,12 @@ interface SpawningFormProps {
   photoUrl: string;
   onPhotoUrlChange: (val: string) => void;
   availableTanks: any[];
+  tankPopulations: Record<string, number>;
   activeSectionId?: string;
   farmId?: string;
   hatcheryId?: string;
   activeBroodstockBatchId?: string | null;
+  isPlanningMode?: boolean;
 }
 
 const SpawningForm = ({
@@ -51,10 +53,12 @@ const SpawningForm = ({
   photoUrl,
   onPhotoUrlChange,
   availableTanks,
+  tankPopulations,
   activeSectionId,
   farmId,
   hatcheryId,
   activeBroodstockBatchId,
+  isPlanningMode,
 }: SpawningFormProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -167,6 +171,16 @@ const SpawningForm = ({
     }
   }, [activeBroodstockBatchId, batchLogs, selectedBatchId, lockedBatchIds]);
 
+  // Sync return destinations' initial population with the absolute latest from parent state
+  useEffect(() => {
+    if (returnDestinations.length > 0 && Object.keys(tankPopulations).length > 0) {
+      setReturnDestinations(prev => prev.map(dest => ({
+        ...dest,
+        initialPopulation: tankPopulations[dest.tankId] ?? dest.initialPopulation ?? 0
+      })));
+    }
+  }, [tankPopulations]);
+
   // Sync entries based on selected Sourcing batch
   useEffect(() => {
     if (selectedBatchId && !isEditing) {
@@ -175,23 +189,41 @@ const SpawningForm = ({
         const matedDests = log.data.matedDestinations || [];
         const sourceTanksFromLog = log.data.sourceTanks || [];
 
-        const newSpawningTanks = matedDests.map((d: any) => ({
-          id: d.id,
-          tankId: d.tankId,
-          tankName: d.tankName,
-          shiftedCount: d.count,
-          spawnedCount: '',
-          balanceCount: d.count
-        }));
+        // ONLY show spawning tanks that actually received animals
+        const newSpawningTanks = matedDests
+          .filter((d: any) => (parseFloat(d.count) || 0) > 0)
+          .map((d: any) => ({
+            id: d.id,
+            tankId: d.tankId,
+            tankName: d.tankName,
+            shiftedCount: d.count,
+            spawnedCount: '',
+            balanceCount: d.count
+          }));
         setSpawningTanks(newSpawningTanks);
 
-        const newReturns = sourceTanksFromLog.map((s: any) => ({
-          id: s.id,
-          tankId: s.tankId,
-          tankName: s.tankName,
-          count: '',
-          initialPopulation: s.available // reference
-        }));
+        const returnDestsFromLog = log.data.returnDestinations || [];
+        const newReturns = sourceTanksFromLog
+          .map((s: any) => {
+            // Calculate how many were already returned to this tank during the Sourcing phase
+            const alreadyReturned = returnDestsFromLog
+              .filter((r: any) => r.tankId === s.tankId)
+              .reduce((sum: number, r: any) => sum + (parseFloat(r.count) || 0), 0);
+            
+            const netSourced = (parseFloat(s.femaleCount) || 0) - alreadyReturned;
+
+            return {
+              id: s.id,
+              tankId: s.tankId,
+              tankName: s.tankName,
+              count: '', // User must enter manually
+              shiftedCount: netSourced, 
+              initialPopulation: tankPopulations[s.tankId] ?? ((parseFloat(s.available) || 0) - (parseFloat(s.femaleCount) || 0) + alreadyReturned),
+              netSourced
+            };
+          })
+          .filter((s: any) => s.netSourced > 0); // Only show tanks that still have animals to return
+
         setReturnDestinations(newReturns);
       }
     }
@@ -242,7 +274,10 @@ const SpawningForm = ({
 
   const goToSourcingMating = () => {
     const portal = user?.role === 'owner' ? 'owner' : 'user';
-    navigate(`/${portal}/activity?mode=activity&type=Sourcing%20%26%20Mating&category=MATURATION`);
+    // Ensure we pass the farmId so the next page knows which farm to load
+    const url = `/${portal}/activity/sourcing-mating?mode=activity&category=MATURATION${farmId ? `&farm=${farmId}` : ''}`;
+    console.log('Navigating to:', url);
+    navigate(url);
   };
 
   return (
@@ -283,51 +318,73 @@ const SpawningForm = ({
             <div className="p-2 bg-indigo-100 rounded-xl">
               <DatabaseIcon className="w-4 h-4 text-indigo-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1 Choose Mating Batch</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1 Choose Nauplii Production Batch</h3>
           </div>
           
           <div className="space-y-1 text-[10px] text-muted-foreground italic -mt-2 px-1">
-            Connect this spawning record to a previous sourcing activity.
+            Connect this spawning record to a previous sourcing activity to load tanks.
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-              {batchLogs.length === 0 && !loadingBatches ? (
-                <div className="p-8 text-center bg-amber-50 border border-amber-100 rounded-[2rem] space-y-4 animate-in fade-in zoom-in-95">
-                   <div className="flex flex-col items-center gap-2">
-                      <AlertCircle className="w-8 h-8 text-amber-600" />
-                      <p className="text-sm font-black uppercase text-amber-900">No Mating Batch Found</p>
-                      <p className="text-[10px] text-amber-700/70 max-w-[280px]">Please complete "Sourcing & Mating" for this broodstock batch first.</p>
-                   </div>
-                   <Button 
-                     variant="outline" 
-                     size="sm" 
-                     onClick={goToSourcingMating}
-                     className="h-9 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-bold text-[10px] uppercase gap-2 w-full max-w-[200px] mx-auto"
-                   >
-                     <PlusCircle className="w-3.5 h-3.5" /> Record Sourcing
-                   </Button>
-                </div>
-              ) : (
+              <div className="space-y-4">
                 <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
-                   <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
-                     <SelectValue placeholder="Search Batch ID" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {loadingBatches ? (
-                       <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                     ) : (
-                       availableBatches.map(log => {
-                         const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
-                         return (
-                           <SelectItem key={log.id} value={bn}>
-                              <span className="font-bold">{bn}</span>
-                           </SelectItem>
-                         );
-                       })
-                     )}
-                   </SelectContent>
+                  <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
+                    <SelectValue placeholder="Search Batch ID" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingBatches ? (
+                      <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                    ) : (
+                      availableBatches.map(log => {
+                        const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+                        return (
+                          <SelectItem key={log.id} value={bn}>
+                             <span className="font-bold">{bn}</span>
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
                 </Select>
-              )}
+
+                {!loadingBatches && availableBatches.length === 0 && (
+                  <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full mt-4">
+                    <div className="p-3 bg-amber-100 rounded-2xl">
+                      <AlertCircle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-black uppercase tracking-tight">No Nauplii Production Batch</p>
+                      <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                        Please record a "Sourcing & Mating" activity first for this broodstock batch.
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                       <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-11 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-black text-xs uppercase gap-2 w-full shadow-sm"
+                        onClick={goToSourcingMating}
+                       >
+                         <PlusCircle className="w-4 h-4" /> Record Sourcing & Mating
+                       </Button>
+                    </div>
+                  </div>
+                )}
+
+                {availableBatches.length > 0 && (
+                  <div className="flex justify-center mt-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={goToSourcingMating}
+                      className="h-8 text-violet-600 hover:text-violet-700 hover:bg-violet-50 font-bold text-[10px] uppercase gap-2"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" /> Record Sourcing & Mating
+                    </Button>
+                  </div>
+                )}
+              </div>
           </div>
         </div>
 
@@ -336,8 +393,8 @@ const SpawningForm = ({
         {/* 2. Spawning Results */}
         <div className="space-y-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-indigo-100 rounded-xl">
-              <Sparkles className="w-4 h-4 text-indigo-600" />
+            <div className="p-2 bg-violet-100 rounded-xl">
+              <Sparkles className="w-4 h-4 text-violet-600" />
             </div>
             <h3 className="text-sm font-bold uppercase tracking-wider">Step # 2 Spawner Result</h3>
           </div>
@@ -348,14 +405,14 @@ const SpawningForm = ({
 
           <div className="space-y-3">
              {spawningTanks.map((tank) => (
-               <Card key={tank.id} className="p-4 bg-indigo-50/40 border-indigo-100/50 rounded-2xl overflow-hidden relative group hover:bg-indigo-50/60 transition-colors">
+               <Card key={tank.id} className="p-4 bg-violet-50/40 border-violet-100/50 rounded-2xl overflow-hidden relative group hover:bg-violet-50/60 transition-colors">
                   <div className="flex items-center justify-between gap-4">
                      <div className="flex-1">
-                        <p className="text-xs font-black text-indigo-950">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60">Spawning Tank ({tank.shiftedCount} F In)</p>
+                        <p className="text-xs font-black text-violet-950">{tank.tankName}</p>
+                        <p className="text-[9px] font-bold text-violet-600 uppercase opacity-60">Spawning Tank ({tank.shiftedCount} F In)</p>
                      </div>
                      <div className="w-32 flex flex-col gap-1">
-                        <Label className="text-[8px] font-black uppercase text-center text-indigo-600 leading-none">No. Females Spawned</Label>
+                        <Label className="text-[8px] font-black uppercase text-center text-violet-600 leading-none">No. Females Spawned</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
@@ -366,16 +423,16 @@ const SpawningForm = ({
                               "h-9 rounded-xl font-black bg-white border shadow-sm text-center pr-6 transition-all placeholder:font-medium placeholder:opacity-30",
                               (parseFloat(tank.spawnedCount) > parseFloat(tank.shiftedCount)) 
                                 ? "border-rose-500 text-rose-950 focus:ring-rose-500 bg-rose-50/50" 
-                                : "border-indigo-100 text-indigo-950 focus:ring-indigo-500"
+                                : "border-violet-100 text-violet-950 focus:ring-violet-500"
                             )}
                             placeholder="0"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400">F</span>
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-violet-400">F</span>
                         </div>
                      </div>
                      <div className="w-20 flex flex-col items-center justify-center">
-                        <Label className="text-[8px] font-black uppercase text-indigo-600 leading-none">Not Spawned</Label>
-                        <span className="text-sm font-black text-indigo-700/60 mt-2">{tank.balanceCount}</span>
+                        <Label className="text-[8px] font-black uppercase text-violet-600 leading-none">Not Spawned</Label>
+                        <span className="text-sm font-black text-violet-700/60 mt-2">{tank.balanceCount}</span>
                      </div>
                   </div>
                </Card>
@@ -388,13 +445,13 @@ const SpawningForm = ({
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2">
-             <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-3 flex flex-col items-center">
-                <span className="text-[8px] font-black uppercase text-indigo-600 tracking-widest mb-1">Total Female Spawned</span>
-                <span className="text-xl font-black text-indigo-950">{totalFemaleSpawned}</span>
+             <div className="bg-violet-500/5 border border-violet-500/10 rounded-2xl p-3 flex flex-col items-center">
+                <span className="text-[8px] font-black uppercase text-violet-600 tracking-widest mb-1">Total Female Spawned</span>
+                <span className="text-xl font-black text-violet-950">{totalFemaleSpawned}</span>
              </div>
-             <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-3 flex flex-col items-center">
-                <span className="text-[8px] font-black uppercase text-indigo-600 tracking-widest mb-1">Total Females Not-spawned</span>
-                <span className="text-xl font-black text-indigo-950">{totalFemaleNotSpawned}</span>
+             <div className="bg-rose-500/5 border border-rose-500/10 rounded-2xl p-3 flex flex-col items-center">
+                <span className="text-[8px] font-black uppercase text-rose-600 tracking-widest mb-1">Total Females Not-spawned</span>
+                <span className="text-xl font-black text-rose-950">{totalFemaleNotSpawned}</span>
              </div>
           </div>
         </div>
@@ -435,7 +492,7 @@ const SpawningForm = ({
                   </div>
                   <div className="w-40 flex items-center gap-4">
                     <div className="flex-1">
-                       <Label className="text-[8px] font-black uppercase text-rose-600 block ml-1 mb-1">No. Shifted</Label>
+                       <Label className="text-[8px] font-black uppercase text-rose-600 block ml-1 mb-1">Return Count</Label>
                        <div className="relative">
                          <Input 
                              type="number" 

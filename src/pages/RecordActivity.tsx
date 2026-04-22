@@ -156,7 +156,7 @@ const RecordActivity = () => {
   }, [categoryParam]);
 
   useEffect(() => {
-    if (type && !activity && !editId && !instructionIdParam && !editInstructionId) {
+    if (type && !editId && !instructionIdParam && !editInstructionId) {
       const typeMap: Record<string, ActivityType> = {
         'feed': 'Feed',
         'treatment': 'Treatment',
@@ -319,8 +319,15 @@ const RecordActivity = () => {
   }, [isLiveTime, editId]);
 
   useEffect(() => {
+    const fetchBatches = async () => {
+      const currentFarmId = selectedFarmId || activeFarmId;
+      if (activeFarmCategory === 'MATURATION' && currentFarmId) {
+        await fetchAvailableBatches(currentFarmId);
+      }
+    };
+    fetchBatches();
     fetchTanks();
-  }, [user]);
+  }, [user, activity]);
 
   const fetchTanks = async () => {
     if (!user || !user.access) return;
@@ -1785,8 +1792,8 @@ const RecordActivity = () => {
         toast.error('Please enter females mated in at least one male tank');
         return;
       }
-      if (totalToSpawning !== totalMated) {
-        toast.error(`Animals shifted to spawning (${totalToSpawning}) must equal total mated (${totalMated})`);
+      if (Math.abs(totalToSpawning - totalMated) > 0.001) {
+        toast.error(`Spawning Allocation Error: You mated ${totalMated} females, but you are trying to shift ${totalToSpawning} to spawning tanks. These must match.`);
         return;
       }
       if (totalReturned !== nonMatedBalance) {
@@ -3062,20 +3069,31 @@ const RecordActivity = () => {
                                   }
                                   return true;
                                 })
-                                .map((t: any) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    <span className={`text-xs ${
-                                      activeFarmCategory === 'MATURATION' 
-                                        ? (t.name.toUpperCase().includes('_MT') ? 'text-blue-600 font-bold' : t.name.toUpperCase().includes('_FT') ? 'text-pink-600 font-bold' : '')
-                                        : ''
-                                    }`}>
-                                      {activeFarmCategory === 'MATURATION' && !sectionId 
-                                        ? `${availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id))?.name} - ${t.name}`
-                                        : t.name
-                                      }
-                                    </span>
-                                  </SelectItem>
-                                ));
+                                .map((t: any) => {
+                                  const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
+                                  const sectionType = section?.section_type?.toUpperCase();
+                                  const sName = (section?.name || '').toUpperCase();
+                                  const tName = (t.name || '').toUpperCase();
+
+                                  let colorClass = '';
+                                  if (activeFarmCategory === 'MATURATION') {
+                                    if (tName.includes('_MT')) colorClass = 'text-blue-600 font-bold';
+                                    else if (tName.includes('_FT')) colorClass = 'text-pink-600 font-bold';
+                                    else if (sectionType === 'SPAWNING' || sName.includes('SPAWN') || tName.includes('_ST') || tName.includes('_SS')) colorClass = 'text-violet-600 font-bold';
+                                    else if (sectionType === 'NAUPLII' || sName.includes('NAUPLII') || sName.includes('HARVEST') || tName.includes('_NH') || tName.includes('_NS')) colorClass = 'text-amber-600 font-bold';
+                                  }
+
+                                  return (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      <span className={`text-xs ${colorClass}`}>
+                                        {activeFarmCategory === 'MATURATION' && !sectionId 
+                                          ? `${section?.name} - ${t.name}`
+                                          : t.name
+                                        }
+                                      </span>
+                                    </SelectItem>
+                                  );
+                                });
                             })()}
                           </SelectContent>
                         </Select>
@@ -3130,11 +3148,19 @@ const RecordActivity = () => {
                           }`}
                         >
                           <Checkbox checked={selectedTankIds.includes(t.id)} className="pointer-events-none" />
-                          <span className={`text-xs break-all ${
-                            activeFarmCategory === 'MATURATION' && t.name
-                              ? (t.name.toUpperCase().includes('_MT') ? 'text-blue-600 font-bold' : t.name.toUpperCase().includes('_FT') ? 'text-pink-600 font-bold' : '')
-                              : ''
-                          }`}>
+                          <span className={`text-xs break-all ${(() => {
+                            if (activeFarmCategory !== 'MATURATION') return '';
+                            const tName = (t.name || '').toUpperCase();
+                            const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
+                            const sectionType = section?.section_type?.toUpperCase();
+                            const sName = (section?.name || '').toUpperCase();
+
+                            if (tName.includes('_MT')) return 'text-blue-600 font-bold';
+                            if (tName.includes('_FT')) return 'text-pink-600 font-bold';
+                            if (sectionType === 'SPAWNING' || sName.includes('SPAWN') || tName.includes('_ST') || tName.includes('_SS')) return 'text-violet-600 font-bold';
+                            if (sectionType === 'NAUPLII' || sName.includes('NAUPLII') || sName.includes('HARVEST') || tName.includes('_NH') || tName.includes('_NS')) return 'text-amber-600 font-bold';
+                            return '';
+                          })()}`}>
                             {t.name}
                           </span>
                         </div>

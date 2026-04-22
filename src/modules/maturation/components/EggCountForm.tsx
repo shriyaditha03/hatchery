@@ -59,10 +59,21 @@ const EggCountForm = ({
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalBatchSpawned || 0);
+  const [existingHarvests, setExistingHarvests] = useState<any[]>([]);
+  const [existingSales, setExistingSales] = useState<any[]>([]);
 
   const isSupervisor = user?.role === 'owner' || user?.role === 'supervisor';
   const isEditing = !!searchParams.get('edit') || !!data.id;
-  const canEdit = isSupervisor || !isEditing;
+  
+  // Check if any downstream activity exists (Harvest or Sale)
+  const isBatchClosed = useMemo(() => {
+    if (!selectedBatchId) return false;
+    const hasHarvest = (existingHarvests || []).some(h => (h.data?.selectedBatchId || h.data?.batchId) === selectedBatchId);
+    const hasSale = (existingSales || []).some(s => (s.data?.selectedBatchId || s.data?.sourceBatchId) === selectedBatchId);
+    return hasHarvest || hasSale;
+  }, [existingHarvests, existingSales, selectedBatchId]);
+
+  const canEdit = isSupervisor || (!isEditing && !isBatchClosed);
 
   const lockedBatchIds = useMemo(() => {
     return (existingEggCounts || []).map(l => 
@@ -110,6 +121,32 @@ const EggCountForm = ({
         
         const { data: eggLogs } = await eggQuery;
         setExistingEggCounts(eggLogs || []);
+
+        // 3. Fetch Harvest and Sale logs to check for batch closure
+        let harvestCheckQuery = supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Nauplii Harvest');
+        
+        let saleCheckQuery = supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Nauplii Sale');
+        
+        if (activeBroodstockBatchId) {
+          harvestCheckQuery = harvestCheckQuery.eq('stocking_id', activeBroodstockBatchId);
+          saleCheckQuery = saleCheckQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const [{ data: hLogs }, { data: sLogs }] = await Promise.all([
+          harvestCheckQuery,
+          saleCheckQuery
+        ]);
+
+        setExistingHarvests(hLogs || []);
+        setExistingSales(sLogs || []);
         
         // Final sanity filter in JS
         const filtered = (logs || []).filter(l => {
@@ -307,7 +344,7 @@ const EggCountForm = ({
           <ShieldAlert className="w-5 h-5 text-amber-600" />
           <div>
             <p className="text-xs font-black uppercase tracking-widest">Read-Only Mode</p>
-            <p className="text-[10px] font-medium opacity-80">This egg count record can only be edited by a supervisor.</p>
+            <p className="text-[10px] font-medium opacity-80">This {isBatchClosed ? 'finalized' : ''} record can only be edited by a supervisor.</p>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Calculator, Database, Loader2, AlertCircle, ArrowRight, FlaskConical, Beaker, ClipboardList, Camera, Info, Sparkles, TrendingUp, CheckCircle2, ListChecks, Layers } from 'lucide-react';
+import { Plus, PlusCircle, Trash2, Calculator, Database, DatabaseIcon, Loader2, AlertCircle, ArrowRight, FlaskConical, Beaker, ClipboardList, Camera, Info, Sparkles, TrendingUp, CheckCircle2, ListChecks, Layers, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import RatingScale from '@/modules/shared/components/RatingScale';
@@ -12,6 +12,9 @@ import { ANIMAL_RATING_FIELDS } from '@/modules/shared/constants/activity';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 interface HarvestTankEntry {
   id: string;
@@ -55,6 +58,9 @@ const NaupliiHarvestForm = ({
   activeBroodstockBatchId,
   tankPopulations = {},
 }: NaupliiHarvestFormProps) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [batchLogs, setBatchLogs] = useState<any[]>([]);
   const [existingHarvests, setExistingHarvests] = useState<any[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
@@ -65,6 +71,22 @@ const NaupliiHarvestForm = ({
   const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalBatchSpawned || 0);
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>(data.selectionScope || 'custom');
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
+  const [perTankEggCounts, setPerTankEggCounts] = useState<Record<string, string>>({}); // tankId -> eggCountMil
+  const [existingSales, setExistingSales] = useState<any[]>([]);
+
+  const isSupervisor = user?.role === 'owner' || user?.role === 'supervisor';
+  const isEditing = !!searchParams.get('edit') || !!data.id;
+
+  // Check if a sale already exists for this batch
+  const isBatchAlreadySold = useMemo(() => {
+    if (!selectedBatchId) return false;
+    return (existingSales || []).some(sale => {
+      const saleBatchId = sale.data?.selectedBatchId || sale.data?.sourceBatchId;
+      return saleBatchId === selectedBatchId;
+    });
+  }, [existingSales, selectedBatchId]);
+
+  const canEdit = isSupervisor || (!isEditing && !isBatchAlreadySold);
 
   const updateData = (updates: any) => {
     onDataChange({ ...data, ...updates });
@@ -158,6 +180,43 @@ const NaupliiHarvestForm = ({
         
         const { data: harvestLogs } = await harvestQuery;
         setExistingHarvests(harvestLogs || []);
+
+        // 3. Fetch Egg Count logs to extract per-tank egg references
+        let eggDetailQuery = supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Egg Count');
+        
+        if (activeBroodstockBatchId) {
+          eggDetailQuery = eggDetailQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const { data: eggDetailLogs } = await eggDetailQuery;
+        const eggMap: Record<string, string> = {};
+        (eggDetailLogs || []).forEach(log => {
+          const batchEntries = log.data?.entries || [];
+          batchEntries.forEach((e: any) => {
+            if (e.tankId && e.totalEggsMillions) {
+              eggMap[e.tankId] = e.totalEggsMillions;
+            }
+          });
+        });
+        setPerTankEggCounts(eggMap);
+
+        // 4. Fetch Sale logs to check for batch closure
+        let saleCheckQuery = supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('farm_id', farmId)
+          .eq('activity_type', 'Nauplii Sale');
+        
+        if (activeBroodstockBatchId) {
+          saleCheckQuery = saleCheckQuery.eq('stocking_id', activeBroodstockBatchId);
+        }
+
+        const { data: saleLogs } = await saleCheckQuery;
+        setExistingSales(saleLogs || []);
 
         // Final sanity filter in JS
         const filtered = (logs || []).filter(l => {
@@ -263,6 +322,12 @@ const NaupliiHarvestForm = ({
     }
   };
 
+  const goToActivity = (type: string) => {
+    const portal = user?.role === 'owner' ? 'owner' : 'user';
+    const url = `/${portal}/activity/${type}?mode=activity&category=MATURATION${farmId ? `&farm=${farmId}` : ''}`;
+    navigate(url);
+  };
+
   const handleHarvestChange = (id: string, updates: any) => {
     const newList = harvestTanks.map(t => t.id === id ? { ...t, ...updates } : t);
     setHarvestTanks(newList);
@@ -311,14 +376,14 @@ const NaupliiHarvestForm = ({
     const hatchability = totalEggsInBatch > 0 ? (totalHarvested / totalEggsInBatch) * 100 : 0;
     
     updateData({
-      totalHarvested: Math.round(totalHarvested * 100) / 100,
-      totalShifted: Math.round(totalShifted * 100) / 100,
+      totalHarvested: Math.round(totalHarvested * 1000) / 1000,
+      totalShifted: Math.round(totalShifted * 1000) / 1000,
       hatchability: Math.round(hatchability * 100) / 100,
       summary: {
         totalBatchEggs: totalEggsInBatch,
         totalBatchSpawned: totalSpawnedInBatch,
-        totalHarvested: Math.round(totalHarvested * 100) / 100,
-        totalShifted: Math.round(totalShifted * 100) / 100,
+        totalHarvested: Math.round(totalHarvested * 1000) / 1000,
+        totalShifted: Math.round(totalShifted * 1000) / 1000,
         hatchability: Math.round(hatchability * 100) / 100,
         naupliiPerAnimal: totalSpawnedInBatch > 0 ? totalHarvested / totalSpawnedInBatch : 0
       }
@@ -326,7 +391,17 @@ const NaupliiHarvestForm = ({
   }, [harvestTanks, shiftingTanks, totalEggsInBatch, totalSpawnedInBatch]);
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className={cn("space-y-6 animate-fade-in-up", !canEdit && "opacity-80 pointer-events-none select-none")}>
+      {!canEdit && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-in zoom-in-95 duration-300 pointer-events-auto">
+          <ShieldAlert className="w-5 h-5 text-amber-600" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest">Read-Only Mode</p>
+            <p className="text-[10px] font-medium opacity-80">This {isBatchAlreadySold ? 'finalized' : ''} record can only be edited by a supervisor.</p>
+          </div>
+        </div>
+      )}
+
       {activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between shadow-sm border-l-4 border-l-red-500">
            <div className="flex items-center gap-3">
@@ -352,45 +427,70 @@ const NaupliiHarvestForm = ({
             <div className="p-2 bg-indigo-100 rounded-xl">
               <Database className="w-4 h-4 text-indigo-600" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Egg Count Batch</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Nauplii Production Batch</h3>
           </div>
           
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold ml-1 text-muted-foreground uppercase tracking-widest leading-none">Choose Batch *</Label>
-            {batchLogs.length === 0 && !loadingBatches ? (
-                 <div className="p-8 text-center bg-amber-50 border border-amber-100 rounded-3xl space-y-3 animate-in fade-in zoom-in-95" id="empty-batch-state">
-                    <div className="flex flex-col items-center gap-2">
-                       <AlertCircle className="w-8 h-8 text-amber-600" />
-                       <p className="text-sm font-black uppercase text-amber-900 leading-tight">No Nauplii Production Batch updated</p>
-                       <p className="text-[10px] text-amber-700/70 max-w-[280px]">Please complete Egg Count for this broodstock batch first.</p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 max-w-md mx-auto pt-2">
-                       <Button variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=sourcing-mating&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Sourcing & Mating</Button>
-                       <Button variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Spawning&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Record Spawning</Button>
-                       <Button variant="outline" size="sm" onClick={() => window.location.href='/user/activity?type=Egg%20Count&mode=activity&category=MATURATION'} className="text-[9px] h-8 font-black uppercase border-amber-200">Record Egg Count</Button>
-                    </div>
-                 </div>
-            ) : (
-              <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
-                 <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
-                   <SelectValue placeholder="Search Batch ID" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   {loadingBatches ? (
-                     <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
-                   ) : (
-                     availableBatches.map(log => {
-                       const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
-                       return (
-                         <SelectItem key={log.id} value={bn}>
-                           <span className="font-bold">{bn}</span>
-                           <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
-                         </SelectItem>
-                       );
-                     })
-                   )}
-                 </SelectContent>
-              </Select>
+          <div className="space-y-4">
+            <Select value={selectedBatchId} onValueChange={handleBatchSelect}>
+                <SelectTrigger className="h-12 rounded-2xl border-indigo-100 bg-background/50 text-sm font-black text-indigo-900 focus:ring-indigo-500">
+                  <SelectValue placeholder="Search Batch ID" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingBatches ? (
+                    <div className="p-4 text-center"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading...</div>
+                  ) : (
+                    availableBatches.map(log => {
+                      const bn = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+                      return (
+                        <SelectItem key={log.id} value={bn}>
+                          <span className="font-bold">{bn}</span>
+                          <span className="ml-2 opacity-50 text-[10px]">({new Date(log.created_at).toLocaleDateString()})</span>
+                        </SelectItem>
+                      );
+                    })
+                  )}
+                </SelectContent>
+            </Select>
+
+            {!loadingBatches && availableBatches.length === 0 && (
+                <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full mt-4">
+                  <div className="p-3 bg-amber-100 rounded-2xl">
+                    <AlertCircle className="w-8 h-8 text-amber-600" />
+                  </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-black uppercase tracking-tight">No Nauplii Production Batch updated</p>
+                    <p className="text-[11px] text-amber-700/70 font-medium leading-tight max-w-[240px]">
+                      Please complete "Egg Count" for this broodstock batch first.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 w-full mt-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-11 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-black text-xs uppercase gap-2 w-full shadow-sm"
+                        onClick={() => goToActivity('sourcing-mating')}
+                      >
+                        <PlusCircle className="w-4 h-4" /> Record Sourcing & Mating
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-11 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-black text-xs uppercase gap-2 w-full shadow-sm"
+                        onClick={() => goToActivity('spawning')}
+                      >
+                        <PlusCircle className="w-4 h-4" /> Record Spawning
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-11 rounded-xl border-amber-200 bg-white text-amber-700 hover:bg-amber-100 font-black text-xs uppercase gap-2 w-full shadow-sm"
+                        onClick={() => goToActivity('egg-count')}
+                      >
+                        <PlusCircle className="w-4 h-4" /> Record Egg Count
+                      </Button>
+                  </div>
+                </div>
             )}
           </div>
         </div>
@@ -411,7 +511,15 @@ const NaupliiHarvestForm = ({
                 <Card key={tank.id} className="p-4 bg-indigo-50/40 border-indigo-100 shadow-sm rounded-2xl flex items-center justify-between gap-4 group hover:bg-indigo-50/60 transition-colors">
                   <div className="flex-1">
                      <p className="text-xs font-black text-indigo-950">{tank.tankName}</p>
-                     <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60">Spawning Tank</p>
+                     <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[9px] font-bold text-indigo-600 uppercase opacity-60">Spawning Tank</p>
+                        {perTankEggCounts[tank.tankId] && (
+                          <div className="flex items-center gap-1 bg-indigo-500/10 px-1.5 py-0.5 rounded-md border border-indigo-200/50">
+                             <Database className="w-2 h-2 text-indigo-600" />
+                             <span className="text-[8px] font-black text-indigo-700 uppercase">Eggs: {perTankEggCounts[tank.tankId]}M</span>
+                          </div>
+                        )}
+                     </div>
                   </div>
                   
                   <div className="w-32">
@@ -445,7 +553,7 @@ const NaupliiHarvestForm = ({
           {harvestTanks.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
                <Label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Total Nauplii Harvested</Label>
-               <span className="text-lg font-black text-indigo-950">{data.totalHarvested?.toLocaleString()}M</span>
+               <span className="text-lg font-black text-indigo-950">{(data.totalHarvested || 0).toFixed(3)}M</span>
             </div>
           )}
         </div>

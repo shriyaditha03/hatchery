@@ -303,19 +303,16 @@ const SourcingMatingForm = ({
       setEditedFields(prev => ({ ...prev, [`mated_dest_${idOrTankId}`]: true }));
     }
     setMatedDestinations(newList);
-    updateData({ matedDestinations: newList });
   };
 
   const addReturnDestination = () => {
     const newList = [...returnDestinations, { id: Date.now().toString(), tankId: '', count: '' }];
     setReturnDestinations(newList);
-    updateData({ returnDestinations: newList });
   };
 
   const removeReturnDestination = (id: string) => {
     const newList = returnDestinations.filter(d => d.id !== id);
     setReturnDestinations(newList);
-    updateData({ returnDestinations: newList });
   };
 
   const handleReturnDestinationChange = (idOrTankId: string, updates: any, isManual = false) => {
@@ -326,7 +323,6 @@ const SourcingMatingForm = ({
       setEditedFields(prev => ({ ...prev, [`return_dest_${idOrTankId}`]: true }));
     }
     setReturnDestinations(newList);
-    updateData({ returnDestinations: newList });
   };
 
   const totalSourcedFromStep1 = sourceTanks.reduce((sum, s) => sum + (parseFloat(s.femaleCount) || 0), 0);
@@ -351,21 +347,21 @@ const SourcingMatingForm = ({
           balance: Math.max(0, totalSourcedFromStep1 - (parseFloat(t.femalesMated) || 0))
         } : t);
         setMatingTanks(newList);
-        onDataChange({ ...data, matingTanks: newList });
       }
     }
-  }, [totalSourcedFromStep1, matingTanks.length]);
+  }, [totalSourcedFromStep1, matingTanks.length, editedFields]);
 
   // 2. Field 2 (Mated/Balance) -> Field 3 (Destinations)
   useEffect(() => {
     // a) Mated -> Spawning
-    if (matedDestinations.length === 1 && totalFemalesMatedAcrossTanks > 0) {
+    // a) Mated -> Spawning
+    if (matedDestinations.length === 1) {
       const dest = matedDestinations[0];
       const fieldKey = `mated_dest_${dest.id}`;
-      if (!editedFields[fieldKey] && dest.count !== totalFemalesMatedAcrossTanks.toString()) {
-        const newList = matedDestinations.map(d => d.id === dest.id ? { ...d, count: totalFemalesMatedAcrossTanks.toString() } : d);
+      const targetCount = totalFemalesMatedAcrossTanks.toString();
+      if (!editedFields[fieldKey] && dest.count !== targetCount) {
+        const newList = matedDestinations.map(d => d.id === dest.id ? { ...d, count: targetCount } : d);
         setMatedDestinations(newList);
-        onDataChange({ ...data, matedDestinations: newList });
       }
     }
     // b) Balance -> Return
@@ -375,31 +371,42 @@ const SourcingMatingForm = ({
       if (mainSource) {
         const newList = [{ id: Date.now().toString(), tankId: mainSource.tankId, count: totalBalanceNonMated.toString() }];
         setReturnDestinations(newList);
-        onDataChange({ ...data, returnDestinations: newList });
       }
-    } else if (returnDestinations.length === 1 && totalBalanceNonMated > 0) {
+    } else if (returnDestinations.length === 1) {
       const dest = returnDestinations[0];
       const fieldKey = `return_dest_${dest.id}`;
-      if (!editedFields[fieldKey] && dest.count !== totalBalanceNonMated.toString()) {
-        const newList = returnDestinations.map(d => d.id === dest.id ? { ...d, count: totalBalanceNonMated.toString() } : d);
+      const targetCount = totalBalanceNonMated.toString();
+      if (!editedFields[fieldKey] && dest.count !== targetCount) {
+        const newList = returnDestinations.map(d => d.id === dest.id ? { ...d, count: targetCount } : d);
         setReturnDestinations(newList);
-        onDataChange({ ...data, returnDestinations: newList });
       }
     }
-  }, [totalFemalesMatedAcrossTanks, totalBalanceNonMated, matedDestinations.length, returnDestinations.length, sourceTanks]);
+  }, [totalFemalesMatedAcrossTanks, totalBalanceNonMated, matedDestinations.length, returnDestinations.length, sourceTanks, editedFields]);
 
-  // Original summary sync
+  // 3. MASTER SYNC TO PARENT
   useEffect(() => {
-    const updates: any = {};
-    if (data.totalSourced !== totalSourcedFromStep1) updates.totalSourced = totalSourcedFromStep1;
-    if (data.matedCount !== totalFemalesMatedAcrossTanks) updates.matedCount = totalFemalesMatedAcrossTanks;
-    if (data.balanceCount !== totalBalanceNonMated) updates.balanceCount = totalBalanceNonMated;
-    if (data.totalShifted !== totalShifted) updates.totalShifted = totalShifted;
-    
-    if (Object.keys(updates).length > 0) {
-      updateData(updates);
+    const nextData = {
+      ...data,
+      batchNumber,
+      sourceTanks,
+      matingTanks,
+      matedDestinations,
+      returnDestinations,
+      totalSourced: totalSourcedFromStep1,
+      matedCount: totalFemalesMatedAcrossTanks,
+      balanceCount: totalBalanceNonMated,
+      totalShifted,
+      summary: {
+        totalSourced: totalSourcedFromStep1,
+        totalMated: totalFemalesMatedAcrossTanks,
+        totalBalance: totalBalanceNonMated
+      }
+    };
+
+    if (JSON.stringify(nextData) !== JSON.stringify(data)) {
+      onDataChange(nextData);
     }
-  }, [totalSourcedFromStep1, totalFemalesMatedAcrossTanks, totalBalanceNonMated, totalShifted]);
+  }, [batchNumber, sourceTanks, matingTanks, matedDestinations, returnDestinations, totalSourcedFromStep1, totalFemalesMatedAcrossTanks, totalBalanceNonMated, totalShifted]);
 
   // Options filtering
   const matingTanksOptions = availableTanks
@@ -462,7 +469,6 @@ const SourcingMatingForm = ({
         };
       });
       if (JSON.stringify(nextDests) !== JSON.stringify(prev)) {
-        setTimeout(() => onDataChange({ ...data, matedDestinations: nextDests }), 0);
         return nextDests;
       }
       return prev;
@@ -483,7 +489,6 @@ const SourcingMatingForm = ({
          };
       });
       if (JSON.stringify(nextReturns) !== JSON.stringify(prev)) {
-         setTimeout(() => onDataChange({ ...data, returnDestinations: nextReturns }), 0);
          return nextReturns;
       }
       return prev;
@@ -642,9 +647,10 @@ const SourcingMatingForm = ({
               <Card key={mating.id} className="p-4 bg-blue-50/40 border-blue-100 shadow-sm rounded-2xl space-y-4 relative group hover:bg-blue-50/60 transition-colors">
                 <div className="flex items-center justify-between border-b border-blue-100/30 pb-3">
                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-white rounded-lg border border-blue-100 shadow-sm">
-                         <p className="text-sm font-black text-blue-900 leading-none">{mating.tankName}</p>
-                      </div>
+                       <div className="flex flex-col">
+                          <span className="text-[9px] font-black uppercase text-indigo-600/70 tracking-widest leading-none">Male Tank</span>
+                          <span className="text-base font-black text-indigo-950 mt-0.5 tracking-tight">{mating.tankName}</span>
+                       </div>
                       <div className="flex flex-col">
                          <span className="text-[9px] font-black uppercase text-blue-600/70 tracking-widest leading-none">Male Animals</span>
                          <span className="text-base font-black text-blue-950 mt-0.5">{mating.maleCount} (M)</span>
@@ -761,22 +767,22 @@ const SourcingMatingForm = ({
           {/* 3a: Spawning Tanks - Auto-populated */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 bg-indigo-100 rounded-lg">
-                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+              <div className="p-1.5 bg-violet-100 rounded-lg">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-violet-600" />
               </div>
-              <Label className="text-[10px] font-black uppercase text-indigo-700">Mated Animals → Spawning Tanks</Label>
+              <Label className="text-[10px] font-black uppercase text-violet-700">Mated Animals → Spawning Tanks</Label>
             </div>
-            <div className="px-1 text-[8px] text-indigo-400 font-bold mb-1">Only empty spawning tanks shown</div>
+            <div className="px-1 text-[8px] text-violet-400 font-bold mb-1">Only empty spawning tanks shown</div>
             {matedDestinations.length === 0 && (
               <p className="text-[10px] text-muted-foreground italic text-center py-4 border border-dashed rounded-xl">
                 No empty spawning tanks available
               </p>
             )}
             {matedDestinations.map(dest => (
-              <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-indigo-50/40 border border-indigo-100 rounded-xl">
+              <div key={dest.tankId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-violet-50/40 border border-violet-100 rounded-xl">
                 <div>
-                  <p className="text-xs font-black text-indigo-900 leading-none">{dest.tankName}</p>
-                  <p className="text-[9px] text-indigo-400 font-bold uppercase mt-0.5">Spawning Tank</p>
+                  <p className="text-xs font-black text-violet-900 leading-none">{dest.tankName}</p>
+                  <p className="text-[9px] text-violet-400 font-bold uppercase mt-0.5">Spawning Tank</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative w-24">
@@ -785,10 +791,10 @@ const SourcingMatingForm = ({
                       min="0"
                       value={dest.count}
                       onChange={e => handleMatedDestinationChange(dest.tankId, { count: e.target.value }, true)}
-                      className="h-9 rounded-xl text-center font-bold border-indigo-200 bg-white text-indigo-900 pr-6 text-sm focus:border-indigo-500 shadow-sm placeholder:font-medium placeholder:opacity-30"
+                      className="h-9 rounded-xl text-center font-bold border-violet-200 bg-white text-violet-900 pr-6 text-sm focus:border-violet-500 shadow-sm placeholder:font-medium placeholder:opacity-30"
                       placeholder="0"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400">F</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-violet-400">F</span>
                   </div>
                 </div>
               </div>
@@ -833,7 +839,7 @@ const SourcingMatingForm = ({
              ))}
           </div>
 
-          <div className="bg-indigo-600 rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-indigo-100">
+          <div className="bg-violet-600 rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-violet-100">
              <div className="flex items-center gap-3">
                 <div className="bg-white/20 p-2 rounded-xl">
                    <Wand2 className="w-4 h-4 text-white" />
