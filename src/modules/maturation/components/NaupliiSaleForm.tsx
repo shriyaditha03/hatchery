@@ -449,7 +449,7 @@ const NaupliiSaleForm = ({
 
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Step # 3 Amount for sale (mil) *</Label>
+                        <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Number of Nauplii in Million – Sold (Gross) *</Label>
                         <div className="relative">
                           <Input 
                             type="number" 
@@ -467,7 +467,7 @@ const NaupliiSaleForm = ({
                         </div>
                      </div>
                      <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">Step # 6 Discarded amount (mil)</Label>
+                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">Number of Nauplii in Mil - Discarded (Gross)</Label>
                         <div className="relative">
                           <Input 
                             type="number" 

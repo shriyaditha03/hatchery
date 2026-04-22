@@ -229,9 +229,10 @@ const RecordActivity = () => {
     summary: { totalEggs: 0, totalFertilized: 0, avgFertilization: 0, eggsPerAnimal: 0 }
   });
   const [naupliiHarvestData, setNaupliiHarvestData] = useState<any>({
-    sources: [{ id: '1', tankId: '', tankName: '', population: '' }],
-    destinations: [{ id: '1', tankId: '', tankName: '', population: '' }],
-    summary: { totalHarvested: 0, totalDistributed: 0, balance: 0 }
+    selectedBatchId: '',
+    harvestTanks: [],
+    naupliiDestinations: [],
+    summary: { totalHarvested: 0, totalShifted: 0, totalBatchEggs: 0, totalBatchSpawned: 0, hatchability: 0, naupliiPerAnimal: 0 }
   });
   const [naupliiSaleData, setNaupliiSaleData] = useState<any>({
     saleTanks: [],
@@ -3712,7 +3713,6 @@ const RecordActivity = () => {
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
             availableTanks={availableTanks}
-            activeSectionId={selectedSectionId || activeSectionId}
             farmId={selectedFarmId || activeFarmId || ''}
             activeBroodstockBatchId={activeBroodstockBatchId}
             tankPopulations={tankPopulations}
