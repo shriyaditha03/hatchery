@@ -684,7 +684,7 @@ const StockingForm = ({
       {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-2 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-            Animal Condition Quality
+            Animal Condition Quality *
             {avg > 0 && <span className="text-primary">{avg.toFixed(1)} / 10</span>}
           </Label>
           <Dialog>
@@ -764,7 +764,7 @@ const StockingForm = ({
       {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-4 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-            Water Condition Quality
+            Water Condition Quality *
             {waterDataAvg > 0 && <span className="text-primary">{waterDataAvg.toFixed(1)} / 10</span>}
           </Label>
           <Dialog>

@@ -100,7 +100,7 @@ const NaupliiSaleForm = ({
 
   // A batch is "locked" (closed) only if it's fully sold/discarded
   const completedHarvestIds = useMemo(() => {
-    // Let's create a map of batchId -> processedAmount
+    // 1. Create a map of batchId -> processedAmount (from existing sales)
     const processedMap: Record<string, number> = {};
     (existingSales || []).forEach(sale => {
       const bId = sale.data?.selectedBatchId || sale.data?.sourceBatchId;
@@ -111,13 +111,24 @@ const NaupliiSaleForm = ({
       }
     });
 
+    // 2. Map harvest batches to their total harvested amounts (from harvest logs)
+    const harvestTotalsMap: Record<string, number> = {};
+    batchLogs.forEach(log => {
+      const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
+      if (bId) {
+        harvestTotalsMap[bId] = log.data?.summary?.totalHarvested || 0;
+      }
+    });
+
+    // 3. A batch is completed if processed amount >= harvested amount
     return Object.keys(processedMap).filter(bId => {
       if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
-      return (existingSales || []).some(s => 
-        (s.data?.selectedBatchId === bId || s.data?.sourceBatchId === bId)
-      );
+      const harvested = harvestTotalsMap[bId] || 0;
+      const processed = processedMap[bId] || 0;
+      // Consider it closed if processed >= harvested (within a small tolerance)
+      return harvested > 0 && processed >= (harvested - 0.001);
     });
-  }, [existingSales, data.id, data.selectedBatchId, data.sourceBatchId]);
+  }, [existingSales, batchLogs, data.id, data.selectedBatchId, data.sourceBatchId]);
 
   const availableBatches = useMemo(() => {
     const filtered = batchLogs.filter(log => {
@@ -365,6 +376,9 @@ const NaupliiSaleForm = ({
 
     const efficiency = totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0;
 
+    const currentProcessed = metrics.totalSale + metrics.totalDiscard;
+    const isBatchClosed = Math.abs(totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)) < 0.005;
+
     updateData({
       totalGross: Math.round(metrics.totalSale * 1000) / 1000,
       totalDiscard: Math.round(metrics.totalDiscard * 1000) / 1000,
@@ -372,13 +386,13 @@ const NaupliiSaleForm = ({
       packsPacked,
       netNauplii: netSaleManual ? parseFloat(netSaleManual) : Math.round(calculatedNet * 1000) / 1000,
       sourceBatchId: selectedBatchId,
-      isBatchClosed: true,
+      isBatchClosed: isBatchClosed,
       summary: {
         totalSaleMil: metrics.totalSale,
         totalDiscardMil: metrics.totalDiscard,
         netSaleMil: netSaleManual ? parseFloat(netSaleManual) : metrics.totalSale,
         totalAvailable: totalHarvestedInBatch,
-        remainingInBatch: 0, 
+        remainingInBatch: Math.max(0, totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)), 
         totalSpawned: totalSpawnedInBatch,
         naupliiPerAnimal: Math.round(efficiency * 1000) / 1000
       }
@@ -547,7 +561,7 @@ const NaupliiSaleForm = ({
               </div>
               
               <div className="space-y-4">
-                {saleTanks.map((tank) => (
+                {saleTanks.filter(tank => (tank.currentPopulation > 0 || isEditing)).map((tank) => (
                   <Card key={tank.id} className={cn("p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors overflow-hidden")}>
                     <div className="flex items-center justify-between px-2">
                       <div>

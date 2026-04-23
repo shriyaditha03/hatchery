@@ -1603,11 +1603,7 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Observation') {
-      // Normalize: provide default maximum scores if missing (for easier recording/tests)
       normalizedData = { ...observationData };
-      if (!normalizedData.animalQualityScore) normalizedData.animalQualityScore = 10.0;
-      if (!normalizedData.waterQualityScore) normalizedData.waterQualityScore = 10.0;
-
       const isMaturation = activeFarmCategory === 'MATURATION';
 
       if (isMaturation && !editId) {
@@ -1617,6 +1613,12 @@ const RecordActivity = () => {
           toast.error('Please select at least one tank');
           return;
         }
+
+        // Also validate quality scores for Maturation Observation
+        if (!normalizedData.animalQualityScore || !normalizedData.waterQualityScore) {
+          toast.error('Animal and Water Quality assessments are required');
+          return;
+        }
       } else {
         const requiredFields = isMaturation
             ? ['animalQualityScore', 'waterQualityScore', 'presentPopulationM', 'presentPopulationF']
@@ -1624,11 +1626,11 @@ const RecordActivity = () => {
 
         const missing = requiredFields.filter(f => {
             const val = normalizedData[f];
-            return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim());
+            return val === undefined || val === null || val === '' || (typeof val === 'string' && !val.trim()) || val === 0;
         });
 
         if (missing.length > 0) {
-          toast.error('Please fill in all observation details');
+          toast.error('Please fill in all observation details (including Quality assessments)');
           return;
         }
       }
@@ -2410,14 +2412,14 @@ const RecordActivity = () => {
 
           // Special bulk save for Nauplii Sale (clear Nauplii tanks)
           if (activity === 'Nauplii Sale') {
-            const { saleTanks } = currentBuildData;
+            const { saleTanks, isBatchClosed } = currentBuildData;
             
             const salePromises = (saleTanks || []).map(async (t: any) => {
               const qty = (parseFloat(t.saleMil) || 0) + (parseFloat(t.discardMil) || 0);
               if (qty <= 0 || !t.tankId) return null;
               
               const currentPop = tankPopulations[t.tankId] || 0;
-              const newPop = Math.max(0, currentPop - qty);
+              const newPop = isBatchClosed ? 0 : Math.max(0, currentPop - qty);
 
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
               return addActivity({
@@ -2443,7 +2445,7 @@ const RecordActivity = () => {
               if (!t.tankId) return null;
               const qty = (parseFloat(t.saleMil) || 0) + (parseFloat(t.discardMil) || 0);
               const currentPop = tankPopulations[t.tankId] || 0;
-              const finalPop = Math.max(0, currentPop - qty);
+              const finalPop = isBatchClosed ? 0 : Math.max(0, currentPop - qty);
               
               const sec = availableTanks.find(sect => sect.tanks.some((tk: any) => tk.id === t.tankId));
               return addActivity({
@@ -2788,9 +2790,9 @@ const RecordActivity = () => {
                     if (!displayId) return null;
 
                     return (
-                      <span className="ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold">
-                        <Database className="w-3 h-3" />
-                        BS ID: {displayId}
+                      <span className="mt-1.5 sm:mt-0 sm:ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold max-w-full overflow-hidden">
+                        <Database className="w-3 h-3 shrink-0" />
+                        <span className="truncate">BS ID: {displayId}</span>
                       </span>
                     );
                   })()
@@ -2853,7 +2855,7 @@ const RecordActivity = () => {
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label className="text-xs">Date</Label>
               <Input
                 type="date"
@@ -2862,27 +2864,25 @@ const RecordActivity = () => {
                   setDate(e.target.value);
                   setIsLiveTime(false);
                 }}
-                className="h-11 border-muted-foreground/20 focus:border-primary/50"
+                className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label className="text-xs">Time</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="time"
-                  value={time}
-                  onChange={e => {
-                    setTime(e.target.value);
-                    setIsLiveTime(false);
-                    // Update AM/PM based on 24h input
-                    const [h] = e.target.value.split(':').map(Number);
-                    if (!isNaN(h)) {
-                      setAmpm(h >= 12 ? 'PM' : 'AM');
-                    }
-                  }}
-                  className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
-                />
-              </div>
+              <Input
+                type="time"
+                value={time}
+                onChange={e => {
+                  setTime(e.target.value);
+                  setIsLiveTime(false);
+                  // Update AM/PM based on 24h input
+                  const [h] = e.target.value.split(':').map(Number);
+                  if (!isNaN(h)) {
+                    setAmpm(h >= 12 ? 'PM' : 'AM');
+                  }
+                }}
+                className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
+              />
             </div>
           </div>
           {(activity === 'Feed' || activity === 'Treatment') && (

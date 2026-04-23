@@ -318,7 +318,7 @@ const ObservationForm = ({
             {/* Animal Quality */}
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-                Animal Condition Quality
+                Animal Condition Quality *
                 {animalAvg > 0 && <span className="text-primary">{animalAvg.toFixed(1)} / 10</span>}
               </Label>
               <Dialog>
@@ -395,7 +395,7 @@ const ObservationForm = ({
             {/* Water Quality */}
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-                Water Condition Quality
+                Water Condition Quality *
                 {waterAvg > 0 && <span className="text-primary">{waterAvg.toFixed(1)} / 10</span>}
               </Label>
               <Dialog>
@@ -655,7 +655,7 @@ const ObservationForm = ({
 
           <div className="space-y-4 pt-4 border-t border-dashed">
             <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-              Animal Condition Quality
+              Animal Condition Quality *
               {animalAvg > 0 && <span className="text-primary">{animalAvg.toFixed(1)} / 10</span>}
             </Label>
             <Dialog>
@@ -725,7 +725,7 @@ const ObservationForm = ({
 
           <div className="space-y-4 pt-4 border-t border-dashed">
             <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-              Water Condition Quality
+              Water Condition Quality *
               {waterAvg > 0 && <span className="text-primary">{waterAvg.toFixed(1)} / 10</span>}
             </Label>
             <Dialog>
