@@ -2735,19 +2735,19 @@ const RecordActivity = () => {
     <div className="min-h-screen bg-background pb-10">
 
       {/* Header */}
-        <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest">
+        <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative overflow-hidden">
+          <div className="mb-4 overflow-x-auto whitespace-nowrap scrollbar-hide">
+            <div className="flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest min-w-max">
               <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>Dashboard</span>
-              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
               <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
-              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
               <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? (activity === 'Stocking' ? 'New Batch' : 'All Sections') : 'Section')}</span>
-              <ChevronDown className="w-3 h-3 -rotate-90" />
+              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
               <span className={activity ? 'text-white/80' : 'text-white'}>{isPlanningMode ? 'Plan Activity' : (editId ? 'Edit Record' : 'Record Activity')}</span>
               {activity && (
                 <>
-                  <ChevronDown className="w-3 h-3 -rotate-90" />
+                  <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
                   <span className="text-white">{activity}</span>
                 </>
               )}
@@ -2778,26 +2778,26 @@ const RecordActivity = () => {
                 }`}>
                   {activeFarmCategory}
                 </span>
+                <div className="text-xs text-white/70 font-medium flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-0.5">
+                  <span>{activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}</span>
+                  {activeFarmCategory === 'MATURATION' && (
+                    (() => {
+                      const displayId = (activeBroodstockBatchId === 'new' && activity === 'Stocking' && stockingData?.stockingId)
+                        ? stockingData.stockingId
+                        : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId);
+                      
+                      if (!displayId) return null;
+  
+                      return (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold max-w-[200px] shrink-0">
+                          <Database className="w-3 h-3 shrink-0" />
+                          <span className="truncate">BS ID: {displayId}</span>
+                        </span>
+                      );
+                    })()
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-white/70 font-medium">
-                {activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}
-                {activeFarmCategory === 'MATURATION' && (
-                  (() => {
-                    const displayId = (activeBroodstockBatchId === 'new' && activity === 'Stocking' && stockingData?.stockingId)
-                      ? stockingData.stockingId
-                      : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId);
-                    
-                    if (!displayId) return null;
-
-                    return (
-                      <span className="mt-1.5 sm:mt-0 sm:ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold max-w-full overflow-hidden">
-                        <Database className="w-3 h-3 shrink-0" />
-                        <span className="truncate">BS ID: {displayId}</span>
-                      </span>
-                    );
-                  })()
-                )}
-              </p>
             </div>
           </div>
         </div>
@@ -2849,9 +2849,9 @@ const RecordActivity = () => {
         )}
 
         {/* Date / Time */}
-        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm overflow-hidden">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
