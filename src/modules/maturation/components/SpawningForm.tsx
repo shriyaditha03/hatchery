@@ -372,7 +372,7 @@ const SpawningForm = ({
                   </div>
                 )}
 
-                {availableBatches.length > 0 && (
+                {availableBatches.length > 0 && !selectedBatchId && (
                   <div className="flex justify-center mt-2">
                     <Button 
                       variant="ghost" 
