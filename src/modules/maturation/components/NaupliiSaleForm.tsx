@@ -561,17 +561,17 @@ const NaupliiSaleForm = ({
               </div>
               
               <div className="space-y-4">
-                {saleTanks.filter(tank => (tank.currentPopulation > 0 || isEditing)).map((tank) => (
+                {saleTanks.map((tank) => (
                   <Card key={tank.id} className={cn("p-5 bg-amber-50/40 border-amber-100 shadow-sm rounded-[2rem] space-y-4 relative group hover:bg-amber-50/60 transition-colors overflow-hidden")}>
                     <div className="flex items-center justify-between px-2">
                       <div>
                         <p className="text-xs font-black text-amber-950">{tank.tankName}</p>
-                        <p className="text-[9px] font-bold text-amber-600 uppercase opacity-60">Available: {tank.harvestedAmount} mil</p>
+                        <p className="text-[9px] font-bold text-amber-600 uppercase opacity-60">AVAILABLE: {tank.harvestedAmount} mil</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">Sold (Gross) *</Label>
+                        <Label className="text-[9px] font-black uppercase text-amber-700 ml-1 leading-none tracking-widest">NUMBER OF NAUPLII IN MILLION - SOLD (GROSS) *</Label>
                         <div className="relative">
                           <Input 
                             type="number" step="0.001" value={tank.saleMil} 
@@ -583,7 +583,7 @@ const NaupliiSaleForm = ({
                         </div>
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">Discarded (Gross)</Label>
+                        <Label className="text-[9px] font-black uppercase text-rose-700 ml-1 leading-none tracking-widest">NUMBER OF NAUPLII IN MIL - DISCARDED (GROSS)</Label>
                         <div className="relative">
                           <Input 
                             type="number" step="0.001" value={tank.discardMil} 
