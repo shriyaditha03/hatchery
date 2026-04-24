@@ -2736,19 +2736,19 @@ const RecordActivity = () => {
 
       {/* Header */}
         <div className="ocean-gradient p-4 sm:p-6 pb-12 rounded-b-3xl shadow-lg relative overflow-hidden">
-          <div className="mb-4 overflow-x-auto whitespace-nowrap scrollbar-hide">
-            <div className="flex items-center gap-2 text-white/60 text-[10px] font-bold uppercase tracking-widest min-w-max">
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>Dashboard</span>
-              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
-              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? (activity === 'Stocking' ? 'New Batch' : 'All Sections') : 'Section')}</span>
-              <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
-              <span className={activity ? 'text-white/80' : 'text-white'}>{isPlanningMode ? 'Plan Activity' : (editId ? 'Edit Record' : 'Record Activity')}</span>
+          <div className="mb-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-white/60 text-[9px] font-bold uppercase tracking-widest w-full">
+              <span className="hover:text-white cursor-pointer transition-colors shrink-0" onClick={() => navigate('/user/dashboard')}>Dashboard</span>
+              <ChevronDown className="w-2.5 h-2.5 -rotate-90 shrink-0" />
+              <span className="hover:text-white cursor-pointer transition-colors shrink-0" onClick={() => navigate('/user/dashboard')}>{activeFarmName || 'Farm'}</span>
+              <ChevronDown className="w-2.5 h-2.5 -rotate-90 shrink-0" />
+              <span className="hover:text-white cursor-pointer transition-colors truncate max-w-[80px]" onClick={() => navigate('/user/dashboard')}>{activeSection?.name || (activeFarmCategory === 'MATURATION' ? (activity === 'Stocking' ? 'New Batch' : 'All Sections') : 'Section')}</span>
+              <ChevronDown className="w-2.5 h-2.5 -rotate-90 shrink-0" />
+              <span className={`shrink-0 ${activity ? 'text-white/80' : 'text-white'}`}>{isPlanningMode ? 'Plan' : (editId ? 'Edit' : 'Record')}</span>
               {activity && (
                 <>
-                  <ChevronDown className="w-3 h-3 -rotate-90 shrink-0" />
-                  <span className="text-white">{activity}</span>
+                  <ChevronDown className="w-2.5 h-2.5 -rotate-90 shrink-0" />
+                  <span className="text-white truncate max-w-[80px]">{activity}</span>
                 </>
               )}
             </div>
@@ -2789,9 +2789,9 @@ const RecordActivity = () => {
                       if (!displayId) return null;
   
                       return (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold max-w-[200px] shrink-0">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-white font-bold max-w-[120px] shrink-0">
                           <Database className="w-3 h-3 shrink-0" />
-                          <span className="truncate">BS ID: {displayId}</span>
+                          <span className="truncate text-[10px]">BS ID: {displayId}</span>
                         </span>
                       );
                     })()
@@ -2810,7 +2810,7 @@ const RecordActivity = () => {
         )}
       </div>
 
-      <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto overflow-x-hidden" data-testid="main-content">
+      <div className="w-full px-3 sm:px-4 pb-8 space-y-4 sm:max-w-lg mx-auto overflow-hidden" data-testid="main-content">
         {/* Supervisor Instruction Note - Read Only Display for Workers */}
         {selectedInstructionData?.planned_data?.instructions && !isPlanningMode && (
           <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up space-y-2 bg-primary/5">
@@ -2849,7 +2849,7 @@ const RecordActivity = () => {
         )}
 
         {/* Date / Time */}
-        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm w-full overflow-hidden">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 truncate">
             <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
