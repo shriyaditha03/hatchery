@@ -2810,7 +2810,7 @@ const RecordActivity = () => {
         )}
       </div>
 
-      <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto" data-testid="main-content">
+      <div className="p-3 sm:p-4 pb-8 space-y-4 max-w-lg mx-auto overflow-x-hidden" data-testid="main-content">
         {/* Supervisor Instruction Note - Read Only Display for Workers */}
         {selectedInstructionData?.planned_data?.instructions && !isPlanningMode && (
           <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up space-y-2 bg-primary/5">
@@ -2854,35 +2854,38 @@ const RecordActivity = () => {
             <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5 min-w-0">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <Label className="text-xs">Date</Label>
-              <Input
-                type="date"
-                value={date}
-                onChange={e => {
-                  setDate(e.target.value);
-                  setIsLiveTime(false);
-                }}
-                className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
-              />
+              <div className="relative">
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={e => {
+                    setDate(e.target.value);
+                    setIsLiveTime(false);
+                  }}
+                  className="h-11 w-full border-muted-foreground/20 focus:border-primary/50 bg-background/50"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5 min-w-0">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <Label className="text-xs">Time</Label>
-              <Input
-                type="time"
-                value={time}
-                onChange={e => {
-                  setTime(e.target.value);
-                  setIsLiveTime(false);
-                  // Update AM/PM based on 24h input
-                  const [h] = e.target.value.split(':').map(Number);
-                  if (!isNaN(h)) {
-                    setAmpm(h >= 12 ? 'PM' : 'AM');
-                  }
-                }}
-                className="h-11 w-full border-muted-foreground/20 focus:border-primary/50"
-              />
+              <div className="relative">
+                <Input
+                  type="time"
+                  value={time}
+                  onChange={e => {
+                    setTime(e.target.value);
+                    setIsLiveTime(false);
+                    const [h] = e.target.value.split(':').map(Number);
+                    if (!isNaN(h)) {
+                      setAmpm(h >= 12 ? 'PM' : 'AM');
+                    }
+                  }}
+                  className="h-11 w-full border-muted-foreground/20 focus:border-primary/50 bg-background/50"
+                />
+              </div>
             </div>
           </div>
           {(activity === 'Feed' || activity === 'Treatment') && (
@@ -2905,7 +2908,7 @@ const RecordActivity = () => {
         </div>
 
         {(activity || !type) && !isSpecialActivity && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
-          <div className="glass-card rounded-2xl p-4 space-y-4">
+          <div className="glass-card rounded-2xl p-4 space-y-4 overflow-hidden">
             {isBatchClosed && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-4 mb-2 animate-pulse">
                    <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
