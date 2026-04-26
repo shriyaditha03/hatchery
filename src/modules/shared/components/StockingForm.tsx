@@ -54,11 +54,16 @@ const StockingForm = ({
 
   const fetchTodayBatchCount = async () => {
     try {
+      // Optimize: Only fetch logs from the last 24 hours to reduce data transfer and lag
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
       const { data: logs, error } = await supabase
         .from('activity_logs')
         .select('data')
         .eq('farm_id', farmId)
-        .eq('activity_type', 'Stocking');
+        .eq('activity_type', 'Stocking')
+        .gte('created_at', yesterday.toISOString());
       
       if (!error && logs) {
         // Convert YYYY-MM-DD to YYMMDD

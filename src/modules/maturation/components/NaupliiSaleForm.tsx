@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, PlusCircle, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Plus, PlusCircle, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info, AlertTriangle, ShieldAlert, Activity } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle 
 } from '@/components/ui/alert-dialog';
 
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
@@ -31,6 +32,7 @@ interface SaleTankEntry {
   saleMil: string;
   discardMil: string;
   isExceedingConfirmed?: boolean;
+  currentPopulation?: number;
 }
 
 interface NaupliiSaleFormProps {
@@ -64,6 +66,7 @@ const NaupliiSaleForm = ({
   const [batchLogs, setBatchLogs] = useState<any[]>([]);
   const [existingSales, setExistingSales] = useState<any[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(data.selectedBatchId || '');
+  const [saleType, setSaleType] = useState<'partial' | 'complete'>(data.saleType || 'complete');
   const [saleTanks, setSaleTanks] = useState<SaleTankEntry[]>(data.saleTanks || []);
   const [bonusPercentage, setBonusPercentage] = useState<string>(data.bonusPercentage || '0');
   const [netSaleManual, setNetSaleManual] = useState<string>(data.netNauplii?.toString() || '');
@@ -120,9 +123,17 @@ const NaupliiSaleForm = ({
       }
     });
 
-    // 3. A batch is completed if processed amount >= harvested amount
+    // 3. A batch is completed if ANY sale record was marked as "complete" 
+    //    OR if processed amount >= harvested amount
     return Object.keys(processedMap).filter(bId => {
       if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
+      
+      const isExplicitlyClosed = (existingSales || []).some(s => 
+        (s.data?.selectedBatchId === bId || s.data?.sourceBatchId === bId) && 
+        s.data?.saleType === 'complete'
+      );
+      if (isExplicitlyClosed) return true;
+
       const harvested = harvestTotalsMap[bId] || 0;
       const processed = processedMap[bId] || 0;
       // Consider it closed if processed >= harvested (within a small tolerance)
@@ -163,11 +174,12 @@ const NaupliiSaleForm = ({
 
   const isBatchAlreadySold = useMemo(() => {
     if (!selectedBatchId) return false;
-    const hasSale = (existingSales || []).some(s => 
+    const hasCompleteSale = (existingSales || []).some(s => 
       (s.data?.selectedBatchId === selectedBatchId || s.data?.sourceBatchId === selectedBatchId) && 
+      s.data?.saleType === 'complete' &&
       (!data.id || s.id !== data.id)
     );
-    return hasSale && !isEditing;
+    return hasCompleteSale && !isEditing;
   }, [existingSales, isEditing, selectedBatchId, data.id]);
 
   const canEdit = isSupervisor || (!isEditing && !isBatchAlreadySold);
@@ -268,8 +280,8 @@ const NaupliiSaleForm = ({
           tankId: e.tankId,
           tankName: e.tankName,
           harvestedAmount: e.shiftedMil || '0', 
-          saleMil: expired ? '0' : (e.shiftedMil || '0'),
-          discardMil: expired ? (e.shiftedMil || '0') : '0',
+          saleMil: expired ? '0' : (currentPop.toString() || '0'),
+          discardMil: expired ? (currentPop.toString() || '0') : '0',
           currentPopulation: currentPop
         };
       });
@@ -301,9 +313,15 @@ const NaupliiSaleForm = ({
 
     if ('saleMil' in updates) {
       const newSale = parseFloat(updates.saleMil) || 0;
-      const newDiscard = Math.max(0, harvested - newSale);
-      finalUpdates.discardMil = newDiscard.toFixed(3);
-      if (newSale <= harvested) finalUpdates.isExceedingConfirmed = false;
+      const currentPop = tank.currentPopulation || 0;
+      if (saleType === 'complete') {
+        const newDiscard = Math.max(0, currentPop - newSale);
+        finalUpdates.discardMil = newDiscard.toFixed(3);
+      } else {
+        // In partial sale, don't force discard
+        finalUpdates.discardMil = tank.discardMil;
+      }
+      if (newSale <= (currentPop || harvested)) finalUpdates.isExceedingConfirmed = false;
     }
 
     if ('discardMil' in updates) {
@@ -377,13 +395,14 @@ const NaupliiSaleForm = ({
     const efficiency = totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0;
 
     const currentProcessed = metrics.totalSale + metrics.totalDiscard;
-    const isBatchClosed = Math.abs(totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)) < 0.005;
+    const isBatchClosed = saleType === 'complete' || Math.abs(totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)) < 0.005;
 
     updateData({
       totalGross: Math.round(metrics.totalSale * 1000) / 1000,
       totalDiscard: Math.round(metrics.totalDiscard * 1000) / 1000,
       bonusPercentage,
       packsPacked,
+      saleType,
       netNauplii: netSaleManual ? parseFloat(netSaleManual) : Math.round(calculatedNet * 1000) / 1000,
       sourceBatchId: selectedBatchId,
       isBatchClosed: isBatchClosed,
@@ -397,7 +416,7 @@ const NaupliiSaleForm = ({
         naupliiPerAnimal: Math.round(efficiency * 1000) / 1000
       }
     });
-  }, [selectedBatchId, saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch]);
+  }, [selectedBatchId, saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch, saleType]);
 
   return (
     <div className={cn("space-y-6 animate-fade-in-up", !canEdit && "opacity-80 pointer-events-none select-none")}>
@@ -436,7 +455,7 @@ const NaupliiSaleForm = ({
                <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
                   <CheckCircle2 className="w-6 h-6" />
                </div>
-               <div className="space-y-1">
+                <div className="space-y-1">
                   <h4 className="text-base font-black text-amber-900 uppercase tracking-tight">Batch Already Sold & Finalized</h4>
                   <p className="text-xs text-amber-700/80 font-medium leading-relaxed">
                     A sale record already exists for batch <span className="font-bold">{selectedBatchId}</span>. To prevent duplicate data capture, this batch is now locked. Only supervisors can modify finalized records.
@@ -474,6 +493,33 @@ const NaupliiSaleForm = ({
                   )}
                 </SelectContent>
             </Select>
+
+            {selectedBatchId && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                  <RadioGroup 
+                      value={saleType} 
+                      onValueChange={(v: any) => setSaleType(v)}
+                      className="flex flex-wrap gap-2"
+                  >
+                      <Label
+                          htmlFor="complete"
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${saleType === 'complete' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-muted hover:border-indigo-200'}`}
+                      >
+                          <RadioGroupItem value="complete" id="complete" className="sr-only" />
+                          <CheckCircle2 className={`w-4 h-4 ${saleType === 'complete' ? 'text-white' : 'text-indigo-300'}`} />
+                          <span className="text-xs font-black uppercase">Final/Complete Sale</span>
+                      </Label>
+                      <Label
+                          htmlFor="partial"
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${saleType === 'partial' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-muted hover:border-amber-200'}`}
+                      >
+                          <RadioGroupItem value="partial" id="partial" className="sr-only" />
+                          <Activity className={`w-4 h-4 ${saleType === 'partial' ? 'text-white' : 'text-amber-300'}`} />
+                          <span className="text-xs font-black uppercase">Partial Sale (Split)</span>
+                      </Label>
+                  </RadioGroup>
+              </div>
+            )}
 
             {!loadingBatches && availableBatches.length === 0 && (
                 <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full mt-4">
@@ -600,6 +646,20 @@ const NaupliiSaleForm = ({
             </div>
 
             <div className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-dashed border-amber-200 space-y-8">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-sm font-black text-amber-950 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-amber-600" />
+                  2. Production Metrics (a-f)
+                </h2>
+                {saleType === 'partial' && (
+                  <div className="flex items-center gap-2 bg-amber-100 px-3 py-1 rounded-full border border-amber-200 animate-pulse">
+                    <History className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="text-[10px] font-black text-amber-900 uppercase">
+                      Remaining: {(data.summary?.remainingInBatch || 0).toFixed(3)}M
+                    </span>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1">a. Bonus % Offered *</Label>
