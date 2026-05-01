@@ -1593,7 +1593,11 @@ const RecordActivity = () => {
         : required;
         
       const missing = adjustedRequired.filter(f => {
-        const val = stockingData[f];
+        let val = stockingData[f];
+        // Special case: check both name variations for water quality
+        if (f === 'waterQualityScore' && (val === undefined || val === null || val === '')) {
+          val = stockingData['waterComplianceScore'];
+        }
         return val === undefined || val === null || val === '' || (typeof val === 'string' && val.trim() === '');
       });
       if (missing.length > 0) {
