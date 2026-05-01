@@ -1471,7 +1471,7 @@ const RecordActivity = () => {
           farm_id: farmId,
           section_id: sectionId,
           tank_id: tId || null,
-          activity_type: activity.trim(),
+          activity_type: activity === 'Broodstock Discard' ? 'Discard' : activity.trim(),
           scheduled_date: date,
           scheduled_time: time,
           planned_data: {
