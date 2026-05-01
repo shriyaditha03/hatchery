@@ -137,10 +137,10 @@ const SourcingMatingForm = ({
       // 1. Get the Stocking record for this batch to find specific tanks
       const { data: logs, error } = await supabase
         .from('activity_logs')
-        .select('*')
+        .select('data, stocking_id')
         .eq('activity_type', 'Stocking')
         .eq('farm_id', farmId)
-        .or(`stockingId.eq."${activeBroodstockBatchId}"`)
+        .eq('stocking_id', activeBroodstockBatchId)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -148,7 +148,7 @@ const SourcingMatingForm = ({
          stockedTankIds = Object.keys(logs[0].data.allocations);
       }
     } catch (err) {
-      console.warn('Optional stocking record not found');
+      console.warn('Stocking record not found for batch:', activeBroodstockBatchId);
     }
 
     const initialSources: any[] = [];
@@ -156,13 +156,20 @@ const SourcingMatingForm = ({
     const filteredSections = availableTanks;
 
     filteredSections.forEach(section => {
+      // Only source from ANIMAL sections
+      const isAnimalSection = section.section_type === 'ANIMAL' || (section.name || '').toUpperCase().includes('ANIMAL');
+      
       section.tanks.forEach((t: any) => {
         const availableCount = tankPopulations[t.id] || 0;
+        // If we found specific stocking records, use them; otherwise trust the availableTanks (which is already filtered by batch in RecordActivity)
         const isStockedInBatch = stockedTankIds.length === 0 || stockedTankIds.includes(t.id);
 
-        // Field 1: Female Sourcing (Robust case-insensitive check)
+        if (!isStockedInBatch) return;
+
         const genderUpper = (t.gender || '').toUpperCase();
-        if (genderUpper === 'FEMALE' && availableCount > 0) {
+        
+        // Field 1: Female Sourcing - Only from ANIMAL sections
+        if (isAnimalSection && genderUpper === 'FEMALE' && availableCount > 0) {
           initialSources.push({
             id: t.id,
             tankId: t.id,
@@ -173,8 +180,8 @@ const SourcingMatingForm = ({
           });
         }
 
-        // Field 2: Male Mating (Robust case-insensitive check)
-        if (genderUpper === 'MALE' && availableCount > 0) {
+        // Field 2: Male Mating - Usually these are in the same batch's ANIMAL sections
+        if (isAnimalSection && genderUpper === 'MALE' && availableCount > 0) {
           initialMating.push({
             id: t.id,
             tankId: t.id,

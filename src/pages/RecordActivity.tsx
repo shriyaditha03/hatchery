@@ -414,7 +414,7 @@ const RecordActivity = () => {
     try {
       const { data, error } = await supabase
         .from('activity_logs')
-        .select('*')
+        .select('activity_type, stocking_id, data')
         .eq('farm_id', farmIdToUse)
         .in('activity_type', ['Stocking', 'Broodstock Discard']);
       
@@ -423,7 +423,7 @@ const RecordActivity = () => {
         const closed = new Set<string>();
 
         data.forEach((d: any) => {
-          const sId = d.stockingId || d.data?.stockingId || d.data?.batchId;
+          const sId = d.stocking_id || d.data?.stockingId || d.data?.batchId;
           if (sId) {
             if (d.activity_type === 'Stocking') {
                 ids.push(sId);
@@ -434,7 +434,9 @@ const RecordActivity = () => {
           }
         });
 
-        setAvailableBatches(Array.from(new Set(ids)));
+        // Only show batches that are not closed
+        const activeIds = Array.from(new Set(ids)).filter(id => !closed.has(id));
+        setAvailableBatches(activeIds);
         setClosedBatchIds(closed);
       }
     } catch (err) {
@@ -470,17 +472,15 @@ const RecordActivity = () => {
   const fetchBatchRelatedTanks = async (batchId: string) => {
     setIsBatchLoading(true);
     try {
+      // Fetch tanks that have ever been associated with this batch
       const { data, error } = await supabase
         .from('activity_logs')
-        .select('tank_id, data')
-        .eq('farm_id', selectedFarmId || activeFarmId);
+        .select('tank_id, stocking_id, data')
+        .eq('farm_id', selectedFarmId || activeFarmId)
+        .or(`stocking_id.eq.${batchId},data->>stockingId.eq.${batchId},data->>batchId.eq.${batchId}`);
       
       if (!error && data) {
-        // Filter in JS to avoid 400 errors from complex .or() queries on JSON columns if not indexed
-        const relatedTanks = data.filter((d: any) => {
-           return d.stockingId === batchId || d.data?.stockingId === batchId;
-        });
-        const ids = relatedTanks.map((d: any) => d.tank_id).filter(Boolean);
+        const ids = data.map((d: any) => d.tank_id).filter(Boolean);
         setBatchRelatedTankIds(Array.from(new Set(ids)));
       }
     } catch (err) {
@@ -2583,7 +2583,9 @@ const RecordActivity = () => {
             tank_id: tId,
             section_id: sId || null,
             farm_id: fId || null,
-            stocking_id: activeBroodstockBatchId || null,
+            stocking_id: (activity === 'Stocking' && stockingData?.stockingId) 
+               ? stockingData.stockingId 
+               : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId),
             activity_type: activity as any,
             data: currentBuildData
           });
@@ -3062,15 +3064,20 @@ const RecordActivity = () => {
                                     : []);
                                     
                               return tanksToDisplay
-                                .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
                                 .filter((t: any) => {
-                                  if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
-                                    const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality', 'Broodstock Discard'];
-                                    if (generalActivities.includes(activity)) {
-                                      return batchRelatedTankIds.includes(t.id);
-                                    }
+                                  // 1. If Maturation and Stocking, only show tanks NOT used by any batch
+                                  if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+                                    return !stockedTankIds.includes(t.id);
                                   }
-                                  return true;
+                                  
+                                  // 2. If Maturation and a batch is selected, restrict to batch tanks
+                                  if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new') {
+                                    // Lock to batch-related tanks
+                                    return batchRelatedTankIds.includes(t.id);
+                                  }
+
+                                  // 3. Standard fallback logic
+                                  return activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                                 })
                                 .map((t: any) => {
                                   const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
@@ -3126,15 +3133,18 @@ const RecordActivity = () => {
                           : (activeFarmCategory === 'MATURATION' ? filteredSections.flatMap(s => s.tanks) : []);
                         
                         return tanksToDisplay
-                          .filter((t: any) => activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id))
                           .filter((t: any) => {
-                            if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && batchRelatedTankIds.length > 0) {
-                              const generalActivities = ['Feed', 'Treatment', 'Water Quality', 'Observation', 'Animal Quality', 'Broodstock Discard'];
-                              if (generalActivities.includes(activity)) {
-                                return batchRelatedTankIds.includes(t.id);
-                              }
+                            // 1. If Maturation and Stocking, only show tanks NOT used by any batch
+                            if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+                              return !stockedTankIds.includes(t.id);
                             }
-                            return true;
+                            
+                            // 2. If Maturation and a batch is selected, restrict to batch tanks
+                            if (activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new') {
+                              return batchRelatedTankIds.includes(t.id);
+                            }
+
+                            return activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                           })
                           .map((t: any) => (
                         <div 
@@ -3566,6 +3576,7 @@ const RecordActivity = () => {
             selectionScope={selectionScope}
             farmId={selectedFarmId || activeFarmId}
             currentDate={date}
+            availableBatches={availableBatches}
             selectedTanks={(() => {
               // For Maturation Stocking, always show ALL tanks from ALL animal sections for THE SELECTED FARM
               if (activeFarmCategory === 'MATURATION' && activity === 'Stocking') {
@@ -3574,7 +3585,9 @@ const RecordActivity = () => {
                   s.section_type === 'ANIMAL' && 
                   s.farm_id === currentFarmId
                 );
-                return animalSections.flatMap(s => s.tanks || []);
+                // Only return tanks NOT in stockedTankIds
+                return animalSections.flatMap(s => s.tanks || [])
+                  .filter(t => !stockedTankIds.includes(t.id));
               }
               if (selectionScope === 'all') {
                 const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));

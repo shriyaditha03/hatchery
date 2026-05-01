@@ -24,6 +24,7 @@ interface StockingFormProps {
   selectionScope?: 'single' | 'all' | 'custom';
   farmId?: string;
   currentDate?: string;
+  availableBatches?: string[];
 }
 
 const StockingForm = ({
@@ -38,60 +39,74 @@ const StockingForm = ({
   selectedTanks = [],
   selectionScope = 'single',
   farmId,
-  currentDate
+  currentDate,
+  availableBatches = []
 }: StockingFormProps) => {
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [todayBatchCount, setTodayBatchCount] = useState(0);
 
-  // Fetch count of batches already created today to determine the B# suffix
+  // Recalculate today's batch count whenever available batches or date changes
   useEffect(() => {
-    if (activeFarmCategory === 'MATURATION' && farmId && currentDate) {
-      fetchTodayBatchCount();
+    if (activeFarmCategory === 'MATURATION' && currentDate) {
+      calculateTodayBatchCount();
     }
-  }, [farmId, currentDate, activeFarmCategory]);
+  }, [availableBatches, currentDate, activeFarmCategory]);
 
-  const fetchTodayBatchCount = async () => {
+  const getYYMMDD = (dateStr: string) => {
+    if (!dateStr) return '';
+    
+    // 1. Primary: Manual regex parsing to avoid timezone shifts
+    const m1 = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m1) return `${m1[1].slice(-2)}${m1[2]}${m1[3]}`;
+    
+    const m2 = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m2) return `${m2[3].slice(-2)}${m2[1]}${m2[2]}`;
+
     try {
-      // Optimize: Only fetch logs from the last 24 hours to reduce data transfer and lag
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const yy = d.getFullYear().toString().slice(-2);
+        const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+        const dd = d.getDate().toString().padStart(2, '0');
+        return `${yy}${mm}${dd}`;
+      }
+    } catch (e) {}
 
-      const { data: logs, error } = await supabase
-        .from('activity_logs')
-        .select('data')
-        .eq('farm_id', farmId)
-        .eq('activity_type', 'Stocking')
-        .gte('created_at', yesterday.toISOString());
+    return '';
+  };
+
+  const calculateTodayBatchCount = () => {
+    if (!currentDate) return;
+    try {
+      const yymmdd = getYYMMDD(currentDate);
+      let maxB = 0;
       
-      if (!error && logs) {
-        // Convert YYYY-MM-DD to YYMMDD
-        const parts = currentDate?.split('-') || [];
-        if (parts.length < 3) return;
-        const targetYYMMDD = `${parts[0].slice(-2)}${parts[1]}${parts[2]}`;
+      if (!availableBatches || availableBatches.length === 0) {
+        setTodayBatchCount(0);
+        return;
+      }
 
-        const todaysStockings = logs.filter(l => {
-          const sId = l.data?.stockingId || '';
-          return sId.includes(`_${targetYYMMDD}_B`);
-        });
-
-        // Find max B#
-        let maxB = 0;
-        todaysStockings.forEach(l => {
-          const sId = l.data?.stockingId || '';
-          const match = sId.match(/_B(\d+)$/);
-          if (match) {
+      availableBatches.forEach(sId => {
+        if (!sId || typeof sId !== 'string') return;
+        
+        if (sId.includes(yymmdd)) {
+           const match = sId.match(/[ _-]B(\d+)/i) || sId.match(/B(\d+)/i);
+           if (match) {
              const bNum = parseInt(match[1]);
              if (bNum > maxB) maxB = bNum;
-          }
-        });
-        setTodayBatchCount(maxB);
-      }
+           }
+        }
+      });
+      
+      setTodayBatchCount(maxB);
     } catch (err) {
-      console.error('Error fetching today batch count:', err);
+      console.error('Error calculating today batch count:', err);
+      setTodayBatchCount(0);
     }
   };
+
   const [stockingStep, setStockingStep] = useState<1 | 2>(1); // For Maturation two-step flow
 
   const handleChange = (field: string, value: any) => {
@@ -101,19 +116,16 @@ const StockingForm = ({
     }
   };
 
-  // Generate Stocking ID: BS_BS-{SUPPLIER}_{VARIANT}_{YYMMDD}
+   // Generate Stocking ID: BS_BS-{SUPPLIER}_{VARIANT}_{YYMMDD}
   const generateStockingId = (supplier: string, variant: string) => {
-    const d = new Date();
-    const yy = d.getFullYear().toString().slice(-2);
-    const mm = (d.getMonth() + 1).toString().padStart(2, '0');
-    const dd = d.getDate().toString().padStart(2, '0');
-    const yymmdd = `${yy}${mm}${dd}`;
+    const yymmdd = getYYMMDD(currentDate || '');
 
     const supplierPrefix = supplier ? supplier.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'SUPPLIER';
     const variantPrefix = variant ? variant.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'VARIANT';
 
     if (activeFarmCategory === 'MATURATION') {
         const batchSuffix = `_B${todayBatchCount + 1}`;
+        // BS_BS-SUPPLIER_Variant_YYMMDD_B#
         return `BS_BS-${supplierPrefix}_${variantPrefix}_${yymmdd}${batchSuffix}`;
     }
     return `BS_${supplierPrefix}_HN_${yymmdd}`; // Fallback for LRT or others
@@ -127,7 +139,7 @@ const StockingForm = ({
         onDataChange((prev: any) => ({ ...prev, stockingId: newId }));
       }
     }
-  }, [data.broodstockSource, data.broodstockType, isIdManuallyEdited, onDataChange]);
+  }, [data.broodstockSource, data.broodstockType, isIdManuallyEdited, onDataChange, todayBatchCount, currentDate]);
 
   const setRating = (key: string, value: number) => {
     setAnimalRatings(prev => ({ ...prev, [key]: value }));
@@ -203,7 +215,6 @@ const StockingForm = ({
 
       {activeFarmCategory === 'MATURATION' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-          {/* Shared fields for both modes */}
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source of Broodstock (Supplier) *</Label>
             <Input
@@ -235,7 +246,6 @@ const StockingForm = ({
           </div>
 
           {isPlanningMode ? (
-            /* Simplified fields for Instruction Mode */
             <>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">8) Number of the Animals *</Label>
@@ -263,9 +273,7 @@ const StockingForm = ({
               </div>
             </>
           ) : (
-            /* Complex fields for Activity Mode — TWO-STEP FLOW */
             <>
-              {/* Step Indicator */}
               <div className="relative pt-2 pb-6">
                 <div className="flex items-center justify-between mb-2 px-2">
                     <div className="flex flex-col items-center gap-1.5 z-10">
@@ -277,17 +285,13 @@ const StockingForm = ({
                         <span className={`text-[9px] font-black uppercase tracking-widest ${stockingStep >= 2 ? 'text-primary' : 'text-muted-foreground'}`}>Allocation</span>
                     </div>
                 </div>
-                {/* Connecting Line */}
                 <div className="absolute top-[21px] left-[15%] right-[15%] h-1 bg-muted rounded-full -z-0">
                     <div className={`h-full bg-primary transition-all duration-700 rounded-full ${stockingStep === 1 ? 'w-0' : 'w-full'}`} />
                 </div>
               </div>
 
-              {/* STEP 1: Received Broodstock (Fields 6-10) */}
               {stockingStep === 1 && (
-                <>
-                  <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
-                    {/* Row 6: TOTAL BS Received */}
+                <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
                     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden group hover:border-emerald-200 transition-all">
                       <div className="bg-emerald-50/50 px-4 py-2 border-b border-emerald-100/50 flex items-center gap-2">
                         <div className="w-1.5 h-4 bg-emerald-500 rounded-full" />
@@ -313,9 +317,7 @@ const StockingForm = ({
                       </div>
                     </div>
 
-                    {/* Losses Section - Combined into a subtle grid */}
                     <div className="grid grid-cols-1 gap-4">
-                        {/* Row 7: Air Transport Loss */}
                         <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between group hover:border-red-200 transition-all">
                            <div className="flex flex-col gap-1">
                                 <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-red-600 transition-colors">7) Air transport loss</Label>
@@ -341,7 +343,6 @@ const StockingForm = ({
                            </div>
                         </div>
 
-                        {/* Row 8: AQF Loss */}
                         <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between group hover:border-orange-200 transition-all">
                            <div className="flex flex-col gap-1">
                                 <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-orange-600 transition-colors">8) AQF losses</Label>
@@ -367,7 +368,6 @@ const StockingForm = ({
                            </div>
                         </div>
 
-                        {/* Row 9: Transport to Hatchery Loss */}
                         <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between group hover:border-amber-200 transition-all">
                            <div className="flex flex-col gap-1">
                                 <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-amber-600 transition-colors">9) Transit to hatchery loss</Label>
@@ -394,13 +394,11 @@ const StockingForm = ({
                         </div>
                     </div>
 
-                    {/* Row 10: Remaining Stocking Population */}
                     {(() => {
                         const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
                         const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
-                        
-                        // Sync with tankStockingNumber (Total) for compatibility
                         const total = remM + remF;
+                        
                         if (data.tankStockingNumber !== total.toString()) {
                             setTimeout(() => handleChange('tankStockingNumber', total.toString()), 0);
                         }
@@ -434,7 +432,6 @@ const StockingForm = ({
                         );
                     })()}
 
-                    {/* Continue to Step 2 Button */}
                     <Button
                         type="button"
                         onClick={() => setStockingStep(2)}
@@ -447,14 +444,11 @@ const StockingForm = ({
                         </span>
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
                     </Button>
-                  </div>
-                </>
+                </div>
               )}
 
-              {/* STEP 2: Tank Allocation */}
               {stockingStep === 2 && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                  {/* Back Button */}
                   <Button
                     type="button"
                     variant="ghost"
@@ -464,7 +458,6 @@ const StockingForm = ({
                     <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Broodstock Details
                   </Button>
 
-                  {/* Remaining Population Summary (compact) */}
                   {(() => {
                     const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
                     const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
@@ -488,7 +481,6 @@ const StockingForm = ({
                     );
                   })()}
 
-                  {/* Row 11: Select TANKS Allocation */}
                   {(selectionScope === 'all' || selectionScope === 'custom' || selectedTanks.length > 0) && (
                     <div className="space-y-5">
                       <div className="flex items-center justify-between px-1">
@@ -499,7 +491,6 @@ const StockingForm = ({
                       </div>
                       
                       <div className="space-y-4">
-                        {/* Group tanks by gender for easier allocation */}
                         {(() => {
                           const maleTanks = selectedTanks.filter((t: any) => t.gender === 'MALE');
                           const femaleTanks = selectedTanks.filter((t: any) => t.gender === 'FEMALE');
@@ -508,9 +499,7 @@ const StockingForm = ({
                           const renderTankRow = (tank: any) => (
                             <div key={tank.id} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group">
                               <div className="flex-1 flex flex-col gap-0.5">
-                                <p className="text-sm font-black text-slate-800 tracking-tight">
-                                  {tank.name}
-                                </p>
+                                <p className="text-sm font-black text-slate-800 tracking-tight">{tank.name}</p>
                                 {tank.gender && (
                                     <span className={`w-fit text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
                                       tank.gender === 'MALE' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'
@@ -518,42 +507,32 @@ const StockingForm = ({
                                 )}
                               </div>
                               <div className="flex gap-3 items-center">
-                                {/* Show M input only for MALE or untagged tanks */}
                                 {(tank.gender === 'MALE' || !tank.gender) && (
-                                  <div className="flex flex-col items-center gap-1">
-                                    <div className="relative group/input">
-                                        <Input 
-                                          type="number"
-                                          placeholder="0"
-                                          value={data.allocations?.[tank.id]?.m || ''}
-                                          onChange={e => {
-                                            const newAllocations = { ...(data.allocations || {}) };
-                                            newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
-                                            handleChange('allocations', newAllocations);
-                                          }}
-                                          className="w-16 h-10 text-center font-black bg-slate-50 border-slate-200 rounded-xl pr-1 text-blue-600 focus:bg-white focus:ring-blue-500/10"
-                                        />
-                                        <span className="absolute -top-1.5 -right-1 w-4 h-4 bg-blue-500 text-white rounded-full flex items-center justify-center text-[8px] font-black border-2 border-white">M</span>
-                                    </div>
+                                  <div className="relative">
+                                    <Input 
+                                      type="number" value={data.allocations?.[tank.id]?.m || ''}
+                                      onChange={e => {
+                                        const newAllocations = { ...(data.allocations || {}) };
+                                        newAllocations[tank.id] = { ...newAllocations[tank.id], m: e.target.value };
+                                        handleChange('allocations', newAllocations);
+                                      }}
+                                      className="w-16 h-10 text-center font-black bg-slate-50 border-slate-200 rounded-xl pr-1 text-blue-600"
+                                    />
+                                    <span className="absolute -top-1.5 -right-1 w-4 h-4 bg-blue-500 text-white rounded-full flex items-center justify-center text-[8px] font-black border-2 border-white">M</span>
                                   </div>
                                 )}
-                                {/* Show F input only for FEMALE or untagged tanks */}
                                 {(tank.gender === 'FEMALE' || !tank.gender) && (
-                                  <div className="flex flex-col items-center gap-1">
-                                    <div className="relative group/input">
-                                        <Input 
-                                          type="number"
-                                          placeholder="0"
-                                          value={data.allocations?.[tank.id]?.f || ''}
-                                          onChange={e => {
-                                            const newAllocations = { ...(data.allocations || {}) };
-                                            newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
-                                            handleChange('allocations', newAllocations);
-                                          }}
-                                          className="w-16 h-10 text-center font-black bg-slate-50 border-slate-200 rounded-xl pr-1 text-pink-600 focus:bg-white focus:ring-pink-500/10"
-                                        />
-                                        <span className="absolute -top-1.5 -right-1 w-4 h-4 bg-pink-500 text-white rounded-full flex items-center justify-center text-[8px] font-black border-2 border-white">F</span>
-                                    </div>
+                                  <div className="relative">
+                                    <Input 
+                                      type="number" value={data.allocations?.[tank.id]?.f || ''}
+                                      onChange={e => {
+                                        const newAllocations = { ...(data.allocations || {}) };
+                                        newAllocations[tank.id] = { ...newAllocations[tank.id], f: e.target.value };
+                                        handleChange('allocations', newAllocations);
+                                      }}
+                                      className="w-16 h-10 text-center font-black bg-slate-50 border-slate-200 rounded-xl pr-1 text-pink-600"
+                                    />
+                                    <span className="absolute -top-1.5 -right-1 w-4 h-4 bg-pink-500 text-white rounded-full flex items-center justify-center text-[8px] font-black border-2 border-white">F</span>
                                   </div>
                                 )}
                               </div>
@@ -564,28 +543,19 @@ const StockingForm = ({
                             <div className="space-y-6">
                               {maleTanks.length > 0 && (
                                 <div className="space-y-2.5">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-1 h-3 bg-blue-500 rounded-full" />
-                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">♂ Male Tanks ({maleTanks.length})</p>
-                                  </div>
+                                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.15em] ml-2">♂ Male Tanks ({maleTanks.length})</p>
                                   {maleTanks.map(renderTankRow)}
                                 </div>
                               )}
                               {femaleTanks.length > 0 && (
                                 <div className="space-y-2.5">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-1 h-3 bg-pink-500 rounded-full" />
-                                    <p className="text-[10px] font-black text-pink-600 uppercase tracking-[0.15em]">♀ Female Tanks ({femaleTanks.length})</p>
-                                  </div>
+                                  <p className="text-[10px] font-black text-pink-600 uppercase tracking-[0.15em] ml-2">♀ Female Tanks ({femaleTanks.length})</p>
                                   {femaleTanks.map(renderTankRow)}
                                 </div>
                               )}
                               {untaggedTanks.length > 0 && (
                                 <div className="space-y-2.5">
-                                   <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-1 h-3 bg-slate-400 rounded-full" />
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em]">General Tanks ({untaggedTanks.length})</p>
-                                  </div>
+                                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-2">General Tanks ({untaggedTanks.length})</p>
                                   {untaggedTanks.map(renderTankRow)}
                                 </div>
                               )}
@@ -594,27 +564,21 @@ const StockingForm = ({
                         })()}
                       </div>
 
-                      {/* Allocation Validation */}
                       {(() => {
                         const remM = (Number(data.totalMalesReceived) || 0) - (Number(data.airLossM) || 0) - (Number(data.aqfLossM) || 0) - (Number(data.hatcheryLossM) || 0);
                         const remF = (Number(data.totalFemalesReceived) || 0) - (Number(data.airLossF) || 0) - (Number(data.aqfLossF) || 0) - (Number(data.hatcheryLossF) || 0);
-                        
                         const allocatedM = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.m) || 0), 0);
                         const allocatedF = Object.values(data.allocations || {}).reduce((acc: number, curr: any) => acc + (Number(curr?.f) || 0), 0);
-                        
                         const isValid = allocatedM === remM && allocatedF === remF;
                         
                         return (
-                          <div className={`p-4 rounded-2xl border-2 transition-all duration-500 flex flex-col items-center gap-1 ${isValid ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800 animate-pulse'}`}>
-                            <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${isValid ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'}`} />
-                                <p className="text-[10px] font-black uppercase tracking-[0.15em]">
-                                  {isValid ? 'Allocation Balanced' : 'Allocation Mismatch'}
-                                </p>
-                            </div>
-                            <p className="text-[9px] font-bold opacity-60 uppercase tracking-tighter">
-                              Males: {String(allocatedM)} / {String(remM)} | Females: {String(allocatedF)} / {String(remF)}
-                            </p>
+                          <div className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-1 ${isValid ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800 animate-pulse'}`}>
+                             <p className="text-[10px] font-black uppercase tracking-[0.15em]">
+                               {isValid ? 'Allocation Balanced' : 'Allocation Mismatch'}
+                             </p>
+                             <p className="text-[9px] font-bold opacity-60">
+                               M: {allocatedM}/{remM} | F: {allocatedF}/{remF}
+                             </p>
                           </div>
                         );
                       })()}
@@ -627,7 +591,7 @@ const StockingForm = ({
         </div>
       )}
 
-  {activeFarmCategory !== 'MATURATION' && (
+      {activeFarmCategory !== 'MATURATION' && (
         <>
           <div className="space-y-1.5">
             <Label className="text-xs">Source of Broodstock *</Label>
@@ -652,15 +616,8 @@ const StockingForm = ({
           <div className="space-y-1.5">
             <Label className="text-xs">Tank Stocking Number (Population) *</Label>
             <Input
-              type="number"
-              min="0"
-              value={data.tankStockingNumber || ''}
-              onChange={e => {
-                const val = e.target.value;
-                if (val === '' || parseFloat(val) >= 0) {
-                  handleChange('tankStockingNumber', val);
-                }
-              }}
+              type="number" min="0" value={data.tankStockingNumber || ''}
+              onChange={e => handleChange('tankStockingNumber', e.target.value)}
               placeholder="0"
               className="h-11 border-2 border-slate-500"
             />
@@ -669,16 +626,8 @@ const StockingForm = ({
           <div className="space-y-1.5">
             <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
             <Input
-              type="number"
-              min="0"
-              step="any"
-              value={data.naupliiStocked || ''}
-              onChange={e => {
-                const val = e.target.value;
-                if (val === '' || parseFloat(val) >= 0) {
-                  handleChange('naupliiStocked', val);
-                }
-              }}
+              type="number" min="0" step="any" value={data.naupliiStocked || ''}
+              onChange={e => handleChange('naupliiStocked', e.target.value)}
               placeholder="0"
               className="h-11 border-2 border-slate-500"
             />
@@ -686,7 +635,7 @@ const StockingForm = ({
         </>
       )}
 
-      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
+      {(activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-2 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
             Animal Condition Quality *
@@ -729,20 +678,17 @@ const StockingForm = ({
                     />
                   ))}
                 </div>
-  
-                 {/* Result Card */}
                 <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-montserrat">Current Quality Score</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Quality Score</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-primary font-montserrat tracking-tight">{avg.toFixed(1)}</span>
+                      <span className="text-3xl font-black text-primary">{avg.toFixed(1)}</span>
                       <span className="text-xs font-bold text-muted-foreground">/ 10</span>
                     </div>
                   </div>
                   <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(avg / 10) * 100}%` }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground text-center italic">Calculated average of {filled.length} parameters</p>
                 </div>
               </div>
               <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
@@ -766,7 +712,7 @@ const StockingForm = ({
         </div>
       )}
 
-      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
+      {(activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-4 border-t border-dashed">
           <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
             Water Condition Quality *
@@ -777,63 +723,43 @@ const StockingForm = ({
               <Button variant="outline" className="w-full h-14 justify-between px-4 rounded-2xl border-dashed hover:border-primary hover:bg-primary/5 group transition-all">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <ClipboardList className="w-5 h-5 text-primary" />
+                    <Layers className="w-5 h-5 text-primary" />
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-bold">Record Water Quality</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{waterFilled} of {waterFields.length} parameters recorded</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{waterFilled} of {waterFields.length} parameters entered</p>
                   </div>
                 </div>
                 <div className="text-right flex flex-col items-end">
                   <p className={`text-xl font-black leading-none ${waterDataAvg > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>{waterDataAvg.toFixed(1)}</p>
-                  <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Compliance Score</p>
+                  <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Compliance</p>
                 </div>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
               <DialogHeader className="p-6 pb-4 bg-muted/30 sticky top-0 z-10 backdrop-blur-md border-b">
                 <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  <ClipboardList className="w-5 h-5 text-primary" />
+                  <Layers className="w-5 h-5 text-primary" />
                   Water Quality Assessment
                 </DialogTitle>
               </DialogHeader>
               <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                 <div className="grid grid-cols-1 gap-4">
-                  {waterFields.map(field => {
-                    const rangeLabel = WATER_QUALITY_RANGES[field];
-                    return (
-                      <div key={field} className="space-y-1.5">
-                        <Label className="text-[10px] font-medium flex justify-between uppercase">
-                          {field} *
-                          {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
-                        </Label>
-                        <Input
-                          type={field === 'Other' ? 'text' : 'number'}
-                          min="0"
-                          step="any"
-                          value={stockingWaterData[field] || ''}
-                          onChange={e => setStockingWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                          placeholder=""
-                          className="h-10 text-sm"
-                        />
+                <div className="grid grid-cols-1 gap-5">
+                  {waterFields.map(field => (
+                    <div key={field} className="space-y-1.5">
+                      <div className="flex justify-between items-center px-1">
+                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{field}</Label>
+                        <span className="text-[10px] font-bold text-primary/60">{WATER_QUALITY_RANGES[field] || ''}</span>
                       </div>
-                    );
-                  })}
-                </div>
-  
-                 {/* Compliance Card */}
-                <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-montserrat">Compliance Score</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-primary font-montserrat tracking-tight">{waterDataAvg.toFixed(1)}</span>
-                      <span className="text-xs font-bold text-muted-foreground">/ 10</span>
+                      <Input
+                        type="number" step="any"
+                        value={stockingWaterData[field] || ''}
+                        onChange={e => setStockingWaterData(prev => ({ ...prev, [field]: e.target.value }))}
+                        className="h-11 rounded-xl bg-muted/10 border-muted focus:bg-background"
+                        placeholder="0.00"
+                      />
                     </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(waterDataAvg / 10) * 100}%` }} />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground text-center italic">Compliance average of {waterFilled} parameters</p>
+                  ))}
                 </div>
               </div>
               <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
@@ -843,7 +769,7 @@ const StockingForm = ({
                     onClick={() => {
                       onDataChange((prev: any) => ({
                         ...prev,
-                        waterQualityScore: parseFloat(waterDataAvg.toFixed(1)),
+                        waterComplianceScore: parseFloat(waterDataAvg.toFixed(1)),
                         stockingWaterData: stockingWaterData
                       }));
                     }}
@@ -857,24 +783,17 @@ const StockingForm = ({
         </div>
       )}
 
-
-
-      {isPlanningMode === false && (activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
-        <div className="space-y-1.5 pt-2 border-t border-dashed">
-          <Label className="text-xs">Activity Photo (Optional)</Label>
-          <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
+      <div className="space-y-4 pt-4 border-t border-dashed">
+        <div className="flex items-center gap-2 mb-1">
+          <Database className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Media Attachment</h3>
         </div>
-      )}
-  
-        <div className="space-y-1.5">
-          <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
-          <Textarea
-            value={comments}
-            onChange={e => onCommentsChange(e.target.value)}
-            placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."}
-            rows={3}
-          />
-        </div>
+        <ImageUpload
+          value={photoUrl}
+          onChange={onPhotoUrlChange}
+          folder="stocking"
+        />
+      </div>
     </div>
   );
 };

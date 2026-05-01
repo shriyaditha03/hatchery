@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, PlusCircle, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info, AlertTriangle, ShieldAlert, Activity } from 'lucide-react';
+import { Plus, PlusCircle, Trash2, Calculator, ShoppingCart, Camera, ClipboardList, CheckCircle2, TrendingUp, Database, Loader2, AlertCircle, ArrowRight, History, Info, AlertTriangle, ShieldAlert, ArrowRightLeft, Activity } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -19,8 +19,8 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from '@/components/ui/alert-dialog';
-
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
@@ -77,6 +77,14 @@ const NaupliiSaleForm = ({
   const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalSpawned || 0);
   const [showOverSaleWarning, setShowOverSaleWarning] = useState(false);
   const [pendingSaleUpdate, setPendingSaleUpdate] = useState<{ id: string, value: string } | null>(null);
+  const [isNetSaleManuallyEdited, setIsNetSaleManuallyEdited] = useState(false);
+  
+  // Default to complete if not set
+  useEffect(() => {
+    if (!data.saleType) {
+      updateData({ saleType: 'complete' });
+    }
+  }, []);
 
   const isSupervisor = user?.role === 'owner' || user?.role === 'supervisor';
   const isEditing = !!searchParams.get('edit') || !!data.id;
@@ -101,16 +109,22 @@ const NaupliiSaleForm = ({
   const totalProcessedSoFar = batchProcessedSummary.totalSold + batchProcessedSummary.totalDiscarded;
   const remainingInBatch = Math.max(0, totalHarvestedInBatch - totalProcessedSoFar);
 
-  // A batch is "locked" (closed) only if it's fully sold/discarded
+  // A batch is "locked" (closed) only if it's fully sold/discarded or explicitly closed
   const completedHarvestIds = useMemo(() => {
     // 1. Create a map of batchId -> processedAmount (from existing sales)
     const processedMap: Record<string, number> = {};
+    const explicitlyClosed = new Set<string>();
+    
     (existingSales || []).forEach(sale => {
       const bId = sale.data?.selectedBatchId || sale.data?.sourceBatchId;
       if (bId) {
         const sold = (parseFloat(sale.data?.totalGross || sale.data?.summary?.totalSaleMil) || 0);
         const disc = (parseFloat(sale.data?.totalDiscard || sale.data?.summary?.totalDiscardMil) || 0);
         processedMap[bId] = (processedMap[bId] || 0) + sold + disc;
+        
+        if (sale.data?.isBatchClosed || sale.data?.saleType === 'complete') {
+            explicitlyClosed.add(bId);
+        }
       }
     });
 
@@ -123,22 +137,26 @@ const NaupliiSaleForm = ({
       }
     });
 
-    // 3. A batch is completed if ANY sale record was marked as "complete" 
-    //    OR if processed amount >= harvested amount
-    return Object.keys(processedMap).filter(bId => {
-      if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
-      
-      const isExplicitlyClosed = (existingSales || []).some(s => 
-        (s.data?.selectedBatchId === bId || s.data?.sourceBatchId === bId) && 
-        s.data?.saleType === 'complete'
-      );
-      if (isExplicitlyClosed) return true;
+    // 3. A batch is completed if (explicitly closed AND balance is 0) OR (processed amount >= harvested amount)
+    return Array.from(new Set([
+        ...Object.keys(processedMap).filter(bId => {
+            if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
+            
+            const harvested = harvestTotalsMap[bId] || 0;
+            const processed = processedMap[bId] || 0;
+            const remaining = harvested - processed;
+            const isExplicitlyClosed = explicitlyClosed.has(bId);
 
-      const harvested = harvestTotalsMap[bId] || 0;
-      const processed = processedMap[bId] || 0;
-      // Consider it closed if processed >= harvested (within a small tolerance)
-      return harvested > 0 && processed >= (harvested - 0.001);
-    });
+            // ONLY lock if:
+            // 1. It was explicitly closed AND there's no significant balance left
+            if (isExplicitlyClosed && remaining < 0.005) return true;
+            
+            // 2. OR it was fully processed automatically
+            if (harvested > 0 && processed >= (harvested - 0.001)) return true;
+
+            return false;
+        })
+    ]));
   }, [existingSales, batchLogs, data.id, data.selectedBatchId, data.sourceBatchId]);
 
   const availableBatches = useMemo(() => {
@@ -172,21 +190,29 @@ const NaupliiSaleForm = ({
     );
   }, [availableBatches, selectedBatchId]);
 
-  const isBatchAlreadySold = useMemo(() => {
+  const isBatchAlreadyClosed = useMemo(() => {
     if (!selectedBatchId) return false;
-    const hasCompleteSale = (existingSales || []).some(s => 
+    const closedSale = (existingSales || []).find(s => 
       (s.data?.selectedBatchId === selectedBatchId || s.data?.sourceBatchId === selectedBatchId) && 
-      s.data?.saleType === 'complete' &&
-      (!data.id || s.id !== data.id)
+      (!data.id || s.id !== data.id) &&
+      (s.data?.isBatchClosed === true || s.data?.saleType === 'complete')
     );
-    return hasCompleteSale && !isEditing;
+    return !!closedSale && !isEditing;
   }, [existingSales, isEditing, selectedBatchId, data.id]);
 
-  const canEdit = isSupervisor || (!isEditing && !isBatchAlreadySold);
+  const canEdit = isSupervisor || (!isEditing && !isBatchAlreadyClosed);
 
   const updateData = (updates: any) => {
-    onDataChange({ ...data, ...updates });
+    const newData = { ...data, ...updates };
+    onDataChange(newData);
   };
+
+  useEffect(() => {
+    if (selectedBatchId) {
+        setIsNetSaleManuallyEdited(false);
+        setNetSaleManual('');
+    }
+  }, [selectedBatchId]);
 
   useEffect(() => {
     const fetchBatches = async () => {
@@ -221,13 +247,8 @@ const NaupliiSaleForm = ({
         const { data: saleLogs } = await saleQuery;
         setExistingSales(saleLogs || []);
 
-        const filtered = (logs || []).filter(l => 
-          l.stocking_id === activeBroodstockBatchId || 
-          l.stockingId === activeBroodstockBatchId || 
-          l.data?.stockingId === activeBroodstockBatchId ||
-          l.data?.selectedBatchId?.startsWith(activeBroodstockBatchId || '')
-        );
-        setBatchLogs(filtered || []);
+        // Relax the JS filter to ensure we don't accidentally hide the batch
+        setBatchLogs(logs || []);
       } catch (err) {
         console.error('Error fetching harvest batches:', err);
       } finally {
@@ -308,26 +329,27 @@ const NaupliiSaleForm = ({
     const tank = saleTanks.find(t => t.id === id);
     if (!tank) return;
 
+    setIsNetSaleManuallyEdited(false);
+    setNetSaleManual('');
+
     let finalUpdates = { ...updates };
     const harvested = parseFloat(tank.harvestedAmount) || 0;
 
     if ('saleMil' in updates) {
       const newSale = parseFloat(updates.saleMil) || 0;
-      const currentPop = tank.currentPopulation || 0;
-      if (saleType === 'complete') {
-        const newDiscard = Math.max(0, currentPop - newSale);
+      if (data.saleType === 'complete') {
+        const newDiscard = Math.max(0, harvested - newSale);
         finalUpdates.discardMil = newDiscard.toFixed(3);
-      } else {
-        // In partial sale, don't force discard
-        finalUpdates.discardMil = tank.discardMil;
       }
-      if (newSale <= (currentPop || harvested)) finalUpdates.isExceedingConfirmed = false;
+      if (newSale <= harvested) finalUpdates.isExceedingConfirmed = false;
     }
 
     if ('discardMil' in updates) {
       const newDiscard = parseFloat(updates.discardMil) || 0;
-      const newSale = Math.max(0, harvested - newDiscard);
-      finalUpdates.saleMil = newSale.toFixed(3);
+      if (data.saleType === 'complete') {
+        const newSale = Math.max(0, harvested - newDiscard);
+        finalUpdates.saleMil = newSale.toFixed(3);
+      }
       finalUpdates.isExceedingConfirmed = false;
     }
 
@@ -388,35 +410,39 @@ const NaupliiSaleForm = ({
     const bonus = parseFloat(bonusPercentage) || 0;
     const calculatedNet = metrics.totalSale / (1 + (bonus / 100));
     
-    if (!netSaleManual || parseFloat(netSaleManual) === 0) {
-      setNetSaleManual((Math.round(calculatedNet * 1000) / 1000).toString());
-    }
-
     const efficiency = totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0;
-
     const currentProcessed = metrics.totalSale + metrics.totalDiscard;
-    const isBatchClosed = saleType === 'complete' || Math.abs(totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)) < 0.005;
+    
+    const isBalanceFullyProcessed = Math.abs(remainingInBatch - currentProcessed) < 0.005;
+    const finalIsClosed = data.saleType === 'complete' || (data.saleType !== 'partial' && isBalanceFullyProcessed);
+
+    const calculatedNetRounded = Math.round(calculatedNet * 1000) / 1000;
+    const finalNetSale = isNetSaleManuallyEdited && netSaleManual ? parseFloat(netSaleManual) : calculatedNetRounded;
 
     updateData({
       totalGross: Math.round(metrics.totalSale * 1000) / 1000,
       totalDiscard: Math.round(metrics.totalDiscard * 1000) / 1000,
       bonusPercentage,
       packsPacked,
-      saleType,
-      netNauplii: netSaleManual ? parseFloat(netSaleManual) : Math.round(calculatedNet * 1000) / 1000,
+      netNauplii: finalNetSale,
       sourceBatchId: selectedBatchId,
-      isBatchClosed: isBatchClosed,
+      isBatchClosed: finalIsClosed,
       summary: {
         totalSaleMil: metrics.totalSale,
         totalDiscardMil: metrics.totalDiscard,
-        netSaleMil: netSaleManual ? parseFloat(netSaleManual) : metrics.totalSale,
+        netSaleMil: finalNetSale,
         totalAvailable: totalHarvestedInBatch,
-        remainingInBatch: Math.max(0, totalHarvestedInBatch - (totalProcessedSoFar + currentProcessed)), 
+        totalProcessedSoFar: totalProcessedSoFar,
+        remainingInBatch: Math.max(0, remainingInBatch - currentProcessed), 
         totalSpawned: totalSpawnedInBatch,
         naupliiPerAnimal: Math.round(efficiency * 1000) / 1000
       }
     });
-  }, [selectedBatchId, saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch, saleType]);
+
+    if (!isNetSaleManuallyEdited) {
+        setNetSaleManual(calculatedNetRounded.toString());
+    }
+  }, [selectedBatchId, saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch, data.saleType, remainingInBatch, totalProcessedSoFar, isNetSaleManuallyEdited]);
 
   return (
     <div className={cn("space-y-6 animate-fade-in-up", !canEdit && "opacity-80 pointer-events-none select-none")}>
@@ -425,7 +451,7 @@ const NaupliiSaleForm = ({
           <ShieldAlert className="w-5 h-5 text-amber-600" />
           <div>
             <p className="text-xs font-black uppercase tracking-widest">Read-Only Mode</p>
-            <p className="text-[10px] font-medium opacity-80">This {isBatchAlreadySold ? 'finalized' : ''} record can only be edited by a supervisor.</p>
+            <p className="text-[10px] font-medium opacity-80">This finalized record can only be edited by a supervisor.</p>
           </div>
         </div>
       )}
@@ -450,7 +476,7 @@ const NaupliiSaleForm = ({
 
       <div className="glass-card rounded-3xl p-6 border shadow-sm space-y-8">
         <div className="space-y-4">
-          {!canEdit && isBatchAlreadySold && (
+          {!canEdit && isBatchAlreadyClosed && (
             <div className="bg-amber-50 border-2 border-amber-200 rounded-[2rem] p-6 flex items-start gap-4 mb-4 animate-in zoom-in-95 pointer-events-auto">
                <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
                   <CheckCircle2 className="w-6 h-6" />
@@ -464,12 +490,36 @@ const NaupliiSaleForm = ({
             </div>
           )}
 
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-indigo-100 rounded-xl">
-              <Database className="w-4 h-4 text-indigo-600" />
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-indigo-50">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-100 rounded-xl">
+                <Database className="w-4 h-4 text-indigo-600" />
+              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Nauplii Batch</h3>
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Step # 1: Choose Nauplii Production Batch</h3>
-            <p className="text-[10px] text-muted-foreground uppercase bg-indigo-50 px-2 py-1 rounded-md font-bold">From Harvest</p>
+
+            <RadioGroup 
+                value={data.saleType || 'complete'} 
+                onValueChange={(v) => updateData({ saleType: v })}
+                className="flex flex-wrap gap-2"
+            >
+                <Label
+                    htmlFor="sale-complete"
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'complete' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-muted hover:border-indigo-200'}`}
+                >
+                    <RadioGroupItem value="complete" id="sale-complete" className="sr-only" />
+                    <CheckCircle2 className={`w-4 h-4 ${data.saleType === 'complete' ? 'text-white' : 'text-indigo-300'}`} />
+                    <span className="text-[10px] font-black uppercase">Final Sale (Close Batch)</span>
+                </Label>
+                <Label
+                    htmlFor="sale-partial"
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'partial' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-muted hover:border-amber-200'}`}
+                >
+                    <RadioGroupItem value="partial" id="sale-partial" className="sr-only" />
+                    <ArrowRightLeft className={`w-4 h-4 ${data.saleType === 'partial' ? 'text-white' : 'text-amber-300'}`} />
+                    <span className="text-[10px] font-black uppercase">Split Sale (Partial)</span>
+                </Label>
+            </RadioGroup>
           </div>
             
           <div className="space-y-4">
@@ -493,33 +543,6 @@ const NaupliiSaleForm = ({
                   )}
                 </SelectContent>
             </Select>
-
-            {selectedBatchId && (
-              <div className="flex flex-wrap gap-2 pt-2">
-                  <RadioGroup 
-                      value={saleType} 
-                      onValueChange={(v: any) => setSaleType(v)}
-                      className="flex flex-wrap gap-2"
-                  >
-                      <Label
-                          htmlFor="complete"
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${saleType === 'complete' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-muted hover:border-indigo-200'}`}
-                      >
-                          <RadioGroupItem value="complete" id="complete" className="sr-only" />
-                          <CheckCircle2 className={`w-4 h-4 ${saleType === 'complete' ? 'text-white' : 'text-indigo-300'}`} />
-                          <span className="text-xs font-black uppercase">Final/Complete Sale</span>
-                      </Label>
-                      <Label
-                          htmlFor="partial"
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${saleType === 'partial' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-muted hover:border-amber-200'}`}
-                      >
-                          <RadioGroupItem value="partial" id="partial" className="sr-only" />
-                          <Activity className={`w-4 h-4 ${saleType === 'partial' ? 'text-white' : 'text-amber-300'}`} />
-                          <span className="text-xs font-black uppercase">Partial Sale (Split)</span>
-                      </Label>
-                  </RadioGroup>
-              </div>
-            )}
 
             {!loadingBatches && availableBatches.length === 0 && (
                 <div className="flex flex-col items-center gap-3 text-amber-600 bg-amber-50 p-6 rounded-3xl border border-amber-100 animate-in fade-in zoom-in-95 w-full mt-4">
@@ -576,26 +599,39 @@ const NaupliiSaleForm = ({
           <>
             <div className="h-px bg-muted-foreground/10 mx-4" />
             
-            <div className="bg-indigo-50/50 border border-indigo-100 rounded-3xl p-6 flex flex-col items-center justify-center text-center gap-3">
-              <div className="flex items-center gap-6">
+            <div className="bg-indigo-50/50 border border-indigo-100 rounded-3xl p-6 flex flex-col items-center justify-center text-center gap-6">
+              <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
                 <div className="text-center">
                   <p className="text-[10px] font-black text-indigo-950/40 uppercase tracking-widest mb-1">Total Harvested</p>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-2xl font-black text-indigo-950">{totalHarvestedInBatch.toFixed(3)} mil</span>
-                    <span className="text-[10px] font-bold text-indigo-500 uppercase opacity-60">(from Harvest)</span>
+                    <span className="text-2xl font-black text-indigo-950">{totalHarvestedInBatch.toFixed(3)}M</span>
                   </div>
                 </div>
-                <div className="w-px h-10 bg-indigo-200/50" />
+
                 <div className="text-center">
-                  <p className="text-[10px] font-black text-emerald-900/40 uppercase tracking-widest mb-1">Remaining to Sell</p>
+                  <p className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest mb-1">Previously Processed</p>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-2xl font-black text-emerald-600">{remainingInBatch.toFixed(3)} mil</span>
+                    <span className="text-2xl font-black text-amber-600">{totalProcessedSoFar.toFixed(3)}M</span>
+                  </div>
+                </div>
+
+                <div className="text-center bg-white/60 p-4 rounded-2xl border border-indigo-100/50 shadow-inner">
+                  <p className="text-[10px] font-black text-emerald-900/40 uppercase tracking-widest mb-1">Balance Available</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-3xl font-black text-emerald-600">{remainingInBatch.toFixed(3)}M</span>
                     <div className="bg-emerald-500/10 p-1.5 rounded-xl">
-                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                      <TrendingUp className="w-5 h-5 text-emerald-600" />
                     </div>
                   </div>
                 </div>
               </div>
+
+              {totalProcessedSoFar > 0 && (
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase tracking-widest border border-indigo-200 shadow-sm animate-pulse">
+                  <History className="w-3 h-3" />
+                  Split Sale Progressing
+                </div>
+              )}
             </div>
 
             <div className="space-y-6">
@@ -651,7 +687,7 @@ const NaupliiSaleForm = ({
                   <Calculator className="w-4 h-4 text-amber-600" />
                   2. Production Metrics (a-f)
                 </h2>
-                {saleType === 'partial' && (
+                {data.saleType === 'partial' && (
                   <div className="flex items-center gap-2 bg-amber-100 px-3 py-1 rounded-full border border-amber-200 animate-pulse">
                     <History className="w-3.5 h-3.5 text-amber-600" />
                     <span className="text-[10px] font-black text-amber-900 uppercase">
@@ -667,14 +703,20 @@ const NaupliiSaleForm = ({
                     <Input 
                       type="number" value={bonusPercentage} 
                       onChange={e => setBonusPercentage(e.target.value)} 
-                      className="h-12 rounded-2xl font-black bg-white border-amber-100 text-xl text-amber-950 pr-12 text-center" 
+                      className="h-14 rounded-2xl font-black bg-white border border-amber-100 shadow-sm text-center text-xl text-amber-950 focus:ring-2 focus:ring-amber-500" 
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">%</span>
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-black text-amber-300">%</span>
                   </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-amber-600 tracking-widest ml-1">b. Total Nauplii Sold Gross (mil)</Label>
-                  <div className="h-12 bg-white rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950 text-xl shadow-sm">
+                   <div className="flex items-center justify-between ml-1">
+                      <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest">b. Total Nauplii Sold Gross (mil)</Label>
+                      <div className="bg-amber-100 px-2 py-0.5 rounded-md">
+                         <span className="text-[8px] font-black text-amber-600 uppercase">Auto</span>
+                      </div>
+                   </div>
+                   <div className="h-14 bg-amber-50/50 rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950 text-2xl shadow-inner">
                     {(data.totalGross || 0).toFixed(3)}M
                   </div>
                 </div>
@@ -682,104 +724,133 @@ const NaupliiSaleForm = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1 flex justify-between">
-                    <span>c. Total Nauplii Sold Net (mil) *</span>
-                    <span className="text-[8px] opacity-50 lowercase tracking-normal bg-amber-100 px-1.5 rounded-full">Editable</span>
-                  </Label>
-                  <div className="relative">
+                   <div className="flex items-center justify-between ml-1">
+                      <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest">c. Total Nauplii Sold Net (mil) *</Label>
+                      <div className="flex items-center gap-2">
+                        {isNetSaleManuallyEdited && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 px-2 text-[8px] font-black uppercase text-amber-600 hover:bg-amber-100 gap-1 rounded-md"
+                            onClick={() => {
+                              setIsNetSaleManuallyEdited(false);
+                              const bonus = parseFloat(bonusPercentage) || 0;
+                              const totalG = data.totalGross || 0;
+                              const calc = totalG / (1 + (bonus / 100));
+                              setNetSaleManual((Math.round(calc * 1000) / 1000).toString());
+                            }}
+                          >
+                            <History className="w-2.5 h-2.5" /> Reset
+                          </Button>
+                        )}
+                        <div className={cn(
+                          "px-2 py-0.5 rounded-md border",
+                          isNetSaleManuallyEdited ? "bg-amber-500 border-amber-600 text-white" : "bg-amber-100 border-amber-200 text-amber-600"
+                        )}>
+                           <span className="text-[8px] font-black uppercase">{isNetSaleManuallyEdited ? 'Manual Entry' : 'Auto'}</span>
+                        </div>
+                      </div>
+                   </div>
+                   <div className="relative">
                     <Input 
                       type="number" step="0.001" value={netSaleManual} 
-                      onChange={e => setNetSaleManual(e.target.value)} 
-                      className="h-16 rounded-[2rem] font-black bg-amber-600 text-white border-none text-3xl shadow-lg shadow-amber-200 pr-12 text-center" 
-                      placeholder={((data.totalGross || 0) / (1 + (parseFloat(bonusPercentage) || 0) / 100)).toFixed(3)}
+                      onChange={e => {
+                        setIsNetSaleManuallyEdited(true);
+                        setNetSaleManual(e.target.value);
+                      }}
+                      className={cn(
+                        "h-14 rounded-2xl font-black shadow-sm text-center text-2xl transition-all",
+                        isNetSaleManuallyEdited ? "bg-amber-50 border-2 border-amber-500 text-amber-900" : "bg-white border-amber-100 text-amber-950"
+                      )} 
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-black text-amber-200">M</span>
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-xl font-black text-amber-300">M</span>
                   </div>
                 </div>
-                <div className="space-y-1.5 self-end">
-                  <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1 leading-none">d. Total No Packets packed *</Label>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest ml-1">d. Total No Packets Packed *</Label>
                   <div className="relative">
                     <Input 
                       type="number" value={packsPacked} 
                       onChange={e => setPacksPacked(e.target.value)} 
-                      className="h-16 rounded-[2rem] font-black bg-white border-muted-foreground/10 text-2xl shadow-sm pr-20 text-center" 
+                      className="h-14 rounded-2xl font-black bg-white border border-indigo-100 shadow-sm text-center text-xl text-indigo-950 focus:ring-2 focus:ring-indigo-500" 
                     />
-                    <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
-                      <span className="text-[10px] font-black">NOS</span>
-                      <span className="text-[8px] font-bold uppercase tracking-tighter">Packets</span>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
+                      <span className="text-[8px] font-black uppercase">Nos</span>
+                      <span className="text-[8px] font-black uppercase">Packets</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-rose-600 tracking-widest ml-1">e. Total Nauplii Discarded (mil)</Label>
-                  <div className="h-14 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-center justify-center font-black text-rose-950 text-xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                 <div className="space-y-1.5">
+                   <div className="flex items-center justify-between ml-1">
+                      <Label className="text-[10px] font-black text-rose-700 uppercase tracking-widest">e. Total Nauplii Discarded (mil)</Label>
+                      <div className="bg-rose-100 px-2 py-0.5 rounded-md">
+                         <span className="text-[8px] font-black text-rose-600 uppercase">Auto</span>
+                      </div>
+                   </div>
+                   <div className="h-14 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-center justify-center font-black text-rose-950 text-2xl shadow-inner">
                     {(data.totalDiscard || 0).toFixed(3)}M
                   </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 ml-1">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                    <Label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">f. No. of Nauplii per Animal (mil)</Label>
-                  </div>
-                  <div className="h-14 bg-emerald-50 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center relative overflow-hidden group">
-                    <span className="text-xl font-black text-emerald-950 z-10">
-                      {(data.summary?.naupliiPerAnimal || 0).toFixed(3)}M
-                    </span>
-                    <span className="text-[8px] font-bold text-emerald-600/50 uppercase leading-none z-10">Per Female</span>
+                   <div className="flex items-center justify-between ml-1">
+                      <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none">f. No. of Nauplii per Animal (mil)</Label>
+                      <div className="bg-emerald-100 px-2 py-0.5 rounded-md">
+                         <span className="text-[8px] font-black text-emerald-600 uppercase">Auto</span>
+                      </div>
+                   </div>
+                   <div className="h-14 bg-emerald-50/50 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center font-black text-emerald-950 text-2xl shadow-inner relative overflow-hidden group">
+                    <span className="leading-tight">{(totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0).toFixed(3)}M</span>
+                    <span className="text-[8px] font-bold text-muted-foreground uppercase opacity-50">Per Female</span>
+                    <div className="absolute inset-0 bg-emerald-500/5 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
                   </div>
                 </div>
               </div>
             </div>
+
+            <div className="h-px bg-muted-foreground/10 mx-4" />
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 bg-indigo-100 rounded-xl">
+                  <Camera className="w-4 h-4 text-indigo-600" />
+                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider">Step # 3: Media Attachment (Optional)</h3>
+              </div>
+              <ImageUpload
+                value={photoUrl}
+                onChange={onPhotoUrlChange}
+                folder="nauplii-sale"
+              />
+            </div>
           </>
         )}
-
-        <div className="space-y-6 pt-4 border-t border-dashed">
-          <div className="space-y-3">
-             <div className="flex items-center gap-2">
-                <Camera className="w-4 h-4 text-muted-foreground" />
-                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Photos (Optional)</Label>
-             </div>
-             <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
-          </div>
-          <div className="space-y-3">
-             <div className="flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-muted-foreground" />
-                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Comments</Label>
-             </div>
-             <Textarea
-               value={comments}
-               onChange={e => onCommentsChange(e.target.value)}
-               placeholder="Add sale notes..."
-               rows={3}
-               className="rounded-2xl border-muted-foreground/10 bg-muted/5 font-medium"
-             />
-          </div>
-        </div>
       </div>
 
       <AlertDialog open={showOverSaleWarning} onOpenChange={setShowOverSaleWarning}>
-        <AlertDialogContent className="rounded-[2rem] border-rose-100">
-          <AlertDialogHeader>
-            <div className="flex items-center gap-3 text-rose-600 mb-2">
-              <div className="p-3 bg-rose-100 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">Over-Sale Warning</AlertDialogTitle>
+        <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl p-0 overflow-hidden max-w-sm">
+          <div className="bg-amber-50 p-8 flex flex-col items-center text-center gap-4">
+            <div className="w-16 h-16 rounded-3xl bg-amber-100 flex items-center justify-center text-amber-600 animate-bounce">
+              <AlertTriangle className="w-8 h-8" />
             </div>
-            <AlertDialogDescription className="text-base font-bold text-rose-900/70">
-              The amount of Nauplii for sale (<span className="text-rose-600 font-black">{pendingSaleUpdate?.value}M</span>) is above the available amount (<span className="text-amber-600 font-black">
-                {saleTanks.find(t => t.id === pendingSaleUpdate?.id)?.harvestedAmount}M
-              </span>).
-              <br /><br />
-              Do you still want to go ahead?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-3">
-            <AlertDialogCancel onClick={cancelOverSale} className="rounded-xl font-bold h-12 border-rose-100">No, Correct Amount</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmOverSale} className="rounded-xl font-black h-12 bg-rose-600 text-white shadow-lg shadow-rose-200">Yes, Continue Sale</AlertDialogAction>
+            <div className="space-y-2">
+              <AlertDialogTitle className="text-xl font-black text-amber-950 uppercase tracking-tight">Oversale Warning</AlertDialogTitle>
+              <AlertDialogDescription className="text-sm text-amber-800/70 font-medium">
+                The amount entered exceeds the quantity currently available in this tank. Are you sure you want to proceed?
+              </AlertDialogDescription>
+            </div>
+          </div>
+          <AlertDialogFooter className="p-4 bg-white flex flex-col gap-2 sm:flex-col">
+            <AlertDialogAction onClick={confirmOverSale} className="h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm uppercase shadow-lg shadow-amber-200 border-none">
+              Yes, Confirm Quantity
+            </AlertDialogAction>
+            <AlertDialogCancel onClick={cancelOverSale} className="h-12 rounded-xl bg-white text-amber-900 border-2 border-amber-100 hover:bg-amber-50 font-black text-sm uppercase">
+              No, Go Back
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

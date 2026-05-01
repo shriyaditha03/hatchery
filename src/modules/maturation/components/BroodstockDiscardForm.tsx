@@ -62,20 +62,21 @@ const BroodstockDiscardForm: React.FC<BroodstockDiscardFormProps> = ({
                 .from('activity_logs')
                 .select('*')
                 .eq('farm_id', farmId)
-                .in('activity_type', ['Stocking', 'Observation']);
+                .in('activity_type', ['Stocking', 'Observation'])
+                .or(`stocking_id.eq.${activeBroodstockBatchId},data->>stockingId.eq.${activeBroodstockBatchId}`);
 
             if (logError) throw logError;
 
             // Filter for Stocking Log
             const sLog = (allLogs || []).find(l => {
-                const sId = l.stockingId || l.data?.stockingId || l.data?.batchId;
+                const sId = l.stocking_id || l.stockingId || l.data?.stockingId || l.data?.batchId;
                 return l.activity_type === 'Stocking' && sId === activeBroodstockBatchId;
             });
             setStockingLog(sLog);
 
             // Filter for Observation Logs
             const oLogs = (allLogs || []).filter(l => {
-                const sId = l.stockingId || l.data?.stockingId || l.data?.batchId || l.data?.selectedBatchId;
+                const sId = l.stocking_id || l.stockingId || l.data?.stockingId || l.data?.batchId || l.data?.selectedBatchId;
                 return l.activity_type === 'Observation' && sId === activeBroodstockBatchId;
             });
             setObservationLogs(oLogs);
