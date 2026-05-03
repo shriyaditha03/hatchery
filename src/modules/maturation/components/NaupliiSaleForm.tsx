@@ -93,70 +93,125 @@ const NaupliiSaleForm = ({
   const batchProcessedSummary = useMemo(() => {
     if (!selectedBatchId || !existingSales.length) return { totalSold: 0, totalDiscarded: 0 };
     
+    const hasNewFormat = existingSales.some(sale => 
+      (sale.data?.selectedBatchId === selectedBatchId || sale.data?.sourceBatchId === selectedBatchId) && 
+      sale.data?.movementType === 'nauplii_clearance'
+    );
+    
     return existingSales.reduce((acc, sale) => {
       // Skip the current record if we're editing it
       if (data.id && sale.id === data.id) return acc;
       
       const saleBatchId = sale.data?.selectedBatchId || sale.data?.sourceBatchId;
       if (saleBatchId === selectedBatchId) {
-        acc.totalSold += (parseFloat(sale.data?.totalGross || sale.data?.summary?.totalSaleMil) || 0);
-        acc.totalDiscarded += (parseFloat(sale.data?.totalDiscard || sale.data?.summary?.totalDiscardMil) || 0);
+        let soldAndDisc = 0;
+
+        if (sale.data?.movementType === 'nauplii_clearance') {
+          // Use the movementQty which represents the exact sale+discard amount for this log
+          soldAndDisc = Math.abs(parseFloat(sale.data?.movementQty) || 0);
+        } else if (!hasNewFormat) {
+          // Legacy log
+          soldAndDisc = (parseFloat(sale.data?.totalGross || sale.data?.summary?.totalSaleMil) || 0) + 
+                        (parseFloat(sale.data?.totalDiscard || sale.data?.summary?.totalDiscardMil) || 0);
+        } else {
+          // Redundant form-level log created alongside new format logs, skip it
+          return acc;
+        }
+        
+        // Since we only need the sum for UI display, we can allocate it all to totalSold
+        acc.totalSold += soldAndDisc;
       }
       return acc;
     }, { totalSold: 0, totalDiscarded: 0 });
   }, [existingSales, selectedBatchId, data.id]);
 
   const totalProcessedSoFar = batchProcessedSummary.totalSold + batchProcessedSummary.totalDiscarded;
-  const remainingInBatch = Math.max(0, totalHarvestedInBatch - totalProcessedSoFar);
+  
+  // The current sale and discard amounts entered in this form
+  const currentFormTotal = (data.totalGross || 0) + (data.totalDiscard || 0);
+  
+  const remainingInBatch = Math.max(0, totalHarvestedInBatch - totalProcessedSoFar - currentFormTotal);
 
   // A batch is "locked" (closed) only if it's fully sold/discarded or explicitly closed
   const completedHarvestIds = useMemo(() => {
     // 1. Create a map of batchId -> processedAmount (from existing sales)
     const processedMap: Record<string, number> = {};
-    const explicitlyClosed = new Set<string>();
+    const finalSaleBatches = new Set<string>();
     
-    (existingSales || []).forEach(sale => {
+    // Sort sales to ensure we process them in a consistent order (latest last)
+    const sortedSales = [...(existingSales || [])].sort((a, b) => 
+      new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    );
+    
+    const hasNewFormat = sortedSales.some(sale => sale.data?.movementType === 'nauplii_clearance');
+    const lastSaleTypeMap: Record<string, string> = {};
+    
+    sortedSales.forEach(sale => {
       const bId = sale.data?.selectedBatchId || sale.data?.sourceBatchId;
       if (bId) {
-        const sold = (parseFloat(sale.data?.totalGross || sale.data?.summary?.totalSaleMil) || 0);
-        const disc = (parseFloat(sale.data?.totalDiscard || sale.data?.summary?.totalDiscardMil) || 0);
-        processedMap[bId] = (processedMap[bId] || 0) + sold + disc;
+        let soldAndDisc = 0;
+
+        if (sale.data?.movementType === 'nauplii_clearance') {
+          soldAndDisc = Math.abs(parseFloat(sale.data?.movementQty) || 0);
+        } else if (!hasNewFormat) {
+          soldAndDisc = (parseFloat(sale.data?.totalGross || sale.data?.summary?.totalSaleMil || '0') || 0) + 
+                        (parseFloat(sale.data?.totalDiscard || sale.data?.summary?.totalDiscardMil || '0') || 0);
+        } else {
+          return; // Skip redundant log
+        }
         
-        if (sale.data?.isBatchClosed || sale.data?.saleType === 'complete') {
-            explicitlyClosed.add(bId);
+        processedMap[bId] = (processedMap[bId] || 0) + soldAndDisc;
+        
+        lastSaleTypeMap[bId] = sale.data?.saleType;
+
+        // A batch is "finalized" only if a sale was explicitly marked as 'complete'
+        // AND it wasn't subsequently reopened (though reopening isn't fully implemented, 
+        // the 'partial' check below handles the split-sale case).
+        if ((sale.data?.isBatchClosed === true || sale.data?.saleType === 'complete') && sale.data?.saleType !== 'partial') {
+            finalSaleBatches.add(bId);
+        } else if (sale.data?.saleType === 'partial') {
+            // If the latest record is partial, it's definitely not finalized
+            finalSaleBatches.delete(bId);
         }
       }
     });
 
-    // 2. Map harvest batches to their total harvested amounts (from harvest logs)
+    // 2. Map harvest batches to their total harvested amounts
     const harvestTotalsMap: Record<string, number> = {};
     batchLogs.forEach(log => {
       const bId = log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber;
       if (bId) {
-        harvestTotalsMap[bId] = log.data?.summary?.totalHarvested || 0;
+        const val = parseFloat(log.data?.summary?.totalShifted || log.data?.summary?.totalHarvested || '0') || 0;
+        harvestTotalsMap[bId] = Math.max(harvestTotalsMap[bId] || 0, val);
       }
     });
 
-    // 3. A batch is completed if (explicitly closed AND balance is 0) OR (processed amount >= harvested amount)
-    return Array.from(new Set([
-        ...Object.keys(processedMap).filter(bId => {
-            if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
-            
-            const harvested = harvestTotalsMap[bId] || 0;
-            const processed = processedMap[bId] || 0;
-            const remaining = harvested - processed;
-            const isExplicitlyClosed = explicitlyClosed.has(bId);
+    // 3. Filter IDs that are truly completed
+    return Array.from(new Set(
+      batchLogs.map(log => log.data?.selectedBatchId || log.data?.batchId || log.data?.batchNumber)
+        .filter(bId => {
+          if (!bId) return false;
+          if (data.id && (bId === data.selectedBatchId || bId === data.sourceBatchId)) return false;
+          
+          const harvested = harvestTotalsMap[bId] || 0;
+          const processed = processedMap[bId] || 0;
+          const remaining = harvested - processed;
+          const isExplicitlyFinalized = finalSaleBatches.has(bId);
+          const lastType = lastSaleTypeMap[bId];
 
-            // ONLY lock if:
-            // 1. It was explicitly closed AND there's no significant balance left
-            if (isExplicitlyClosed && remaining < 0.005) return true;
-            
-            // 2. OR it was fully processed automatically
-            if (harvested > 0 && processed >= (harvested - 0.001)) return true;
+          // CRITICAL: If the most recent sale was partial, keep the batch open regardless of balance
+          if (lastType === 'partial') return false;
 
-            return false;
+          // ONLY lock if:
+          // 1. It was explicitly closed AND there's NO significant balance left
+          if (isExplicitlyFinalized && remaining < 0.005) return true;
+          
+          // 2. OR it was fully processed automatically (sum of sales >= capacity)
+          if (harvested > 0.001 && processed >= (harvested - 0.005)) return true;
+
+          return false;
         })
-    ]));
+    ));
   }, [existingSales, batchLogs, data.id, data.selectedBatchId, data.sourceBatchId]);
 
   const availableBatches = useMemo(() => {
@@ -192,12 +247,20 @@ const NaupliiSaleForm = ({
 
   const isBatchAlreadyClosed = useMemo(() => {
     if (!selectedBatchId) return false;
+    
+    // Check if any existing sale explicitly closed this batch
     const closedSale = (existingSales || []).find(s => 
       (s.data?.selectedBatchId === selectedBatchId || s.data?.sourceBatchId === selectedBatchId) && 
       (!data.id || s.id !== data.id) &&
-      (s.data?.isBatchClosed === true || s.data?.saleType === 'complete')
+      (s.data?.isBatchClosed === true || s.data?.saleType === 'complete') &&
+      s.data?.saleType !== 'partial'
     );
-    return !!closedSale && !isEditing;
+
+    if (!closedSale) return false;
+
+    // Even if marked closed, if there's still a significant balance, allow editing (for supervisors/safety)
+    // This part is handled by canEdit and UI warnings
+    return !isEditing;
   }, [existingSales, isEditing, selectedBatchId, data.id]);
 
   const canEdit = isSupervisor || (!isEditing && !isBatchAlreadyClosed);
@@ -236,9 +299,10 @@ const NaupliiSaleForm = ({
 
         let saleQuery = supabase
           .from('activity_logs')
-          .select('id, data')
+          .select('id, data, created_at')
           .eq('farm_id', farmId)
-          .eq('activity_type', 'Nauplii Sale');
+          .eq('activity_type', 'Nauplii Sale')
+          .order('created_at', { ascending: false });
         
         if (activeBroodstockBatchId) {
           saleQuery = saleQuery.eq('stocking_id', activeBroodstockBatchId);
@@ -277,7 +341,7 @@ const NaupliiSaleForm = ({
     const log = batchLogs.find(l => (l.data?.selectedBatchId || l.data?.batchId || l.data?.batchNumber) === batchId);
     if (log && log.data) {
       const harvestEntries = log.data.naupliiDestinations || [];
-      const harvestedTotal = log.data.summary?.totalHarvested || 0;
+      const harvestedTotal = log.data.summary?.totalShifted || log.data.summary?.totalHarvested || 0;
       const spawnedTotal = log.data.summary?.totalBatchSpawned || 0;
       
       const harvestDate = new Date(log.created_at);
@@ -337,19 +401,10 @@ const NaupliiSaleForm = ({
 
     if ('saleMil' in updates) {
       const newSale = parseFloat(updates.saleMil) || 0;
-      if (data.saleType === 'complete') {
-        const newDiscard = Math.max(0, harvested - newSale);
-        finalUpdates.discardMil = newDiscard.toFixed(3);
-      }
       if (newSale <= harvested) finalUpdates.isExceedingConfirmed = false;
     }
 
     if ('discardMil' in updates) {
-      const newDiscard = parseFloat(updates.discardMil) || 0;
-      if (data.saleType === 'complete') {
-        const newSale = Math.max(0, harvested - newDiscard);
-        finalUpdates.saleMil = newSale.toFixed(3);
-      }
       finalUpdates.isExceedingConfirmed = false;
     }
 
@@ -413,8 +468,8 @@ const NaupliiSaleForm = ({
     const efficiency = totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0;
     const currentProcessed = metrics.totalSale + metrics.totalDiscard;
     
-    const isBalanceFullyProcessed = Math.abs(remainingInBatch - currentProcessed) < 0.005;
-    const finalIsClosed = data.saleType === 'complete' || (data.saleType !== 'partial' && isBalanceFullyProcessed);
+    const isBalanceFullyProcessed = totalHarvestedInBatch > 0 && Math.abs(remainingInBatch - currentProcessed) < 0.005;
+    const finalIsClosed = data.saleType === 'complete' || (data.saleType && data.saleType !== 'partial' && isBalanceFullyProcessed);
 
     const calculatedNetRounded = Math.round(calculatedNet * 1000) / 1000;
     const finalNetSale = isNetSaleManuallyEdited && netSaleManual ? parseFloat(netSaleManual) : calculatedNetRounded;
@@ -440,7 +495,7 @@ const NaupliiSaleForm = ({
     });
 
     if (!isNetSaleManuallyEdited) {
-        setNetSaleManual(calculatedNetRounded.toString());
+        setNetSaleManual(calculatedNetRounded.toFixed(3));
     }
   }, [selectedBatchId, saleTanks, bonusPercentage, packsPacked, netSaleManual, totalHarvestedInBatch, totalSpawnedInBatch, data.saleType, remainingInBatch, totalProcessedSoFar, isNetSaleManuallyEdited]);
 
@@ -505,19 +560,19 @@ const NaupliiSaleForm = ({
             >
                 <Label
                     htmlFor="sale-complete"
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'complete' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-muted hover:border-indigo-200'}`}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'complete' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-muted hover:border-indigo-200'}`}
                 >
                     <RadioGroupItem value="complete" id="sale-complete" className="sr-only" />
                     <CheckCircle2 className={`w-4 h-4 ${data.saleType === 'complete' ? 'text-white' : 'text-indigo-300'}`} />
-                    <span className="text-[10px] font-black uppercase">Final Sale (Close Batch)</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">Final Sale (Close Batch)</span>
                 </Label>
                 <Label
                     htmlFor="sale-partial"
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'partial' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-muted hover:border-amber-200'}`}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${data.saleType === 'partial' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-muted hover:border-amber-200'}`}
                 >
                     <RadioGroupItem value="partial" id="sale-partial" className="sr-only" />
-                    <ArrowRightLeft className={`w-4 h-4 ${data.saleType === 'partial' ? 'text-white' : 'text-amber-300'}`} />
-                    <span className="text-[10px] font-black uppercase">Split Sale (Partial)</span>
+                    <Activity className={`w-4 h-4 ${data.saleType === 'partial' ? 'text-white' : 'text-amber-300'}`} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Partial Sale (Split Sale)</span>
                 </Label>
             </RadioGroup>
           </div>
@@ -681,135 +736,115 @@ const NaupliiSaleForm = ({
               </div>
             </div>
 
-            <div className="p-8 bg-amber-50/30 rounded-[2.5rem] border border-dashed border-amber-200 space-y-8">
+            <div className="space-y-8 animate-fade-in-up">
               <div className="flex items-center justify-between gap-4">
-                <h2 className="text-sm font-black text-amber-950 uppercase tracking-[0.2em] flex items-center gap-2">
-                  <Calculator className="w-4 h-4 text-amber-600" />
-                  2. Production Metrics (a-f)
+                <h2 className="text-xl font-black text-amber-950 uppercase tracking-tight flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-amber-600" />
+                  2. Production Metrics (A-F)
                 </h2>
-                {data.saleType === 'partial' && (
-                  <div className="flex items-center gap-2 bg-amber-100 px-3 py-1 rounded-full border border-amber-200 animate-pulse">
-                    <History className="w-3.5 h-3.5 text-amber-600" />
-                    <span className="text-[10px] font-black text-amber-900 uppercase">
-                      Remaining: {(data.summary?.remainingInBatch || 0).toFixed(3)}M
+                {selectedBatchId && (
+                  <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-full border-2 border-amber-100 shadow-sm">
+                    <History className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-black text-amber-900 uppercase">
+                      Remaining: {remainingInBatch.toFixed(3)}M
                     </span>
                   </div>
                 )}
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest ml-1">a. Bonus % Offered *</Label>
-                  <div className="relative">
+                {/* A. BONUS % OFFERED */}
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] ml-1">A. Bonus % Offered *</h3>
+                  <div className="h-20 bg-white rounded-3xl border-2 border-amber-50 shadow-sm flex items-center justify-between px-8 group hover:border-amber-200 transition-all focus-within:border-amber-400">
                     <Input 
-                      type="number" value={bonusPercentage} 
-                      onChange={e => setBonusPercentage(e.target.value)} 
-                      className="h-14 rounded-2xl font-black bg-white border border-amber-100 shadow-sm text-center text-xl text-amber-950 focus:ring-2 focus:ring-amber-500" 
+                      type="number"
+                      value={bonusPercentage}
+                      onChange={e => setBonusPercentage(e.target.value)}
+                      className="text-3xl font-black text-slate-900 border-none bg-transparent focus-visible:ring-0 w-full p-0 h-full"
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-black text-amber-300">%</span>
+                    <span className="text-2xl font-black text-amber-400 opacity-50 group-hover:opacity-100 transition-opacity ml-4">%</span>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                   <div className="flex items-center justify-between ml-1">
-                      <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest">b. Total Nauplii Sold Gross (mil)</Label>
-                      <div className="bg-amber-100 px-2 py-0.5 rounded-md">
-                         <span className="text-[8px] font-black text-amber-600 uppercase">Auto</span>
-                      </div>
-                   </div>
-                   <div className="h-14 bg-amber-50/50 rounded-2xl border border-amber-100 flex items-center justify-center font-black text-amber-950 text-2xl shadow-inner">
+                {/* B. TOTAL NAUPLII SOLD GROSS */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-[0.2em]">B. Total Nauplii Sold Gross (Mil)</h3>
+                    <div className="bg-amber-100 px-2 py-0.5 rounded-lg text-[8px] font-black text-amber-600 uppercase">Auto</div>
+                  </div>
+                  <div className="h-20 bg-amber-50/50 rounded-3xl border-2 border-amber-100/50 shadow-sm flex items-center justify-center font-black text-amber-950 text-3xl">
                     {(data.totalGross || 0).toFixed(3)}M
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-1.5">
-                   <div className="flex items-center justify-between ml-1">
-                      <Label className="text-[10px] font-black text-amber-700 uppercase tracking-widest">c. Total Nauplii Sold Net (mil) *</Label>
-                      <div className="flex items-center gap-2">
-                        {isNetSaleManuallyEdited && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 px-2 text-[8px] font-black uppercase text-amber-600 hover:bg-amber-100 gap-1 rounded-md"
-                            onClick={() => {
-                              setIsNetSaleManuallyEdited(false);
-                              const bonus = parseFloat(bonusPercentage) || 0;
-                              const totalG = data.totalGross || 0;
-                              const calc = totalG / (1 + (bonus / 100));
-                              setNetSaleManual((Math.round(calc * 1000) / 1000).toString());
-                            }}
-                          >
-                            <History className="w-2.5 h-2.5" /> Reset
-                          </Button>
-                        )}
-                        <div className={cn(
-                          "px-2 py-0.5 rounded-md border",
-                          isNetSaleManuallyEdited ? "bg-amber-500 border-amber-600 text-white" : "bg-amber-100 border-amber-200 text-amber-600"
-                        )}>
-                           <span className="text-[8px] font-black uppercase">{isNetSaleManuallyEdited ? 'Manual Entry' : 'Auto'}</span>
-                        </div>
-                      </div>
-                   </div>
-                   <div className="relative">
-                    <Input 
-                      type="number" step="0.001" value={netSaleManual} 
-                      onChange={e => {
-                        setIsNetSaleManuallyEdited(true);
-                        setNetSaleManual(e.target.value);
-                      }}
-                      className={cn(
-                        "h-14 rounded-2xl font-black shadow-sm text-center text-2xl transition-all",
-                        isNetSaleManuallyEdited ? "bg-amber-50 border-2 border-amber-500 text-amber-900" : "bg-white border-amber-100 text-amber-950"
-                      )} 
-                    />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-xl font-black text-amber-300">M</span>
+                {/* C. TOTAL NAUPLII SOLD NET */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-[0.2em]">C. Total Nauplii Sold Net (Mil) *</h3>
+                    <div className="bg-amber-100 px-2 py-0.5 rounded-lg text-[8px] font-black text-amber-600 uppercase">Auto</div>
+                  </div>
+                  <div className="h-20 bg-white rounded-3xl border-2 border-amber-50 shadow-sm flex items-center justify-between px-8 group">
+                    <span className="text-3xl font-black text-slate-900">{(data.netNauplii || 0).toFixed(1)}</span>
+                    <span className="text-2xl font-black text-amber-400 group-hover:scale-110 transition-transform">M</span>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest ml-1">d. Total No Packets Packed *</Label>
-                  <div className="relative">
+                {/* D. TOTAL NO PACKETS PACKED */}
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] ml-1">D. Total No Packets Packed *</h3>
+                  <div className="h-20 bg-white rounded-3xl border-2 border-indigo-50 shadow-sm flex items-center justify-between px-8 focus-within:border-indigo-400 transition-all">
                     <Input 
-                      type="number" value={packsPacked} 
-                      onChange={e => setPacksPacked(e.target.value)} 
-                      className="h-14 rounded-2xl font-black bg-white border border-indigo-100 shadow-sm text-center text-xl text-indigo-950 focus:ring-2 focus:ring-indigo-500" 
+                      type="number"
+                      value={packsPacked}
+                      onChange={e => setPacksPacked(e.target.value)}
+                      placeholder="0"
+                      className="text-3xl font-black text-slate-900 border-none bg-transparent focus-visible:ring-0 w-full p-0 h-full"
                     />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none opacity-40">
-                      <span className="text-[8px] font-black uppercase">Nos</span>
-                      <span className="text-[8px] font-black uppercase">Packets</span>
+                    <div className="text-right ml-4">
+                       <p className="text-[8px] font-black text-indigo-300 uppercase leading-none">Nos</p>
+                       <p className="text-[8px] font-black text-indigo-300 uppercase leading-none">Packets</p>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                 <div className="space-y-1.5">
-                   <div className="flex items-center justify-between ml-1">
-                      <Label className="text-[10px] font-black text-rose-700 uppercase tracking-widest">e. Total Nauplii Discarded (mil)</Label>
-                      <div className="bg-rose-100 px-2 py-0.5 rounded-md">
-                         <span className="text-[8px] font-black text-rose-600 uppercase">Auto</span>
-                      </div>
-                   </div>
-                   <div className="h-14 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-center justify-center font-black text-rose-950 text-2xl shadow-inner">
+                {/* E. TOTAL NAUPLII DISCARDED */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[10px] font-black text-rose-700 uppercase tracking-[0.2em]">E. Total Nauplii Discarded (Mil)</h3>
+                    <div className="bg-rose-100 px-2 py-0.5 rounded-lg text-[8px] font-black text-rose-600 uppercase">Auto</div>
+                  </div>
+                  <div className="h-20 bg-rose-50/50 rounded-3xl border-2 border-rose-100 shadow-sm flex items-center justify-center font-black text-rose-950 text-3xl">
                     {(data.totalDiscard || 0).toFixed(3)}M
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                   <div className="flex items-center justify-between ml-1">
-                      <Label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none">f. No. of Nauplii per Animal (mil)</Label>
-                      <div className="bg-emerald-100 px-2 py-0.5 rounded-md">
-                         <span className="text-[8px] font-black text-emerald-600 uppercase">Auto</span>
-                      </div>
-                   </div>
-                   <div className="h-14 bg-emerald-50/50 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center font-black text-emerald-950 text-2xl shadow-inner relative overflow-hidden group">
-                    <span className="leading-tight">{(totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0).toFixed(3)}M</span>
-                    <span className="text-[8px] font-bold text-muted-foreground uppercase opacity-50">Per Female</span>
-                    <div className="absolute inset-0 bg-emerald-500/5 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
+                {/* F. NO. OF NAUPLII PER ANIMAL */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.2em]">F. No. of Nauplii per Animal (Mil)</h3>
+                    <div className="bg-emerald-100 px-2 py-0.5 rounded-lg text-[8px] font-black text-emerald-600 uppercase">Auto</div>
+                  </div>
+                  <div className="h-20 bg-emerald-50/50 rounded-3xl border-2 border-emerald-100 shadow-sm flex flex-col items-center justify-center group">
+                    <span className="text-3xl font-black text-emerald-950">{(totalSpawnedInBatch > 0 ? (totalHarvestedInBatch / totalSpawnedInBatch) : 0).toFixed(3)}M</span>
+                    <span className="text-[9px] font-bold text-emerald-600/40 uppercase tracking-widest mt-1">Per Female</span>
                   </div>
                 </div>
               </div>
+
+              {data.saleType === 'complete' && (
+                <div className="bg-amber-50 border-2 border-amber-200 border-dashed rounded-[2.5rem] p-8 flex items-start gap-6 shadow-sm mt-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0 shadow-inner">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-base font-black text-amber-900 uppercase tracking-tight">System-Wide Batch Closure Warning</h4>
+                    <p className="text-xs text-amber-700/80 font-medium leading-relaxed max-w-2xl">
+                      Proceeding with a "Final Sale" will permanently archive this batch ({selectedBatchId}). All related activities will be locked. This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="h-px bg-muted-foreground/10 mx-4" />

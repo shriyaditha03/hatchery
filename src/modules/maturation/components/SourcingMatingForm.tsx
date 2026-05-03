@@ -70,6 +70,7 @@ const SourcingMatingForm = ({
           .select('data')
           .eq('activity_type', 'Sourcing & Mating')
           .eq('farm_id', farmId)
+          .eq('stocking_id', activeBroodstockBatchId)
           .gte('created_at', `${today}T00:00:00`)
           .lte('created_at', `${today}T23:59:59`);
         
@@ -89,7 +90,7 @@ const SourcingMatingForm = ({
     };
 
     fetchNextBatchNo();
-  }, [farmId, data.batchNo]);
+  }, [farmId, data.batchNo, activeBroodstockBatchId]);
 
   // Auto-fill tracking state
   const [editedFields, setEditedFields] = useState<Record<string, boolean>>(data.editedFields || {});
@@ -376,13 +377,13 @@ const SourcingMatingForm = ({
       // Find the primary source tank to return to
       const mainSource = sourceTanks.find(s => (parseFloat(s.femaleCount) || 0) > 0);
       if (mainSource) {
-        const newList = [{ id: Date.now().toString(), tankId: mainSource.tankId, count: totalBalanceNonMated.toString() }];
+        const newList = [{ id: Date.now().toString(), tankId: mainSource.tankId, count: totalBalanceNonMated > 0 ? totalBalanceNonMated.toString() : '' }];
         setReturnDestinations(newList);
       }
     } else if (returnDestinations.length === 1) {
       const dest = returnDestinations[0];
       const fieldKey = `return_dest_${dest.id}`;
-      const targetCount = totalBalanceNonMated.toString();
+      const targetCount = totalBalanceNonMated > 0 ? totalBalanceNonMated.toString() : '';
       if (!editedFields[fieldKey] && dest.count !== targetCount) {
         const newList = returnDestinations.map(d => d.id === dest.id ? { ...d, count: targetCount } : d);
         setReturnDestinations(newList);

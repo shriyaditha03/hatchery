@@ -7,7 +7,7 @@ import RatingScale from './RatingScale';
 import ImageUpload from './ImageUpload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ClipboardList, Database, Layers, CheckCircle2 } from 'lucide-react';
+import { ClipboardList, Database, Layers, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -481,7 +481,7 @@ const StockingForm = ({
                     );
                   })()}
 
-                  {(selectionScope === 'all' || selectionScope === 'custom' || selectedTanks.length > 0) && (
+                  {selectedTanks.length > 0 ? (
                     <div className="space-y-5">
                       <div className="flex items-center justify-between px-1">
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">11) Select TANKS & Allocation</Label>
@@ -582,6 +582,18 @@ const StockingForm = ({
                           </div>
                         );
                       })()}
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 border-2 border-amber-200 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center text-center gap-3 animate-in fade-in zoom-in-95 mt-4">
+                      <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-black text-amber-900 uppercase tracking-tight">No Tanks to Allocate</p>
+                        <p className="text-[11px] text-amber-700/70 font-medium leading-relaxed max-w-[240px]">
+                          There are no empty tanks available in the selected section. Please ensure tanks are cleared before stocking.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
