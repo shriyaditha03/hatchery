@@ -16,6 +16,10 @@ interface TankConfig {
     type: 'FRP' | 'CONCRETE';
     shape: 'CIRCLE' | 'RECTANGLE';
     gender?: 'MALE' | 'FEMALE';
+    waterTankType?: 'OPEN' | 'CLOSED';
+    usageCategory?: 'Storage' | 'Settlement' | 'De-chlorination' | 'Others';
+    usageOther?: string;
+    waterType?: 'SEA' | 'FRESH';
     length: number;
     width: number;
     height: number;
@@ -26,7 +30,7 @@ interface TankConfig {
 
 interface SectionConfig {
     name: string;
-    type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT';
+    type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT' | 'WATER';
     tanks: TankConfig[];
 }
 
@@ -130,6 +134,7 @@ const CreateFarm = () => {
     const [animalCount, setAnimalCount] = useState<number | string>(1);
     const [spawningCount, setSpawningCount] = useState<number | string>(1);
     const [naupliiCount, setNaupliiCount] = useState<number | string>(1);
+    const [waterCount, setWaterCount] = useState<number | string>(1);
 
     const [sections, setSections] = useState<SectionConfig[]>([]);
     const [collapsedSections, setCollapsedSections] = useState<number[]>([]);
@@ -178,6 +183,7 @@ const CreateFarm = () => {
             const aCount = Number(animalCount) || 0;
             const sCount = Number(spawningCount) || 0;
             const nCount = Number(naupliiCount) || 0;
+            const wCount = Number(waterCount) || 0;
 
             for (let i = 0; i < aCount; i++) {
                 newSections.push({ name: `Animal Section ${i + 1}`, type: 'ANIMAL', tanks: [] });
@@ -188,13 +194,22 @@ const CreateFarm = () => {
             for (let i = 0; i < nCount; i++) {
                 newSections.push({ name: `Nauplii Section ${i + 1}`, type: 'NAUPLII', tanks: [] });
             }
+            for (let i = 0; i < wCount; i++) {
+                newSections.push({ name: `Water Storage Section ${i + 1}`, type: 'WATER', tanks: [] });
+            }
         } else {
             const count = Number(sectionCount) || 1;
-            newSections = Array.from({ length: count }).map((_, sIdx) => ({
-                name: `Section ${sIdx + 1}`,
-                type: 'LRT',
-                tanks: []
-            }));
+            const wCount = Number(waterCount) || 0;
+            for (let i = 0; i < count; i++) {
+                newSections.push({
+                    name: `Section ${i + 1}`,
+                    type: 'LRT',
+                    tanks: []
+                });
+            }
+            for (let i = 0; i < wCount; i++) {
+                newSections.push({ name: `Water Storage Section ${i + 1}`, type: 'WATER', tanks: [] });
+            }
         }
 
         setSections(newSections);
@@ -208,6 +223,7 @@ const CreateFarm = () => {
         if (section.type === 'ANIMAL') return `AS${sNum}`;
         if (section.type === 'SPAWNING') return `SS${sNum}`;
         if (section.type === 'NAUPLII') return `NS${sNum}`;
+        if (section.type === 'WATER') return `WS${sNum}`;
         return `S${sNum}`;
     };
 
@@ -228,6 +244,13 @@ const CreateFarm = () => {
                     tankName = farmCategory === 'MATURATION' 
                         ? `${farmPrefix}_${prefix}_${genderCode}${genderTanks.length + 1}`
                         : `${prefix}_${genderCode}${genderTanks.length + 1}`;
+                } else if (currentSection.type === 'WATER' && gender) {
+                    // Overloading gender parameter to pass 'OPEN' or 'CLOSED' for WATER sections
+                    const waterTypeParam = gender as string;
+                    const wtTanks = currentTanks.filter(t => t.waterTankType === waterTypeParam);
+                    tankName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`
+                        : `${prefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`;
                 } else {
                     tankName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
@@ -237,7 +260,11 @@ const CreateFarm = () => {
 
             const newTank: TankConfig = {
                 name: tankName,
-                gender: gender,
+                gender: currentSection.type === 'ANIMAL' ? gender : undefined,
+                waterTankType: currentSection.type === 'WATER' ? (gender as any) || 'OPEN' : undefined,
+                usageCategory: currentSection.type === 'WATER' ? 'Storage' : undefined,
+                usageOther: '',
+                waterType: currentSection.type === 'WATER' ? 'SEA' : undefined,
                 type: currentTanks[currentTanks.length - 1]?.type || 'FRP',
                 shape: 'RECTANGLE',
                 length: 0,
@@ -253,8 +280,8 @@ const CreateFarm = () => {
         setCollapsedSections(prev => prev.filter(idx => idx !== sIdx));
     };
 
-    const addSectionByType = (type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT') => {
-        const typeLabel = type === 'ANIMAL' ? 'Animal' : type === 'SPAWNING' ? 'Spawning' : type === 'NAUPLII' ? 'Nauplii' : 'Section';
+    const addSectionByType = (type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT' | 'WATER') => {
+        const typeLabel = type === 'ANIMAL' ? 'Animal' : type === 'SPAWNING' ? 'Spawning' : type === 'NAUPLII' ? 'Nauplii' : type === 'WATER' ? 'Water Storage' : 'Section';
         
         // Find the max number currently used for this type to avoid duplicates
         const existingNumbers = sections
@@ -303,6 +330,10 @@ const CreateFarm = () => {
 
                     return {
                         name: name,
+                        waterTankType: newSections[sIdx].type === 'WATER' ? 'OPEN' : undefined,
+                        usageCategory: newSections[sIdx].type === 'WATER' ? 'Storage' : undefined,
+                        usageOther: '',
+                        waterType: newSections[sIdx].type === 'WATER' ? 'SEA' : undefined,
                         type: (currentTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
                         shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
                         length: 0,
@@ -326,11 +357,32 @@ const CreateFarm = () => {
     const updateTank = (sIdx: number, tIdx: number, updates: Partial<TankConfig>) => {
         setSections(prev => {
             const newSections = [...prev];
-            const tank = { ...newSections[sIdx].tanks[tIdx], ...updates };
+            const currentSection = newSections[sIdx];
+            const tank = { ...currentSection.tanks[tIdx], ...updates };
 
             // Re-calculate volume/area
             const { volume, area } = calculateTank(tank);
-            newSections[sIdx].tanks[tIdx] = { ...tank, volume, area };
+            tank.volume = volume;
+            tank.area = area;
+
+            // Rename WATER tank if relevant fields changed and the name wasn't manually overridden yet (basic check)
+            if (currentSection.type === 'WATER' && (updates.waterTankType || updates.usageCategory || updates.usageOther || updates.waterType !== undefined)) {
+                const farmPrefix = getFarmPrefix(farmName);
+                const prefix = getTankPrefix(currentSection, sIdx);
+                const typeStr = tank.waterTankType || 'OPEN';
+                const usageStr = tank.usageCategory === 'Others' ? (tank.usageOther || 'Custom') : (tank.usageCategory || 'Storage');
+                const waterCode = tank.waterType === 'FRESH' ? 'F' : 'S';
+                
+                // Keep the same index as before
+                const existingIndexMatch = tank.name.match(/T(\d+)$/);
+                const tNum = existingIndexMatch ? existingIndexMatch[1] : (tIdx + 1);
+
+                tank.name = farmCategory === 'MATURATION'
+                    ? `${farmPrefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`
+                    : `${prefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`;
+            }
+
+            newSections[sIdx].tanks[tIdx] = tank;
 
             return newSections;
         });
@@ -353,6 +405,13 @@ const CreateFarm = () => {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_${genderCode}${existingGenderCount + i + 1}`
                         : `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
+                } else if (tankToCopy.waterTankType) {
+                    const wtTanks = currentTanks.filter(t => t.waterTankType === tankToCopy.waterTankType);
+                    const usageStr = tankToCopy.usageCategory === 'Others' ? (tankToCopy.usageOther || 'Custom') : (tankToCopy.usageCategory || 'Storage');
+                    const waterCode = tankToCopy.waterType === 'FRESH' ? 'F' : 'S';
+                    newName = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`
+                        : `${prefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`;
                 } else {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
@@ -519,6 +578,37 @@ const CreateFarm = () => {
                     </div>
                 </div>
 
+                {sections[sIdx].type === 'WATER' && (
+                    <div className="grid grid-cols-2 gap-4 pt-1">
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Usage</Label>
+                            <Select value={tank.usageCategory || 'Storage'} onValueChange={(val: any) => updateTank(sIdx, tIdx, { usageCategory: val })}>
+                                <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Storage">Storage</SelectItem>
+                                    <SelectItem value="Settlement">Settlement</SelectItem>
+                                    <SelectItem value="De-chlorination">De-chlorination</SelectItem>
+                                    <SelectItem value="Others">Others</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Water Type</Label>
+                            <Select value={tank.waterType || 'SEA'} onValueChange={(val: any) => updateTank(sIdx, tIdx, { waterType: val })}>
+                                <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="SEA">Sea Water</SelectItem>
+                                    <SelectItem value="FRESH">Fresh Water</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
+
                 <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
@@ -587,6 +677,17 @@ const CreateFarm = () => {
                                     }}
                                 />
                             </div>
+                            {sections[sIdx].type === 'WATER' && tank.usageCategory === 'Others' && (
+                                <div className="space-y-1.5 col-span-1 sm:col-span-2">
+                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Custom Usage</Label>
+                                    <Input
+                                        value={tank.usageOther || ''}
+                                        onChange={(e) => updateTank(sIdx, tIdx, { usageOther: e.target.value })}
+                                        placeholder="Enter custom usage..."
+                                        className="h-10 text-xs rounded-xl shadow-none"
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
@@ -664,7 +765,7 @@ const CreateFarm = () => {
                             {farmCategory === 'MATURATION' ? (
                                 <div className="space-y-4">
                                      <Label className="font-semibold">Configure Initial Sections</Label>
-                                     <div className="grid grid-cols-3 gap-3">
+                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                          {/* Animal Sections */}
                                          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
                                              <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Animal</Label>
@@ -701,30 +802,58 @@ const CreateFarm = () => {
                                                  className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
                                              />
                                          </div>
+                                         {/* Water Sections */}
+                                         <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
+                                             <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Water Storage</Label>
+                                             <Input
+                                                 type="number"
+                                                 min="0"
+                                                 max="20"
+                                                 value={waterCount}
+                                                 onChange={(e) => setWaterCount(e.target.value)}
+                                                 className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
+                                             />
+                                         </div>
                                      </div>
                                 </div>
                             ) : (
-                                <div className="space-y-2">
-                                    <Label className="font-semibold">Number of Sections</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        max="50"
-                                        value={sectionCount}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === '') {
-                                                setSectionCount('');
-                                            } else {
-                                                const num = parseInt(val);
-                                                if (!isNaN(num) && num >= 1 && num <= 50) {
-                                                    setSectionCount(num);
-                                                }
-                                            }
-                                        }}
-                                        className="h-12 text-md w-full"
-                                    />
-                                    <p className="text-[10px] text-muted-foreground">You can add more sections later</p>
+                                <div className="space-y-4">
+                                     <Label className="font-semibold">Configure Initial Sections</Label>
+                                     <div className="grid grid-cols-2 gap-3">
+                                         <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
+                                             <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Production</Label>
+                                             <Input
+                                                 type="number"
+                                                 min="1"
+                                                 max="50"
+                                                 value={sectionCount}
+                                                 onChange={(e) => {
+                                                     const val = e.target.value;
+                                                     if (val === '') {
+                                                         setSectionCount('');
+                                                     } else {
+                                                         const num = parseInt(val);
+                                                         if (!isNaN(num) && num >= 1 && num <= 50) {
+                                                             setSectionCount(num);
+                                                         }
+                                                     }
+                                                 }}
+                                                 className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
+                                             />
+                                         </div>
+                                         <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
+                                             <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Water Storage</Label>
+                                             <Input
+                                                 type="number"
+                                                 min="0"
+                                                 max="20"
+                                                 value={waterCount}
+                                                 onChange={(e) => setWaterCount(e.target.value)}
+                                                 className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
+                                             />
+                                         </div>
+                                     </div>
+                                     <p className="text-[10px] text-muted-foreground">You can add more sections later</p>
                                 </div>
                             )}
 
@@ -797,6 +926,25 @@ const CreateFarm = () => {
                                                         className="h-8 sm:h-9 px-2 sm:px-3 border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
                                                     >
                                                         <Plus className="w-3.5 h-3.5 mr-1" /> Female
+                                                    </Button>
+                                                </div>
+                                            ) : section.type === 'WATER' ? (
+                                                <div className="flex gap-1.5 md:gap-2 flex-wrap">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => addTank(sIdx, 'OPEN' as any)}
+                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-cyan-200 bg-cyan-50 text-cyan-600 hover:bg-cyan-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Open
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => addTank(sIdx, 'CLOSED' as any)}
+                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Closed
                                                     </Button>
                                                 </div>
                                             ) : (
@@ -878,6 +1026,44 @@ const CreateFarm = () => {
                                                     </div>
                                                 )}
                                             </div>
+                                        ) : section.type === 'WATER' ? (
+                                            <div className="space-y-8">
+                                                {/* Open Subsection */}
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-2 px-1">
+                                                        <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
+                                                        <h3 className="text-sm font-black uppercase tracking-widest text-cyan-600">Open Tanks</h3>
+                                                        <div className="h-[1px] flex-1 bg-gradient-to-r from-cyan-100 to-transparent" />
+                                                    </div>
+                                                    <div className="grid gap-4">
+                                                        {section.tanks.filter(t => t.waterTankType === 'OPEN').map((tank) => {
+                                                            const tIdx = section.tanks.findIndex(t => t === tank);
+                                                            return renderTankCard(tank, sIdx, tIdx);
+                                                        })}
+                                                        {section.tanks.filter(t => t.waterTankType === 'OPEN').length === 0 && (
+                                                            <p className="text-[10px] text-muted-foreground italic px-3">No open tanks added.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Closed Subsection */}
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-2 px-1">
+                                                        <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                                                        <h3 className="text-sm font-black uppercase tracking-widest text-indigo-600">Closed Tanks</h3>
+                                                        <div className="h-[1px] flex-1 bg-gradient-to-r from-indigo-100 to-transparent" />
+                                                    </div>
+                                                    <div className="grid gap-4">
+                                                        {section.tanks.filter(t => t.waterTankType === 'CLOSED').map((tank) => {
+                                                            const tIdx = section.tanks.findIndex(t => t === tank);
+                                                            return renderTankCard(tank, sIdx, tIdx);
+                                                        })}
+                                                        {section.tanks.filter(t => t.waterTankType === 'CLOSED').length === 0 && (
+                                                            <p className="text-[10px] text-muted-foreground italic px-3">No closed tanks added.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         ) : (
                                             <div className="grid gap-4">
                                                 {section.tanks.map((tank, tIdx) => renderTankCard(tank, sIdx, tIdx))}
@@ -931,16 +1117,34 @@ const CreateFarm = () => {
                                         <Plus className="w-5 h-5 text-primary/40" />
                                         <span className="font-bold text-[10px] uppercase tracking-wider">Add Nauplii Section</span>
                                     </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => addSectionByType('WATER')}
+                                        className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                    >
+                                        <Plus className="w-5 h-5 text-primary/40" />
+                                        <span className="font-bold text-[10px] uppercase tracking-wider">Add Water Section</span>
+                                    </Button>
                                 </>
                             ) : (
-                                <Button
-                                    variant="outline"
-                                    onClick={() => addSectionByType('LRT')}
-                                    className="w-full border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
-                                >
-                                    <Plus className="w-6 h-6" />
-                                    <span className="font-bold text-sm uppercase tracking-wider">Add New Section</span>
-                                </Button>
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => addSectionByType('LRT')}
+                                        className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                    >
+                                        <Plus className="w-6 h-6 text-primary/40" />
+                                        <span className="font-bold text-sm uppercase tracking-wider">Add New Section</span>
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => addSectionByType('WATER')}
+                                        className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                    >
+                                        <Plus className="w-6 h-6 text-primary/40" />
+                                        <span className="font-bold text-sm uppercase tracking-wider">Add Water Section</span>
+                                    </Button>
+                                </>
                             )}
                         </div>
 
