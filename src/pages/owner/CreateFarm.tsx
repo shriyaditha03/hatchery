@@ -17,7 +17,7 @@ interface TankConfig {
     shape: 'CIRCLE' | 'RECTANGLE';
     gender?: 'MALE' | 'FEMALE';
     waterTankType?: 'OPEN' | 'CLOSED';
-    usageCategory?: 'Storage' | 'Settlement' | 'De-chlorination' | 'Others';
+    usageCategory?: 'Storage' | 'Settlement' | 'Dechlorination' | 'Others';
     usageOther?: string;
     waterType?: 'SEA' | 'FRESH';
     length: number;
@@ -248,9 +248,11 @@ const CreateFarm = () => {
                     // Overloading gender parameter to pass 'OPEN' or 'CLOSED' for WATER sections
                     const waterTypeParam = gender as string;
                     const wtTanks = currentTanks.filter(t => t.waterTankType === waterTypeParam);
-                    tankName = farmCategory === 'MATURATION'
-                        ? `${farmPrefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`
-                        : `${prefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`;
+                    const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                    const typeLabel = waterTypeParam === 'OPEN' ? 'Open' : 'Close';
+                    const sectionPrefix = getTankPrefix(currentSection, sIdx);
+                    // Use ST index based on count within this water type
+                    tankName = `${modulePrefix}_${typeLabel}_Storage_${sectionPrefix}_ST${wtTanks.length + 1}`;
                 } else {
                     tankName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
@@ -367,19 +369,17 @@ const CreateFarm = () => {
 
             // Rename WATER tank if relevant fields changed and the name wasn't manually overridden yet (basic check)
             if (currentSection.type === 'WATER' && (updates.waterTankType || updates.usageCategory || updates.usageOther || updates.waterType !== undefined)) {
-                const farmPrefix = getFarmPrefix(farmName);
-                const prefix = getTankPrefix(currentSection, sIdx);
-                const typeStr = tank.waterTankType || 'OPEN';
+                const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                const typeLabel = (tank.waterTankType || 'OPEN') === 'OPEN' ? 'Open' : 'Close';
                 const usageStr = tank.usageCategory === 'Others' ? (tank.usageOther || 'Custom') : (tank.usageCategory || 'Storage');
                 const waterCode = tank.waterType === 'FRESH' ? 'F' : 'S';
+                const sectionPrefix = getTankPrefix(currentSection, sIdx);
                 
                 // Keep the same index as before
                 const existingIndexMatch = tank.name.match(/T(\d+)$/);
                 const tNum = existingIndexMatch ? existingIndexMatch[1] : (tIdx + 1);
 
-                tank.name = farmCategory === 'MATURATION'
-                    ? `${farmPrefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`
-                    : `${prefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`;
+                tank.name = `${modulePrefix}_${typeLabel}_${usageStr}_${sectionPrefix}_${waterCode}T${tNum}`;
             }
 
             newSections[sIdx].tanks[tIdx] = tank;
@@ -406,12 +406,17 @@ const CreateFarm = () => {
                         ? `${farmPrefix}_${prefix}_${genderCode}${existingGenderCount + i + 1}`
                         : `${prefix}_${genderCode}${existingGenderCount + i + 1}`;
                 } else if (tankToCopy.waterTankType) {
-                    const wtTanks = currentTanks.filter(t => t.waterTankType === tankToCopy.waterTankType);
+                    const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                    const typeLabel = tankToCopy.waterTankType === 'OPEN' ? 'Open' : 'Close';
                     const usageStr = tankToCopy.usageCategory === 'Others' ? (tankToCopy.usageOther || 'Custom') : (tankToCopy.usageCategory || 'Storage');
                     const waterCode = tankToCopy.waterType === 'FRESH' ? 'F' : 'S';
-                    newName = farmCategory === 'MATURATION'
-                        ? `${farmPrefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`
-                        : `${prefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`;
+                    const sectionPrefix = getTankPrefix(currentSection, sIdx);
+                    const wtTanks = currentTanks.filter(t => t.waterTankType === tankToCopy.waterTankType);
+                    if (usageStr === 'Storage') {
+                        newName = `${modulePrefix}_${typeLabel}_Storage_${sectionPrefix}_ST${wtTanks.length + i + 1}`;
+                    } else {
+                        newName = `${modulePrefix}_${typeLabel}_${usageStr}_${sectionPrefix}_${waterCode}T${wtTanks.length + i + 1}`;
+                    }
                 } else {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
@@ -536,7 +541,8 @@ const CreateFarm = () => {
                             {tIdx + 1}
                         </div>
                         <Input
-                            className="font-bold border-none bg-transparent p-0 text-sm focus-visible:ring-0 h-auto"
+                            className="font-bold border-none bg-transparent p-0 text-md focus-visible:ring-0 h-auto w-full overflow-x-auto"
+                            style={{ minWidth: '200px' }}
                             value={tank.name}
                             onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
                         />
@@ -589,7 +595,7 @@ const CreateFarm = () => {
                                 <SelectContent>
                                     <SelectItem value="Storage">Storage</SelectItem>
                                     <SelectItem value="Settlement">Settlement</SelectItem>
-                                    <SelectItem value="De-chlorination">De-chlorination</SelectItem>
+                                    <SelectItem value="Dechlorination">Dechlorination</SelectItem>
                                     <SelectItem value="Others">Others</SelectItem>
                                 </SelectContent>
                             </Select>

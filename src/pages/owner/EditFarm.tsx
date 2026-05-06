@@ -18,7 +18,7 @@ interface TankConfig {
     shape: 'CIRCLE' | 'RECTANGLE';
     gender?: 'MALE' | 'FEMALE';
     waterTankType?: 'OPEN' | 'CLOSED';
-    usageCategory?: 'Storage' | 'Settlement' | 'De-chlorination' | 'Others';
+    usageCategory?: 'Storage' | 'Settlement' | 'Dechlorination' | 'Others';
     usageOther?: string;
     waterType?: 'SEA' | 'FRESH';
     length: number;
@@ -138,13 +138,13 @@ const EditFarm = () => {
                         id: t.id,
                         name: t.name,
                         gender: t.gender || null,
-                        waterTankType: s.section_type === 'WATER' ? (t.name.includes('CLOSED') ? 'CLOSED' : 'OPEN') : undefined,
+                        waterTankType: s.section_type === 'WATER' ? (t.name.includes('Close') || t.name.includes('CLOSED') ? 'CLOSED' : 'OPEN') : undefined,
                         usageCategory: s.section_type === 'WATER' ? (
                             t.name.includes('Settlement') ? 'Settlement' :
-                            t.name.includes('De-chlorination') ? 'De-chlorination' :
+                            t.name.includes('Dechlorination') || t.name.includes('De-chlorination') ? 'Dechlorination' :
                             t.name.includes('Storage') ? 'Storage' : 'Others'
                         ) : undefined,
-                        usageOther: s.section_type === 'WATER' && !t.name.includes('Settlement') && !t.name.includes('De-chlorination') && !t.name.includes('Storage') ? t.name.split('_')[2] : '',
+                        usageOther: s.section_type === 'WATER' && !t.name.includes('Settlement') && !t.name.includes('Dechlorination') && !t.name.includes('De-chlorination') && !t.name.includes('Storage') ? t.name.split('_')[2] : '',
                         waterType: s.section_type === 'WATER' ? (t.name.includes('_FT') ? 'FRESH' : 'SEA') : undefined,
                         type: t.type as 'FRP' | 'CONCRETE',
                         shape: t.shape as 'CIRCLE' | 'RECTANGLE',
@@ -199,18 +199,16 @@ const EditFarm = () => {
             tank.area = area;
 
             if (currentSection.type === 'WATER' && (updates.waterTankType || updates.usageCategory || updates.usageOther || updates.waterType !== undefined)) {
-                const farmPrefix = getFarmPrefix(farmName);
-                const prefix = getTankPrefix(currentSection, sIdx);
-                const typeStr = tank.waterTankType || 'OPEN';
+                const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                const typeLabel = (tank.waterTankType || 'OPEN') === 'OPEN' ? 'Open' : 'Close';
                 const usageStr = tank.usageCategory === 'Others' ? (tank.usageOther || 'Custom') : (tank.usageCategory || 'Storage');
                 const waterCode = tank.waterType === 'FRESH' ? 'F' : 'S';
+                const sectionPrefix = getTankPrefix(currentSection, sIdx);
                 
                 const existingIndexMatch = tank.name.match(/T(\d+)$/);
                 const tNum = existingIndexMatch ? existingIndexMatch[1] : (tIdx + 1);
 
-                tank.name = farmCategory === 'MATURATION'
-                    ? `${farmPrefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`
-                    : `${prefix}_${typeStr}_${usageStr}_WS_${waterCode}T${tNum}`;
+                tank.name = `${modulePrefix}_${typeLabel}_${usageStr}_${sectionPrefix}_${waterCode}T${tNum}`;
             }
 
             newSections[sIdx].tanks[tIdx] = tank;
@@ -288,9 +286,10 @@ const EditFarm = () => {
             } else if (currentSection.type === 'WATER' && gender) {
                 const waterTypeParam = gender as string;
                 const wtTanks = currentTanks.filter(t => t.waterTankType === waterTypeParam);
-                tankName = farmCategory === 'MATURATION'
-                    ? `${farmPrefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`
-                    : `${prefix}_${waterTypeParam}_Storage_WS_ST${wtTanks.length + 1}`;
+                const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                const typeLabel = waterTypeParam === 'OPEN' ? 'Open' : 'Close';
+                const sectionPrefix = getTankPrefix(currentSection, sIdx);
+                tankName = `${modulePrefix}_${typeLabel}_Storage_${sectionPrefix}_ST${wtTanks.length + 1}`;
             } else {
                 tankName = farmCategory === 'MATURATION'
                     ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
@@ -349,9 +348,10 @@ const EditFarm = () => {
                     const wtTanks = currentTanks.filter(t => t.waterTankType === tankToCopy.waterTankType);
                     const usageStr = tankToCopy.usageCategory === 'Others' ? (tankToCopy.usageOther || 'Custom') : (tankToCopy.usageCategory || 'Storage');
                     const waterCode = tankToCopy.waterType === 'FRESH' ? 'F' : 'S';
-                    newName = farmCategory === 'MATURATION'
-                        ? `${farmPrefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`
-                        : `${prefix}_${tankToCopy.waterTankType}_${usageStr}_WS_${waterCode}T${wtTanks.length + i + 1}`;
+                    const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                    const typeLabel = tankToCopy.waterTankType === 'OPEN' ? 'Open' : 'Close';
+                    const sectionPrefix = getTankPrefix(currentSection, sIdx);
+                    newName = `${modulePrefix}_${typeLabel}_${usageStr}_${sectionPrefix}_${waterCode}T${wtTanks.length + i + 1}`;
                 } else {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
@@ -432,7 +432,7 @@ const EditFarm = () => {
                                 <SelectContent>
                                     <SelectItem value="Storage">Storage</SelectItem>
                                     <SelectItem value="Settlement">Settlement</SelectItem>
-                                    <SelectItem value="De-chlorination">De-chlorination</SelectItem>
+                                    <SelectItem value="Dechlorination">Dechlorination</SelectItem>
                                     <SelectItem value="Others">Others</SelectItem>
                                 </SelectContent>
                             </Select>
