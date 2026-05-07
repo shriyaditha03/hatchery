@@ -5,7 +5,7 @@ import {
     MoveRight, FileText, ChevronDown, LogOut, User, MapPin,
     ClipboardList, Pencil, CheckCircle2, Clock, Trash2,
     Heart, Sparkles, Database, ArrowUpRight, ShoppingCart,
-    Loader2, ArrowLeft, ChevronRight, Plus
+    Loader2, ArrowLeft, ChevronRight, Plus, Droplets
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -369,7 +369,8 @@ const UserDashboard = () => {
         'Egg Count': Database,
         'Nauplii Harvest': ArrowUpRight,
         'Nauplii Sale': ShoppingCart,
-        'Broodstock Discard': Trash2
+        'Broodstock Discard': Trash2,
+        'Water Management': Droplets
     };
 
     const activities = useMemo(() => {
@@ -384,11 +385,12 @@ const UserDashboard = () => {
             { name: 'Tank Shifting', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
             { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
             { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
+            { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' },
         ];
 
         if (activeModule.toUpperCase() === 'MATURATION') {
             const maturationBase = base.filter(a => 
-                a.name !== 'Artemia' && a.name !== 'Algae' && a.name !== 'Harvest' && a.name !== 'Tank Shifting'
+                a.name !== 'Artemia' && a.name !== 'Algae' && a.name !== 'Harvest' && a.name !== 'Tank Shifting' && a.name !== 'Water Management'
             );
             return [
                 ...maturationBase,
@@ -397,6 +399,7 @@ const UserDashboard = () => {
                 { name: 'Egg Count', icon: Database, route: '/user/activity/egg-count', color: 'bg-indigo-100 text-indigo-600' },
                 { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/user/activity/nauplii-harvest', color: 'bg-emerald-100 text-emerald-600' },
                 { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' },
+                { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' },
                 { name: 'Broodstock Discard', icon: Trash2, route: '/user/activity/broodstock-discard', color: 'bg-red-100 text-red-600' }
             ];
         }

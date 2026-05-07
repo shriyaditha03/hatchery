@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database, User, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ClipboardList, Check, ListChecks, Database, User, ChevronDown, Droplets } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { 
   Plus, 
   Trash2, 
@@ -21,7 +22,8 @@ import {
   Camera,
   MessageSquare,
   ArrowRight,
-  ArrowUpRight
+  ArrowUpRight,
+  Layers
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -55,7 +57,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -176,7 +178,9 @@ const RecordActivity = () => {
         'nauplii-harvest': 'Nauplii Harvest',
         'nauplii-sale': 'Nauplii Sale',
         'broodstock-discard': 'Broodstock Discard',
-        'discard': 'Broodstock Discard'
+        'discard': 'Broodstock Discard',
+        'water-management': 'Water Management',
+        'water-mgmt': 'Water Management'
       };
       
       const mappedActivity = typeMap[type.toLowerCase()];
@@ -302,7 +306,7 @@ const RecordActivity = () => {
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
-  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || (activity === 'Broodstock Discard' && broodstockDiscardData.discardType === 'complete') || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || activity === 'Water Management' || (activity === 'Broodstock Discard' && broodstockDiscardData.discardType === 'complete') || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
 
   // Live Time Update Effect
   useEffect(() => {
@@ -861,6 +865,8 @@ const RecordActivity = () => {
           setNaupliiHarvestData(data.data);
         } else if (actType === 'Nauplii Sale') {
           setNaupliiSaleData(data.data);
+        } else if (actType === 'Water Management') {
+          setWaterMgmtData(data.data);
         }
       }
     } catch (err) {
@@ -1121,6 +1127,8 @@ const RecordActivity = () => {
         'nauplii harvest': 'Nauplii Harvest',
         'nauplii sale': 'Nauplii Sale',
         'broodstock discard': 'Broodstock Discard',
+        'water management': 'Water Management',
+        'water-management': 'Water Management',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
@@ -1170,6 +1178,52 @@ const RecordActivity = () => {
   const [harvestData, setHarvestData] = useState<any>({});
   const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
 
+  // Water Management data
+  const [waterMgmtData, setWaterMgmtData] = useState<any>({
+    flowOperation: '',
+    sourceType: '', // 'sea', 'fresh', 'tank'
+    sourceTankIds: [],
+    sourceScope: 'custom', // 'single', 'all', 'custom'
+    sourceVolumeAvailable: 0,
+    selectedSectionFilter: 'all',
+    fillTargets: [], // Array of { tankId: string, volumeToFill: number, finalVolume: number }
+    totalVolumeToFill: 0,
+    sourceFinalVolume: 0,
+    waterQualityScore: 0,
+    waterQualityData: {}
+  });
+
+  // Water Quality Calculation for Water Management
+  const waterMgmtValues = waterFields.map(field => {
+    const valStr = String(waterMgmtData.waterQualityData?.[field] || '').trim();
+    if (valStr === '') return null;
+    const val = parseFloat(valStr);
+    if (isNaN(val)) return 10;
+    const range = WATER_QUALITY_RANGES[field] || '';
+    let isOk = true;
+    if (field === 'Vibrio Count') {
+      isOk = val < 1000;
+    } else if (field === 'Yellow Green Bacteria') {
+      isOk = val < 100;
+    } else if (range === '[Nil]') {
+      isOk = val === 0;
+    } else if (range.includes(' - ')) {
+      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
+      if (matches) { isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]); }
+    } else if (range.includes('>')) {
+      const matches = range.match(/>\s*(\d+\.?\d*)/);
+      if (matches) isOk = val > parseFloat(matches[1]);
+    } else if (range.includes('<')) {
+      const matches = range.match(/<\s*(\d+\.?\d*)/);
+      if (matches) isOk = val < parseFloat(matches[1]);
+    }
+    return isOk ? 10 : 0;
+  });
+
+  const waterMgmtFilledCount = waterMgmtValues.filter(v => v !== null).length;
+  const waterMgmtAvg = waterMgmtFilledCount > 0
+    ? waterMgmtValues.filter(v => v !== null).reduce((a, b) => (a || 0) + (b || 0), 0) / waterMgmtFilledCount
+    : 0;
 
   const [comments, setComments] = useState('');
 
@@ -1322,6 +1376,7 @@ const RecordActivity = () => {
       case 'Nauplii Harvest': return { ...baseData, ...naupliiHarvestData };
       case 'Nauplii Sale': return { ...baseData, ...naupliiSaleData };
       case 'Broodstock Discard': return { ...baseData, ...broodstockDiscardData };
+      case 'Water Management': return { ...baseData, ...waterMgmtData };
       default: return baseData;
     }
   };
@@ -1333,7 +1388,7 @@ const RecordActivity = () => {
     }
 
     let targets = [];
-    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'].includes(activity);
+    const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'].includes(activity);
 
     if (selectionScope === 'all') {
       targets = [null]; // One record for the whole section
@@ -1559,7 +1614,7 @@ const RecordActivity = () => {
 
     // Basic validation
     if (selectionScope === 'single' && !tankId) {
-      const activitiesWithInternalSelection = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
+      const activitiesWithInternalSelection = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'];
       if (isSpecialActivity && !selectedSectionId && !activeSectionId && !activitiesWithInternalSelection.includes(activity)) {
         toast.error('Please select a section for this activity');
         return;
@@ -1733,6 +1788,35 @@ const RecordActivity = () => {
       if (!harvestData.harvestedPopulation) {
         toast.error('Harvested population is required');
         return;
+      }
+    }
+
+    if (activity === 'Water Management') {
+      if (!waterMgmtData.flowOperation) {
+        toast.error('Please select a Water Flow Operation');
+        return;
+      }
+      if (waterMgmtData.flowOperation === 'Water Filling') {
+        // Validate source: either an external type (sea/fresh) or internal tank(s) selected
+        const hasExternalSource = waterMgmtData.sourceType === 'sea' || waterMgmtData.sourceType === 'fresh';
+        const hasInternalSource = waterMgmtData.sourceType === 'tank' && (waterMgmtData.sourceTankIds || []).length > 0;
+        if (!hasExternalSource && !hasInternalSource) {
+          toast.error('Please select a source (External: Sea/Fresh water, or Internal: choose a tank)');
+          return;
+        }
+        if (waterMgmtData.fillTargets.length === 0) {
+          toast.error('Please select at least one tank to fill');
+          return;
+        }
+        const hasZeroFill = waterMgmtData.fillTargets.some((t: any) => (t.volumeToFill || 0) === 0);
+        if (hasZeroFill) {
+          toast.error('Please enter a fill amount for all selected tanks');
+          return;
+        }
+        if (waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable) {
+          toast.error(`Total fill (${waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds available source volume (${waterMgmtData.sourceVolumeAvailable.toLocaleString()} L). Please reduce fill amounts.`);
+          return;
+        }
       }
     }
 
@@ -2913,7 +2997,7 @@ const RecordActivity = () => {
           )}
         </div>
 
-        {(activity || !type) && !isSpecialActivity && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
+        {(activity || !type) && !isSpecialActivity && activity !== 'Water Management' && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
           <div className="glass-card rounded-2xl p-4 space-y-4 overflow-hidden">
             {isBatchClosed && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-4 mb-2 animate-pulse">
@@ -3788,6 +3872,494 @@ const RecordActivity = () => {
             farmId={selectedFarmId || activeFarmId || ''}
             selectedTanks={currentSelectedTanks}
           />
+        )}
+
+        {activity === 'Water Management' && (
+          <div className="glass-card rounded-2xl p-4 space-y-6 animate-fade-in-up">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Droplets className="w-4 h-4 text-sky-500" />
+              Water Management Details
+            </h2>
+            
+            {/* Field 1: Water Flow Operation */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                1. Water Flow Operation <span className="text-destructive">*</span>
+              </Label>
+              <Select 
+                value={waterMgmtData.flowOperation} 
+                onValueChange={(val) => setWaterMgmtData({ ...waterMgmtData, flowOperation: val })}
+              >
+                <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/20 focus:ring-2 focus:ring-primary/50 shadow-sm bg-background/50">
+                  <SelectValue placeholder="Choose Operation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Water Filling">1) Water Filling</SelectItem>
+                  <SelectItem value="Exchange">2) Exchange</SelectItem>
+                  <SelectItem value="Recirculation">3) Recirculation</SelectItem>
+                  <SelectItem value="Drain / Clean">4) Drain / Clean</SelectItem>
+                  <SelectItem value="Observations">5) Observations</SelectItem>
+                  <SelectItem value="Treatment">6) Treatment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {waterMgmtData.flowOperation === 'Water Filling' && (
+              <>
+                {/* Field 2: Choose Source Tank */}
+                <div className="space-y-4 pt-4 border-t border-dashed">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    2. Choose Source Tank <span className="text-destructive">*</span>
+                  </Label>
+                  
+                  {/* External Source Dropdown */}
+                  <div className="space-y-1.5">
+                    <Select 
+                      value={(waterMgmtData.sourceType === 'sea' || waterMgmtData.sourceType === 'fresh') ? waterMgmtData.sourceType : ''} 
+                      onValueChange={(val) => {
+                        setWaterMgmtData({ 
+                          ...waterMgmtData, 
+                          sourceType: val, 
+                          sourceTankIds: [], 
+                          sourceScope: 'custom',
+                          sourceVolumeAvailable: 999999,
+                          sourceFinalVolume: 999999 - (waterMgmtData.totalVolumeToFill || 0)
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl border-muted-foreground/20 bg-background/50">
+                        <SelectValue placeholder={<span className="text-muted-foreground/40">Select External Source (Sea / Fresh)</span>} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sea">1) Sea Water</SelectItem>
+                        <SelectItem value="fresh">2) Fresh Water Source</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                        Internal Water Section
+                      </h2>
+                      <Tabs 
+                        value={waterMgmtData.sourceScope || 'custom'} 
+                        onValueChange={(val: any) => {
+                          const allTanks = availableTanks
+                            .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                            .flatMap(s => s.tanks || [])
+                            .map(t => t.id);
+                          setWaterMgmtData({ 
+                            ...waterMgmtData, 
+                            sourceScope: val, 
+                            sourceTankIds: val === 'all' ? allTanks : [] 
+                          });
+                        }} 
+                        className="h-8"
+                      >
+                        <TabsList className="bg-muted/50 h-8 p-0.5">
+                          <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
+                          <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All</TabsTrigger>
+                          <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        {waterMgmtData.sourceScope === 'single' ? 'Select Source Tank *' : 'Selected Source Tank *'}
+                      </Label>
+                      
+                      {waterMgmtData.sourceScope === 'single' ? (
+                        <Select 
+                          value={waterMgmtData.sourceTankIds[0] || ''} 
+                          onValueChange={(val) => setWaterMgmtData({ 
+                            ...waterMgmtData, 
+                            sourceType: 'tank', 
+                            sourceTankIds: [val], 
+                            sourceVolumeAvailable: 5000,
+                            sourceFinalVolume: 5000 - (waterMgmtData.totalVolumeToFill || 0)
+                          })}
+                        >
+                          <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
+                            <SelectValue placeholder="Select tank" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTanks
+                              .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                              .flatMap(s => s.tanks || [])
+                              .map(t => (
+                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      ) : waterMgmtData.sourceScope === 'all' ? (
+                        <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
+                          <Check className="w-4 h-4" />
+                          Apply to all tanks in Water Section
+                        </div>
+                      ) : (
+                        <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
+                          {waterMgmtData.sourceTankIds.length} tank(s) selected
+                        </div>
+                      )}
+                    </div>
+
+                    {waterMgmtData.sourceScope === 'custom' && (
+                      <div className="pt-2 border-t border-dashed">
+                        <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
+                        <div className="grid grid-cols-2 xs:grid-cols-3 gap-2">
+                          {availableTanks
+                            .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                            .flatMap(s => s.tanks || [])
+                            .map(t => {
+                              const isSelected = waterMgmtData.sourceTankIds.includes(t.id);
+                              return (
+                                <div 
+                                  key={t.id}
+                                  onClick={() => {
+                                    const newIds = isSelected 
+                                      ? waterMgmtData.sourceTankIds.filter(id => id !== t.id)
+                                      : [...waterMgmtData.sourceTankIds, t.id];
+                                    setWaterMgmtData({ 
+                                      ...waterMgmtData, 
+                                      sourceType: 'tank', 
+                                      sourceTankIds: newIds, 
+                                      sourceVolumeAvailable: 5000 * newIds.length, // Placeholder
+                                      sourceFinalVolume: (5000 * newIds.length) - (waterMgmtData.totalVolumeToFill || 0)
+                                    });
+                                  }}
+                                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                                    isSelected 
+                                      ? 'bg-primary/10 border-primary text-primary font-bold' 
+                                      : 'bg-card border-border hover:border-primary/50'
+                                  }`}
+                                >
+                                  <Checkbox checked={isSelected} className="pointer-events-none" />
+                                  <span className="text-xs break-all uppercase">
+                                    {t.name}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                        {availableTanks.filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId)).flatMap(s => s.tanks || []).length === 0 && (
+                          <p className="text-[10px] text-muted-foreground italic text-center py-2">No tanks found in Water Section for this module</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {waterMgmtData.sourceType && (
+                    <div className="p-3 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                      <span className="text-xs font-bold text-sky-700 uppercase tracking-tight">Total Volume Available</span>
+                      <span className="text-sm font-black text-sky-900">
+                        {waterMgmtData.sourceType === 'tank' ? `${waterMgmtData.sourceVolumeAvailable.toLocaleString()} L` : 'Unlimited'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Field 3: Choose Tank / Tanks to fill */}
+                <div className="space-y-3 pt-4 border-t border-dashed">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                    3. Choose Tank / Tanks to fill <span className="text-destructive">*</span>
+                  </Label>
+                  
+                  {/* Section Filter */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap uppercase">Filter Section:</span>
+                    <Select 
+                      value={waterMgmtData.selectedSectionFilter} 
+                      onValueChange={(val) => setWaterMgmtData({ ...waterMgmtData, selectedSectionFilter: val })}
+                    >
+                      <SelectTrigger className="h-8 text-[10px] rounded-lg border-muted-foreground/20 py-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sections</SelectItem>
+                        {availableTanks
+                          .filter(s => s.farm_id === (selectedFarmId || activeFarmId))
+                          .map(s => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                    {(() => {
+                      const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
+                      return (waterMgmtData.selectedSectionFilter === 'all' 
+                        ? farmSections.flatMap(s => s.tanks || [])
+                        : farmSections.find(s => s.id === waterMgmtData.selectedSectionFilter)?.tanks || []
+                      ).map(tank => {
+                      const isSelected = waterMgmtData.fillTargets.some((t: any) => t.tankId === tank.id);
+                      return (
+                        <button
+                          key={tank.id}
+                          onClick={() => {
+                            const targets = [...waterMgmtData.fillTargets];
+                            const idx = targets.findIndex((t: any) => t.tankId === tank.id);
+                            if (idx >= 0) {
+                              targets.splice(idx, 1);
+                            } else {
+                              targets.push({ tankId: tank.id, tankName: tank.name, volumeToFill: 0, finalVolume: 0 });
+                            }
+                            setWaterMgmtData({ ...waterMgmtData, fillTargets: targets });
+                          }}
+                          className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${
+                            isSelected 
+                              ? 'bg-primary/10 border-primary shadow-sm' 
+                              : 'bg-background border-muted-foreground/10 hover:border-primary/30'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                            isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                            {tank.name}
+                          </span>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+                  <div className="text-[10px] text-muted-foreground font-medium italic">
+                    {waterMgmtData.fillTargets.length} tank(s) selected
+                  </div>
+                </div>
+
+                {/* Field 4: Volumes to be Filled */}
+                {waterMgmtData.fillTargets.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-dashed">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      4. Volumes to be Filled
+                    </Label>
+                    <div className="space-y-3">
+                      {waterMgmtData.fillTargets.map((target: any, idx: number) => (
+                        <div key={target.tankId} className="p-3 rounded-2xl bg-muted/20 border space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-foreground uppercase">{target.tankName}</span>
+                          </div>
+                          <div className="space-y-1">
+                              <Label className="text-[9px] uppercase font-bold text-primary">Fill (L) *</Label>
+                              <Input 
+                                type="number"
+                                value={target.volumeToFill === 0 ? '' : target.volumeToFill}
+                                placeholder="0"
+                                onChange={(e) => {
+                                  const targets = [...waterMgmtData.fillTargets];
+                                  targets[idx].volumeToFill = parseFloat(e.target.value) || 0;
+                                  targets[idx].finalVolume = targets[idx].volumeToFill;
+                                  
+                                  const total = targets.reduce((sum: number, t: any) => sum + t.volumeToFill, 0);
+                                  setWaterMgmtData({ 
+                                    ...waterMgmtData, 
+                                    fillTargets: targets, 
+                                    totalVolumeToFill: total,
+                                    sourceFinalVolume: waterMgmtData.sourceVolumeAvailable - total
+                                  });
+                                }}
+                                className={`h-9 text-xs rounded-lg font-bold placeholder:text-muted-foreground/30 transition-all ${waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable ? 'border-destructive focus:border-destructive' : 'border-primary/30 focus:border-primary'}`}
+                              />
+                            </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-destructive/10 border border-destructive/30 animate-pulse">
+                        <span className="text-[10px] font-black text-destructive uppercase tracking-wide">
+                          ⚠ Total fill ({waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds source volume ({waterMgmtData.sourceVolumeAvailable.toLocaleString()} L). Please reduce fill amounts.
+                        </span>
+                      </div>
+                    )}
+
+
+
+                    {/* Field 5: Final Volumes in Tanks */}
+                    <div className="space-y-4 pt-4 border-t border-dashed animate-fade-in-up">
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        5. Final Volumes in Tanks
+                      </Label>
+                      
+                      {/* 1) Source Tank Final Volume */}
+                      <div className="space-y-3">
+                        <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">1) Source Tank (Final Volume)</Label>
+                        <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-sky-950 uppercase">
+                              {waterMgmtData.sourceType === 'tank' 
+                                ? (availableTanks.flatMap(s => s.tanks || []).find(t => t.id === waterMgmtData.sourceTankIds[0])?.name || 'Source Tank')
+                                : `${waterMgmtData.sourceType} Water Source`}
+                            </span>
+                            <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                          </div>
+                          <Input 
+                            type="number"
+                            value={waterMgmtData.sourceFinalVolume === 0 ? '' : waterMgmtData.sourceFinalVolume}
+                            onChange={(e) => setWaterMgmtData({ ...waterMgmtData, sourceFinalVolume: parseFloat(e.target.value) || 0 })}
+                            className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2) Filled Tanks Final Volumes */}
+                      <div className="space-y-3">
+                        <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">2) Filled tanks (Final Volumes)</Label>
+                        {waterMgmtData.fillTargets.map((target: any, idx: number) => (
+                          <div key={target.tankId} className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-sky-950 uppercase">{target.tankName}</span>
+                              <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                            </div>
+                            <Input 
+                              type="number"
+                              value={target.finalVolume === 0 ? '' : target.finalVolume}
+                              onChange={(e) => {
+                                const targets = [...waterMgmtData.fillTargets];
+                                targets[idx].finalVolume = parseFloat(e.target.value) || 0;
+                                setWaterMgmtData({ ...waterMgmtData, fillTargets: targets });
+                              }}
+                              className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
+                              placeholder="0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Field 6: Water Quality Score */}
+                <div className="space-y-3 pt-4 border-t border-dashed">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                    6. Water Quality Score
+                    {waterMgmtAvg > 0 && <span className="text-emerald-600 font-black">{waterMgmtAvg.toFixed(1)} / 10</span>}
+                  </Label>
+                  
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className={`w-full h-20 justify-between px-4 rounded-2xl border-2 border-dashed transition-all hover:bg-emerald-50/50 hover:border-emerald-500/50 group ${waterMgmtAvg > 0 ? 'bg-emerald-50/30 border-emerald-500/30' : 'border-muted-foreground/20'}`}>
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${waterMgmtAvg > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-muted/30 text-muted-foreground opacity-40'}`}>
+                            <Droplets className="w-6 h-6" />
+                          </div>
+                          <div className="text-left">
+                            <p className={`text-base font-black ${waterMgmtAvg > 0 ? 'text-emerald-950' : 'text-foreground'}`}>
+                              {waterMgmtAvg > 0 ? 'Water Quality Recorded' : 'Record Water Quality'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                              {waterMgmtFilledCount} of {waterFields.length} parameters entered
+                            </p>
+                          </div>
+                        </div>
+                        {waterMgmtAvg > 0 && (
+                          <div className="text-right flex flex-col items-end">
+                            <p className="text-2xl font-black text-emerald-600 leading-none">{waterMgmtAvg.toFixed(1)}</p>
+                            <p className="text-[9px] text-emerald-600/60 uppercase font-black tracking-tighter">Compliance Score</p>
+                          </div>
+                        )}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
+                      <DialogHeader className="p-6 pb-4 bg-emerald-50/50 sticky top-0 z-10 backdrop-blur-md border-b border-emerald-100">
+                        <DialogTitle className="text-xl font-black flex items-center gap-2 text-emerald-950">
+                          <Droplets className="w-6 h-6 text-emerald-600" />
+                          Water Quality Assessment
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                        <div className="grid grid-cols-1 gap-5">
+                          {waterFields.map(field => {
+                            const rangeLabel = WATER_QUALITY_RANGES[field];
+                            const isFilled = waterMgmtData.waterQualityData?.[field] !== undefined && waterMgmtData.waterQualityData?.[field] !== '';
+                            return (
+                              <div key={field} className="space-y-1.5 group">
+                                <Label className={`text-[10px] font-black flex justify-between uppercase tracking-wider transition-colors ${isFilled ? 'text-emerald-700' : 'text-muted-foreground group-focus-within:text-emerald-600'}`}>
+                                  {field} *
+                                  {rangeLabel && <span className="text-[9px] font-bold opacity-60 font-mono">{rangeLabel}</span>}
+                                </Label>
+                                <Input
+                                  type={field === 'Other' ? 'text' : 'number'}
+                                  min="0"
+                                  step="any"
+                                  value={waterMgmtData.waterQualityData?.[field] || ''}
+                                  onChange={e => {
+                                    setWaterMgmtData(prev => ({
+                                      ...prev,
+                                      waterQualityData: {
+                                        ...prev.waterQualityData,
+                                        [field]: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                  placeholder="0.0"
+                                  className={`h-11 font-bold text-sm rounded-xl transition-all ${isFilled ? 'border-emerald-200 bg-emerald-50/20 focus:border-emerald-500' : 'border-muted-foreground/10 focus:border-emerald-400'}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Summary Score Card inside Modal */}
+                        <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5 space-y-3 shadow-inner">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-emerald-900 uppercase tracking-widest">Compliance Score</span>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-4xl font-black text-emerald-600">{waterMgmtAvg.toFixed(1)}</span>
+                              <span className="text-sm font-black text-emerald-600/40">/ 10</span>
+                            </div>
+                          </div>
+                          <div className="w-full h-2.5 bg-emerald-200/50 rounded-full overflow-hidden border border-emerald-200">
+                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${(waterMgmtAvg / 10) * 100}%` }} />
+                          </div>
+                          <p className="text-[10px] text-emerald-700/70 text-center font-bold italic tracking-wide">
+                            Calculated compliance average of {waterMgmtFilledCount} parameters
+                          </p>
+                        </div>
+                      </div>
+                      <DialogFooter className="p-4 bg-emerald-50/50 border-t border-emerald-100 sticky bottom-0 z-10">
+                        <DialogClose asChild>
+                          <Button
+                            className="w-full h-12 rounded-xl font-black text-base shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700 text-white border-none transition-all active:scale-[0.98]"
+                            onClick={() => {
+                              setWaterMgmtData(prev => ({
+                                ...prev,
+                                waterQualityScore: parseFloat(waterMgmtAvg.toFixed(1))
+                              }));
+                            }}
+                          >
+                            Save Water Quality Assessment
+                          </Button>
+                        </DialogClose>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                {!isPlanningMode && (
+                  <div className="space-y-1.5 pt-2 border-t border-dashed">
+                    <Label className="text-xs">Activity Photo (Optional)</Label>
+                    <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
+                  <Textarea 
+                    value={comments} 
+                    onChange={e => setComments(e.target.value)} 
+                    placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."} 
+                    rows={3} 
+                  />
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* Save */}
