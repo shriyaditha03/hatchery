@@ -21,7 +21,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Calendar, Info, Filter, BarChart2, Waves, Beaker, Layers, Camera, Eye, FlaskConical, Edit2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, Info, Filter, BarChart2, Waves, Beaker, Layers, Camera, Eye, FlaskConical, Edit2, Droplets } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, toLocal, getTodayStr, getDateRangeUTC } from '@/lib/date-utils';
 import { subDays, startOfDay, endOfDay, format } from 'date-fns';
@@ -89,7 +89,8 @@ const OwnerActivityLogs = () => {
                 'spawning': 'Spawning',
                 'egg count': 'Egg Count',
                 'nauplii harvest': 'Nauplii Harvest',
-                'nauplii sale': 'Nauplii Sale'
+                'nauplii sale': 'Nauplii Sale',
+                'water management': 'Water Management'
             };
             const dbType = typeMap[type?.toLowerCase() || ''] || type;
 
@@ -389,11 +390,25 @@ const OwnerActivityLogs = () => {
                     <div className="text-[9px] text-muted-foreground">Hatch Rate: {data.hatchRate || '0'}%</div>
                 </div>
             );
-        } else if (typeLower === 'nauplii sale') {
+        } else if (typeLower === 'water management') {
             return (
                 <div className="space-y-0.5">
-                    <div>Sold: {data.quantitySold || '0'}, Customer: {data.customerName || 'N/A'}</div>
-                    <div className="text-[9px] text-muted-foreground">Price: {data.pricePerMillion || '0'} /M</div>
+                    <div className="font-bold text-primary">{data.flowOperation || 'N/A'}</div>
+                    <div className="text-[10px]">
+                        {data.flowOperation === 'Water Filling' ? (
+                            <>
+                                Source: {data.sourceType === 'external' ? (data.externalSource || 'External') : (data.sourceTankName || 'Internal Tank')}
+                                <br />
+                                Targets: {data.fillTargets?.length || 0} tanks
+                            </>
+                        ) : (
+                            <>
+                                Source: {data.sourceTankName || 'N/A'}
+                                <br />
+                                Target: {data.drainTarget === 'sea' ? 'Sea' : (data.drainTarget === 'external' ? 'External' : (data.destinationTankName || 'Internal Tank'))}
+                            </>
+                        )}
+                    </div>
                 </div>
             );
         }
@@ -415,6 +430,7 @@ const OwnerActivityLogs = () => {
         if (typeLower === 'egg count') return { total: 'Total Eggs', unit: 'M', icon: <Layers className="w-4 h-4" /> };
         if (typeLower === 'nauplii harvest') return { total: 'Total Nauplii', unit: 'M', icon: <Layers className="w-4 h-4" /> };
         if (typeLower === 'nauplii sale') return { total: 'Total Sold', unit: 'M', icon: <Layers className="w-4 h-4" /> };
+        if (typeLower === 'water management') return { total: 'Water Ops', unit: 'qty', icon: <Droplets className="w-4 h-4" /> };
         return { total: 'Total', unit: '', icon: <BarChart2 className="w-4 h-4" /> };
     };
 

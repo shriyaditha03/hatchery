@@ -280,11 +280,13 @@ const OwnerConsolidatedReports = () => {
                     <div className="text-[9px] text-muted-foreground">Hatch Rate: {data.hatchRate || '0'}%</div>
                 </div>
             );
-        } else if (typeLower === 'nauplii sale') {
+        } else if (typeLower === 'water management') {
             return (
                 <div className="space-y-0.5">
-                    <div>Sold: {data.quantitySold || '0'}, Customer: {data.customerName || 'N/A'}</div>
-                    <div className="text-[9px] text-muted-foreground">Price: {data.pricePerMillion || '0'} /M</div>
+                    <div className="font-bold text-primary">{data.flowOperation || 'N/A'}</div>
+                    <div className="text-[10px]">
+                        {data.sourceType === 'tank' ? `From: ${data.sourceTankName || 'Tank'}` : `Source: ${data.sourceType || 'N/A'}`}
+                    </div>
                 </div>
             );
         }
@@ -323,6 +325,7 @@ const OwnerConsolidatedReports = () => {
             'Egg Count': 'bg-amber-100 text-amber-700',
             'Nauplii Harvest': 'bg-emerald-100 text-emerald-700',
             'Nauplii Sale': 'bg-blue-100 text-blue-700',
+            'Water Management': 'bg-blue-100 text-blue-800',
         };
         return colors[type] || 'bg-gray-100 text-gray-700';
     };

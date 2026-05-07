@@ -283,8 +283,6 @@ const CreateFarm = () => {
     };
 
     const addSectionByType = (type: 'ANIMAL' | 'SPAWNING' | 'NAUPLII' | 'LRT' | 'WATER') => {
-        const typeLabel = type === 'ANIMAL' ? 'Animal' : type === 'SPAWNING' ? 'Spawning' : type === 'NAUPLII' ? 'Nauplii' : type === 'WATER' ? 'Water Storage' : 'Section';
-        
         // Find the max number currently used for this type to avoid duplicates
         const existingNumbers = sections
             .filter(s => s.type === type)
@@ -294,8 +292,22 @@ const CreateFarm = () => {
             });
         const nextNum = Math.max(0, ...existingNumbers) + 1;
         
+        let name = '';
+        let typeLabel = '';
+
+        if (type === 'LRT') {
+            name = `Section ${nextNum}`;
+            typeLabel = 'Section';
+        } else if (type === 'WATER') {
+            name = `Water Storage Section ${nextNum}`;
+            typeLabel = 'Water Storage';
+        } else {
+            typeLabel = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+            name = `${typeLabel} Section ${nextNum}`;
+        }
+
         const newSection: SectionConfig = {
-            name: `${typeLabel} Section ${nextNum}`,
+            name: name,
             type: type,
             tanks: []
         };
@@ -307,6 +319,7 @@ const CreateFarm = () => {
     const addSection = () => {
         const newSection: SectionConfig = {
             name: `Section ${sections.length + 1}`,
+            type: 'LRT',
             tanks: []
         };
         setSections(prev => [...prev, newSection]);

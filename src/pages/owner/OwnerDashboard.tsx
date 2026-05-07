@@ -15,7 +15,7 @@ import {
 import {
     User, LogOut, PlusCircle, Warehouse, Users,
     Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
-    FlaskConical, Leaf, MapPin, Scissors, MoveRight, Heart, Sparkles, ShoppingCart, ArrowUpRight, Database
+    FlaskConical, Leaf, MapPin, Scissors, MoveRight, Heart, Sparkles, ShoppingCart, ArrowUpRight, Database, Droplets
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import logo from '@/assets/aqua-nexus-logo.png';
@@ -103,6 +103,7 @@ const OwnerDashboard = () => {
         { name: 'Tank Shifting', icon: MoveRight, route: '/owner/reports/shifting', color: 'bg-indigo-100 text-indigo-600' },
         { name: 'Artemia', icon: FlaskConical, route: '/owner/reports/artemia', color: 'bg-teal-100 text-teal-600' },
         { name: 'Algae', icon: Leaf, route: '/owner/reports/algae', color: 'bg-green-100 text-green-700' },
+        { name: 'Water Management', icon: Droplets, route: '/owner/reports/water management', color: 'bg-blue-100 text-blue-700' },
     ];
     
     const maturationActivities = [
@@ -117,6 +118,7 @@ const OwnerDashboard = () => {
         { name: 'Egg Count', icon: Layers, route: '/owner/reports/egg count', color: 'bg-blue-100 text-blue-600' },
         { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/owner/reports/nauplii harvest', color: 'bg-emerald-100 text-emerald-600' },
         { name: 'Nauplii Sale', icon: ShoppingCart, route: '/owner/reports/nauplii sale', color: 'bg-indigo-100 text-indigo-600' },
+        { name: 'Water Management', icon: Droplets, route: '/owner/reports/water management', color: 'bg-blue-100 text-blue-700' },
     ];
 
     const activities = activeModule === 'MATURATION' ? maturationActivities : lrtActivities;
