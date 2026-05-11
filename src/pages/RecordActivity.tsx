@@ -101,6 +101,7 @@ const RecordActivity = () => {
   const [dbFeedTypes, setDbFeedTypes] = useState<string[]>(FEED_TYPES);
   const [dbTreatmentTypes, setDbTreatmentTypes] = useState<string[]>(TREATMENT_TYPES);
   const [tankPopulations, setTankPopulations] = useState<Record<string, number>>({});
+  const [tankWaterVolumes, setTankWaterVolumes] = useState<Record<string, number>>({});
   const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>(sectionParam || '');
 
@@ -354,11 +355,11 @@ const RecordActivity = () => {
       
       if (secError) throw secError;
 
-      // 2. Fetch Tanks for these sections (include gender for Maturation ANIMAL sections)
+      // 2. Fetch Tanks for these sections (include gender for Maturation ANIMAL sections and volume_litres)
       const allSecIds = sections.map(s => s.id);
       const { data: tanks, error: tankError } = await supabase
         .from('tanks')
-        .select('id, name, section_id, gender')
+        .select('id, name, section_id, gender, volume_litres')
         .in('section_id', allSecIds);
       if (tankError) throw tankError;
 
@@ -396,6 +397,83 @@ const RecordActivity = () => {
            });
            setTankPopulations(popMap);
         }
+      }
+
+      // 5. Check water volumes
+      if (allTankIds.length > 0) {
+        const { data: waterLogs } = await supabase
+          .from('activity_logs')
+          .select('data, created_at')
+          .in('farm_id', farmIds)
+          .eq('activity_type', 'Water Management')
+          .order('created_at', { ascending: false });
+
+        const latestVolumes: Record<string, number> = {};
+        tanks?.forEach(t => {
+          latestVolumes[t.id] = parseFloat(t.volume_litres || '0') || 0;
+        });
+
+        const foundTanks = new Set<string>();
+        
+        if (waterLogs) {
+          for (const log of waterLogs) {
+            const data = log.data;
+            if (!data) continue;
+            
+            if (data.flowOperation === 'Water Filling') {
+              if (data.sourceType === 'tank' && data.sourceTankIds?.length > 0) {
+                const sourceId = data.sourceTankIds[0];
+                if (!foundTanks.has(sourceId)) {
+                  latestVolumes[sourceId] = data.sourceFinalVolume || 0;
+                  foundTanks.add(sourceId);
+                }
+              }
+              if (data.fillTargets) {
+                data.fillTargets.forEach((target: any) => {
+                  if (target.tankId && !foundTanks.has(target.tankId)) {
+                    latestVolumes[target.tankId] = target.finalVolume || 0;
+                    foundTanks.add(target.tankId);
+                  }
+                });
+              }
+            } else if (data.flowOperation === 'Water Exchange') {
+              if (data.exchangeSourceTankId) {
+                const sourceId = data.exchangeSourceTankId;
+                if (!foundTanks.has(sourceId)) {
+                  latestVolumes[sourceId] = data.sourceFinalVolume || 0;
+                  foundTanks.add(sourceId);
+                }
+              }
+              if (data.exchangeTargets) {
+                data.exchangeTargets.forEach((target: any) => {
+                  if (target.tankId && !foundTanks.has(target.tankId)) {
+                    latestVolumes[target.tankId] = target.finalVolume || 0;
+                    foundTanks.add(target.tankId);
+                  }
+                });
+              }
+            } else if (data.flowOperation === 'Drain / Clean') {
+              if (data.drainTargets) {
+                data.drainTargets.forEach((target: any) => {
+                  if (target.tankId && !foundTanks.has(target.tankId)) {
+                    latestVolumes[target.tankId] = target.finalVolume || 0;
+                    foundTanks.add(target.tankId);
+                  }
+                });
+              }
+            } else if (data.flowOperation === 'Recirculation') {
+              if (data.recirculationTargets) {
+                data.recirculationTargets.forEach((target: any) => {
+                  if (target.tankId && !foundTanks.has(target.tankId)) {
+                    latestVolumes[target.tankId] = target.finalVolume || 0;
+                    foundTanks.add(target.tankId);
+                  }
+                });
+              }
+            }
+          }
+        }
+        setTankWaterVolumes(latestVolumes);
       }
     } catch (err: any) {
       console.error('Error fetching tanks:', err);
@@ -1183,14 +1261,24 @@ const RecordActivity = () => {
     flowOperation: '',
     sourceType: '', // 'sea', 'fresh', 'tank'
     sourceTankIds: [],
-    sourceScope: 'custom', // 'single', 'all', 'custom'
+    sourceScope: 'single', // 'single', 'all', 'custom'
     sourceVolumeAvailable: 0,
     selectedSectionFilter: 'all',
     fillTargets: [], // Array of { tankId: string, volumeToFill: number, finalVolume: number }
     totalVolumeToFill: 0,
     sourceFinalVolume: 0,
     waterQualityScore: 0,
-    waterQualityData: {}
+    waterQualityData: {},
+    // New fields for Exchange
+    exchangeUnit: 'volume', // 'volume' or 'percent'
+    exchangeSourceTankId: '',
+    exchangeTargets: [], // Array of { tankId: string, tankName: string, exchangeAmount: number, finalVolume: number }
+    // New fields for Drain
+    drainUnit: 'volume',
+    drainTargets: [], // Array of { tankId: string, tankName: string, drainAmount: number, finalVolume: number }
+    // New fields for Recirculation
+    recirculationUnit: 'percent',
+    recirculationTargets: [] // Array of { tankId: string, tankName: string, recircAmount: number, finalVolume: number }
   });
 
   // Water Quality Calculation for Water Management
@@ -1815,6 +1903,47 @@ const RecordActivity = () => {
         }
         if (waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable) {
           toast.error(`Total fill (${waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds available source volume (${waterMgmtData.sourceVolumeAvailable.toLocaleString()} L). Please reduce fill amounts.`);
+          return;
+        }
+      }
+
+      if (waterMgmtData.flowOperation === 'Water Exchange') {
+        if (!waterMgmtData.exchangeSourceTankId) {
+          toast.error('Please select a Source Tank for exchange');
+          return;
+        }
+        if (waterMgmtData.exchangeTargets.length === 0) {
+          toast.error('Please select at least one target tank for exchange');
+          return;
+        }
+        const hasZeroExchange = waterMgmtData.exchangeTargets.some((t: any) => (t.exchangeAmount || 0) === 0);
+        if (hasZeroExchange) {
+          toast.error('Please enter an exchange amount for all selected tanks');
+          return;
+        }
+        if (waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable) {
+          toast.error(`Total exchange (${waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds available source volume (${waterMgmtData.sourceVolumeAvailable.toLocaleString()} L).`);
+          return;
+        }
+      }
+
+      if (waterMgmtData.flowOperation === 'Drain / Clean') {
+        if (waterMgmtData.drainTargets.length === 0) {
+          toast.error('Please select at least one tank to drain');
+          return;
+        }
+        const hasZeroDrain = waterMgmtData.drainTargets.some((t: any) => (t.drainAmount || 0) === 0);
+        if (hasZeroDrain) {
+          toast.error('Please enter a drain amount for all selected tanks');
+          return;
+        }
+        const exceedsCapacity = waterMgmtData.drainTargets.some((t: any) => {
+          const available = tankWaterVolumes[t.tankId] || 0;
+          const drain = waterMgmtData.drainUnit === 'percent' ? (t.drainAmount / 100) * available : t.drainAmount;
+          return drain > available + 0.1; // Small buffer for floats
+        });
+        if (exceedsCapacity) {
+          toast.error('Drain amount exceeds current tank volume for one or more tanks');
           return;
         }
       }
@@ -3183,12 +3312,19 @@ const RecordActivity = () => {
 
                                   return (
                                     <SelectItem key={t.id} value={t.id}>
-                                      <span className={`text-xs ${colorClass}`}>
-                                        {activeFarmCategory === 'MATURATION' && !sectionId 
-                                          ? `${section?.name} - ${t.name}`
-                                          : t.name
-                                        }
-                                      </span>
+                                      <div className="flex items-center justify-between w-full gap-4">
+                                        <span className={`text-xs ${colorClass}`}>
+                                          {activeFarmCategory === 'MATURATION' && !sectionId 
+                                            ? `${section?.name} - ${t.name}`
+                                            : t.name
+                                          }
+                                        </span>
+                                        {tankWaterVolumes[t.id] !== undefined && (
+                                          <span className="text-[9px] font-bold text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded shrink-0">
+                                            {tankWaterVolumes[t.id].toLocaleString()} L
+                                          </span>
+                                        )}
+                                      </div>
                                     </SelectItem>
                                   );
                                 });
@@ -3249,21 +3385,28 @@ const RecordActivity = () => {
                           }`}
                         >
                           <Checkbox checked={selectedTankIds.includes(t.id)} className="pointer-events-none" />
-                          <span className={`text-xs break-all ${(() => {
-                            if (activeFarmCategory !== 'MATURATION') return '';
-                            const tName = (t.name || '').toUpperCase();
-                            const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
-                            const sectionType = section?.section_type?.toUpperCase();
-                            const sName = (section?.name || '').toUpperCase();
+                          <div className="flex flex-col min-w-0">
+                            <span className={`text-xs truncate ${(() => {
+                              if (activeFarmCategory !== 'MATURATION') return '';
+                              const tName = (t.name || '').toUpperCase();
+                              const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
+                              const sectionType = section?.section_type?.toUpperCase();
+                              const sName = (section?.name || '').toUpperCase();
 
-                            if (tName.includes('_MT')) return 'text-blue-600 font-bold';
-                            if (tName.includes('_FT')) return 'text-pink-600 font-bold';
-                            if (sectionType === 'SPAWNING' || sName.includes('SPAWN') || tName.includes('_ST') || tName.includes('_SS')) return 'text-violet-600 font-bold';
-                            if (sectionType === 'NAUPLII' || sName.includes('NAUPLII') || sName.includes('HARVEST') || tName.includes('_NH') || tName.includes('_NS')) return 'text-amber-600 font-bold';
-                            return '';
-                          })()}`}>
-                            {t.name}
-                          </span>
+                              if (tName.includes('_MT')) return 'text-blue-600 font-bold';
+                              if (tName.includes('_FT')) return 'text-pink-600 font-bold';
+                              if (sectionType === 'SPAWNING' || sName.includes('SPAWN') || tName.includes('_ST') || tName.includes('_SS')) return 'text-violet-600 font-bold';
+                              if (sectionType === 'NAUPLII' || sName.includes('NAUPLII') || sName.includes('HARVEST') || tName.includes('_NH') || tName.includes('_NS')) return 'text-amber-600 font-bold';
+                              return '';
+                            })()}`}>
+                              {t.name}
+                            </span>
+                            {tankWaterVolumes[t.id] !== undefined && (
+                              <span className="text-[8px] font-bold text-muted-foreground leading-tight shrink-0">
+                                {tankWaterVolumes[t.id].toLocaleString()} L
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ));
                     })()}
@@ -3895,7 +4038,7 @@ const RecordActivity = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Water Filling">1) Water Filling</SelectItem>
-                  <SelectItem value="Exchange">2) Exchange</SelectItem>
+                  <SelectItem value="Water Exchange">2) Water Exchange</SelectItem>
                   <SelectItem value="Recirculation">3) Recirculation</SelectItem>
                   <SelectItem value="Drain / Clean">4) Drain / Clean</SelectItem>
                   <SelectItem value="Observations">5) Observations</SelectItem>
@@ -3907,126 +4050,187 @@ const RecordActivity = () => {
             {waterMgmtData.flowOperation === 'Water Filling' && (
               <>
                 {/* Field 2: Choose Source Tank */}
-                <div className="space-y-4 pt-4 border-t border-dashed">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    2. Choose Source Tank <span className="text-destructive">*</span>
-                  </Label>
-                  
-                  {/* External Source Dropdown */}
-                  <div className="space-y-1.5">
-                    <Select 
-                      value={(waterMgmtData.sourceType === 'sea' || waterMgmtData.sourceType === 'fresh') ? waterMgmtData.sourceType : ''} 
-                      onValueChange={(val) => {
+                <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      2. Choose Source Tank <span className="text-destructive">*</span>
+                    </Label>
+                    <Tabs 
+                      value={waterMgmtData.sourceScope || 'single'} 
+                      onValueChange={(val: any) => {
+                        const allTanks = availableTanks
+                          .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                          .flatMap(s => s.tanks || [])
+                          .map(t => t.id);
+                        
+                        let sourceIds = waterMgmtData.sourceTankIds;
+                        let sType = waterMgmtData.sourceType;
+
+                        if (val === 'all') {
+                          sourceIds = allTanks;
+                          sType = 'tank';
+                        } else if (val === 'single') {
+                          sourceIds = [];
+                        }
+
+                        const totalAvailable = sType === 'tank' 
+                          ? (sourceIds || []).reduce((sum, id) => sum + (tankWaterVolumes[id] || 0), 0)
+                          : (sType === 'sea' || sType === 'fresh' ? 999999 : 0);
+
                         setWaterMgmtData({ 
                           ...waterMgmtData, 
-                          sourceType: val, 
-                          sourceTankIds: [], 
-                          sourceScope: 'custom',
-                          sourceVolumeAvailable: 999999,
-                          sourceFinalVolume: 999999 - (waterMgmtData.totalVolumeToFill || 0)
+                          sourceScope: val, 
+                          sourceType: sType,
+                          sourceTankIds: sourceIds,
+                          sourceVolumeAvailable: totalAvailable,
+                          sourceFinalVolume: Math.max(0, totalAvailable - (waterMgmtData.totalVolumeToFill || 0))
                         });
-                      }}
+                      }} 
+                      className="h-8"
                     >
-                      <SelectTrigger className="h-11 rounded-xl border-muted-foreground/20 bg-background/50">
-                        <SelectValue placeholder={<span className="text-muted-foreground/40">Select External Source (Sea / Fresh)</span>} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sea">1) Sea Water</SelectItem>
-                        <SelectItem value="fresh">2) Fresh Water Source</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <TabsList className="bg-muted/50 h-8 p-0.5">
+                        <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
+                        <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All</TabsTrigger>
+                        <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                   </div>
 
-                  <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                        Internal Water Section
-                      </h2>
-                      <Tabs 
-                        value={waterMgmtData.sourceScope || 'custom'} 
-                        onValueChange={(val: any) => {
-                          const allTanks = availableTanks
-                            .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
-                            .flatMap(s => s.tanks || [])
-                            .map(t => t.id);
-                          setWaterMgmtData({ 
-                            ...waterMgmtData, 
-                            sourceScope: val, 
-                            sourceTankIds: val === 'all' ? allTanks : [] 
-                          });
-                        }} 
-                        className="h-8"
+                  <div className="space-y-1.5">
+                    {waterMgmtData.sourceScope === 'single' ? (
+                      <Select 
+                        value={waterMgmtData.sourceType === 'tank' ? (waterMgmtData.sourceTankIds[0] || '') : waterMgmtData.sourceType} 
+                        onValueChange={(val) => {
+                          if (val === 'sea' || val === 'fresh') {
+                            setWaterMgmtData({ 
+                              ...waterMgmtData, 
+                              sourceType: val, 
+                              sourceTankIds: [], 
+                              sourceVolumeAvailable: 999999,
+                              sourceFinalVolume: 999999 - (waterMgmtData.totalVolumeToFill || 0)
+                            });
+                          } else {
+                            const availableVol = tankWaterVolumes[val] || 0;
+                            setWaterMgmtData({ 
+                              ...waterMgmtData, 
+                              sourceType: 'tank', 
+                              sourceTankIds: [val], 
+                              sourceVolumeAvailable: availableVol,
+                              sourceFinalVolume: Math.max(0, availableVol - (waterMgmtData.totalVolumeToFill || 0))
+                            });
+                          }
+                        }}
                       >
-                        <TabsList className="bg-muted/50 h-8 p-0.5">
-                          <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
-                          <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All</TabsTrigger>
-                          <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        {waterMgmtData.sourceScope === 'single' ? 'Select Source Tank *' : 'Selected Source Tank *'}
-                      </Label>
-                      
-                      {waterMgmtData.sourceScope === 'single' ? (
-                        <Select 
-                          value={waterMgmtData.sourceTankIds[0] || ''} 
-                          onValueChange={(val) => setWaterMgmtData({ 
-                            ...waterMgmtData, 
-                            sourceType: 'tank', 
-                            sourceTankIds: [val], 
-                            sourceVolumeAvailable: 5000,
-                            sourceFinalVolume: 5000 - (waterMgmtData.totalVolumeToFill || 0)
-                          })}
-                        >
-                          <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
-                            <SelectValue placeholder="Select tank" />
-                          </SelectTrigger>
-                          <SelectContent>
+                        <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
+                          <SelectValue placeholder="Select Source (External or Tank)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">External Sources</SelectLabel>
+                            <SelectItem value="sea">Sea Water</SelectItem>
+                            <SelectItem value="fresh">Fresh Water Source</SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">Internal Water Tanks</SelectLabel>
                             {availableTanks
                               .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                               .flatMap(s => s.tanks || [])
                               .map(t => (
-                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                <SelectItem key={t.id} value={t.id}>
+                                  <div className="flex items-center justify-between w-full gap-4">
+                                    <span>{t.name}</span>
+                                    <span className="text-[9px] font-bold text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                    </span>
+                                  </div>
+                                </SelectItem>
                               ))}
-                          </SelectContent>
-                        </Select>
-                      ) : waterMgmtData.sourceScope === 'all' ? (
-                        <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
-                          <Check className="w-4 h-4" />
-                          Apply to all tanks in Water Section
-                        </div>
-                      ) : (
-                        <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
-                          {waterMgmtData.sourceTankIds.length} tank(s) selected
-                        </div>
-                      )}
-                    </div>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    ) : waterMgmtData.sourceScope === 'all' ? (
+                      <div className="h-11 flex items-center px-4 bg-primary/5 text-primary rounded-lg border border-primary/20 text-sm font-bold gap-2">
+                        <Check className="w-4 h-4" />
+                        Apply to all tanks in Water Section
+                      </div>
+                    ) : (
+                      <div className="h-11 flex items-center px-4 bg-muted/50 rounded-lg border border-input text-sm font-medium cursor-default">
+                        {waterMgmtData.sourceType === 'tank' 
+                          ? `${waterMgmtData.sourceTankIds.length} tank(s) selected`
+                          : (waterMgmtData.sourceType === 'sea' ? 'Sea Water' : (waterMgmtData.sourceType === 'fresh' ? 'Fresh Water' : 'None selected'))
+                        }
+                      </div>
+                    )}
+                  </div>
 
                     {waterMgmtData.sourceScope === 'custom' && (
                       <div className="pt-2 border-t border-dashed">
                         <Label className="text-[10px] uppercase text-muted-foreground mb-2 block">Select Tanks for this Activity</Label>
                         <div className="grid grid-cols-2 xs:grid-cols-3 gap-2">
+                          {/* Sea Water Source */}
+                          <div 
+                            onClick={() => {
+                              setWaterMgmtData({ 
+                                ...waterMgmtData, 
+                                sourceType: 'sea', 
+                                sourceTankIds: [], 
+                                sourceVolumeAvailable: 999999,
+                                sourceFinalVolume: Math.max(0, 999999 - (waterMgmtData.totalVolumeToFill || 0))
+                              });
+                            }}
+                            className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                              waterMgmtData.sourceType === 'sea' 
+                                ? 'bg-primary/10 border-primary text-primary font-bold' 
+                                : 'bg-card border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <Checkbox checked={waterMgmtData.sourceType === 'sea'} className="pointer-events-none" />
+                            <span className="text-xs break-all uppercase">Sea Water</span>
+                          </div>
+
+                          {/* Fresh Water Source */}
+                          <div 
+                            onClick={() => {
+                              setWaterMgmtData({ 
+                                ...waterMgmtData, 
+                                sourceType: 'fresh', 
+                                sourceTankIds: [], 
+                                sourceVolumeAvailable: 999999,
+                                sourceFinalVolume: Math.max(0, 999999 - (waterMgmtData.totalVolumeToFill || 0))
+                              });
+                            }}
+                            className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                              waterMgmtData.sourceType === 'fresh' 
+                                ? 'bg-primary/10 border-primary text-primary font-bold' 
+                                : 'bg-card border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <Checkbox checked={waterMgmtData.sourceType === 'fresh'} className="pointer-events-none" />
+                            <span className="text-xs break-all uppercase">Fresh Water</span>
+                          </div>
+
                           {availableTanks
                             .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                             .flatMap(s => s.tanks || [])
                             .map(t => {
-                              const isSelected = waterMgmtData.sourceTankIds.includes(t.id);
+                              const isSelected = waterMgmtData.sourceType === 'tank' && waterMgmtData.sourceTankIds.includes(t.id);
                               return (
                                 <div 
                                   key={t.id}
                                   onClick={() => {
+                                    const prevIds = waterMgmtData.sourceType === 'tank' ? waterMgmtData.sourceTankIds : [];
                                     const newIds = isSelected 
-                                      ? waterMgmtData.sourceTankIds.filter(id => id !== t.id)
-                                      : [...waterMgmtData.sourceTankIds, t.id];
+                                      ? prevIds.filter(id => id !== t.id)
+                                      : [...prevIds, t.id];
+                                    
+                                    const totalAvailable = newIds.reduce((sum, id) => sum + (tankWaterVolumes[id] || 0), 0);
+                                    
                                     setWaterMgmtData({ 
                                       ...waterMgmtData, 
                                       sourceType: 'tank', 
                                       sourceTankIds: newIds, 
-                                      sourceVolumeAvailable: 5000 * newIds.length, // Placeholder
-                                      sourceFinalVolume: (5000 * newIds.length) - (waterMgmtData.totalVolumeToFill || 0)
+                                      sourceVolumeAvailable: totalAvailable,
+                                      sourceFinalVolume: Math.max(0, totalAvailable - (waterMgmtData.totalVolumeToFill || 0))
                                     });
                                   }}
                                   className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
@@ -4036,9 +4240,14 @@ const RecordActivity = () => {
                                   }`}
                                 >
                                   <Checkbox checked={isSelected} className="pointer-events-none" />
-                                  <span className="text-xs break-all uppercase">
-                                    {t.name}
-                                  </span>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-xs break-all uppercase">
+                                      {t.name}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-muted-foreground leading-tight shrink-0">
+                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -4048,7 +4257,6 @@ const RecordActivity = () => {
                         )}
                       </div>
                     )}
-                  </div>
                   
                   {waterMgmtData.sourceType && (
                     <div className="p-3 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-between animate-in fade-in slide-in-from-top-1">
@@ -4126,8 +4334,8 @@ const RecordActivity = () => {
                       );
                     });
                   })()}
-                </div>
-                  <div className="text-[10px] text-muted-foreground font-medium italic">
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-medium italic mt-2">
                     {waterMgmtData.fillTargets.length} tank(s) selected
                   </div>
                 </div>
@@ -4187,26 +4395,26 @@ const RecordActivity = () => {
                       </Label>
                       
                       {/* 1) Source Tank Final Volume */}
-                      <div className="space-y-3">
-                        <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">1) Source Tank (Final Volume)</Label>
-                        <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-black text-sky-950 uppercase">
-                              {waterMgmtData.sourceType === 'tank' 
-                                ? (availableTanks.flatMap(s => s.tanks || []).find(t => t.id === waterMgmtData.sourceTankIds[0])?.name || 'Source Tank')
-                                : `${waterMgmtData.sourceType} Water Source`}
-                            </span>
-                            <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                      {waterMgmtData.sourceType === 'tank' && (
+                        <div className="space-y-3">
+                          <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">1) Source Tank (Final Volume)</Label>
+                          <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-sky-950 uppercase">
+                                {availableTanks.flatMap(s => s.tanks || []).find(t => t.id === waterMgmtData.sourceTankIds[0])?.name || 'Source Tank'}
+                              </span>
+                              <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                            </div>
+                            <Input 
+                              type="number"
+                              value={waterMgmtData.sourceFinalVolume === 0 ? '' : waterMgmtData.sourceFinalVolume}
+                              onChange={(e) => setWaterMgmtData({ ...waterMgmtData, sourceFinalVolume: parseFloat(e.target.value) || 0 })}
+                              className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
+                              placeholder="0"
+                            />
                           </div>
-                          <Input 
-                            type="number"
-                            value={waterMgmtData.sourceFinalVolume === 0 ? '' : waterMgmtData.sourceFinalVolume}
-                            onChange={(e) => setWaterMgmtData({ ...waterMgmtData, sourceFinalVolume: parseFloat(e.target.value) || 0 })}
-                            className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
-                            placeholder="0"
-                          />
                         </div>
-                      </div>
+                      )}
 
                       {/* 2) Filled Tanks Final Volumes */}
                       <div className="space-y-3">
@@ -4234,7 +4442,415 @@ const RecordActivity = () => {
                     </div>
                   </div>
                 )}
+              </>
+            )}
 
+            {waterMgmtData.flowOperation === 'Water Exchange' && (
+              <>
+                {/* Field 2: Choose Source Tank */}
+                <div className="space-y-4 pt-4 border-t border-dashed">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    2. Choose Source Tank <span className="text-destructive">*</span>
+                  </Label>
+                  
+                  <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Select Source Tank (Water Section) *</Label>
+                      <Select 
+                        value={waterMgmtData.exchangeSourceTankId || ''} 
+                        onValueChange={(val) => {
+                          const availableVol = tankWaterVolumes[val] || 0;
+                          setWaterMgmtData({ 
+                            ...waterMgmtData, 
+                            exchangeSourceTankId: val,
+                            sourceVolumeAvailable: availableVol,
+                            sourceFinalVolume: Math.max(0, availableVol - (waterMgmtData.totalVolumeToFill || 0))
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
+                          <SelectValue placeholder="Select source tank" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTanks
+                            .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                            .flatMap(s => s.tanks || [])
+                            .map(t => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {waterMgmtData.exchangeSourceTankId && (
+                      <div className="p-3 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                        <span className="text-xs font-bold text-sky-700 uppercase tracking-tight">Water Volume Available</span>
+                        <span className="text-sm font-black text-sky-900">
+                          {waterMgmtData.sourceVolumeAvailable.toLocaleString()} L
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Field 3: Choose Tank / Tanks for Exchange */}
+                <div className="space-y-3 pt-4 border-t border-dashed">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    3. Choose Tank / Tanks for Exchange <span className="text-destructive">*</span>
+                  </Label>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                    {(() => {
+                      const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
+                      // Only Animal Tanks (not in Water Section)
+                      return farmSections
+                        .filter(s => s.section_type !== 'WATER')
+                        .flatMap(s => s.tanks || [])
+                        .map(tank => {
+                          const isSelected = waterMgmtData.exchangeTargets.some((t: any) => t.tankId === tank.id);
+                          return (
+                            <button
+                              key={tank.id}
+                              onClick={() => {
+                                const targets = [...waterMgmtData.exchangeTargets];
+                                const idx = targets.findIndex((t: any) => t.tankId === tank.id);
+                                if (idx >= 0) {
+                                  targets.splice(idx, 1);
+                                } else {
+                                  targets.push({ tankId: tank.id, tankName: tank.name, exchangeAmount: 0, finalVolume: 0 });
+                                }
+                                setWaterMgmtData({ ...waterMgmtData, exchangeTargets: targets });
+                              }}
+                              className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${
+                                isSelected 
+                                  ? 'bg-primary/10 border-primary shadow-sm' 
+                                  : 'bg-background border-muted-foreground/10 hover:border-primary/30'
+                              }`}
+                            >
+                              <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                                isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </div>
+                              <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                {tank.name}
+                              </span>
+                            </button>
+                          );
+                        });
+                    })()}
+                  </div>
+                </div>
+
+                    {/* Field 4: Volume to be Exchanged */}
+                    {waterMgmtData.exchangeTargets.length > 0 && (
+                      <div className="space-y-4 pt-4 border-t border-dashed">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            4. Volume to be Exchanged
+                          </Label>
+                          <Tabs 
+                            value={waterMgmtData.exchangeUnit} 
+                            onValueChange={(val: any) => {
+                              let totalVol = 0;
+                              const sourceVol = waterMgmtData.sourceVolumeAvailable || 0;
+                              
+                              const newTargets = waterMgmtData.exchangeTargets.map((t: any) => {
+                                let newFinal = 0;
+                                if (val === 'percent') {
+                                  newFinal = (t.exchangeAmount / 100) * sourceVol;
+                                } else {
+                                  newFinal = t.exchangeAmount || 0;
+                                }
+                                totalVol += newFinal;
+                                return { ...t, finalVolume: newFinal };
+                              });
+                              
+                              setWaterMgmtData({ 
+                                ...waterMgmtData, 
+                                exchangeUnit: val,
+                                exchangeTargets: newTargets,
+                                totalVolumeToFill: totalVol,
+                                sourceFinalVolume: sourceVol - totalVol
+                              });
+                            }}
+                            className="h-8"
+                          >
+                            <TabsList className="bg-muted/50 h-8 p-0.5">
+                              <TabsTrigger value="volume" className="text-[10px] px-2 h-7">Tons/Ltrs</TabsTrigger>
+                              <TabsTrigger value="percent" className="text-[10px] px-2 h-7 text-xs">% of Water</TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </div>
+
+                        <div className="space-y-3">
+                          {waterMgmtData.exchangeTargets.map((target: any, idx: number) => (
+                            <div key={target.tankId} className="p-3 rounded-2xl bg-muted/20 border space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black text-foreground uppercase">{target.tankName}</span>
+                              </div>
+                              <div className="space-y-1">
+                                  <Label className="text-[9px] uppercase font-bold text-primary">
+                                    {waterMgmtData.exchangeUnit === 'volume' ? 'Exchange Volume (L) *' : 'Exchange % *'}
+                                  </Label>
+                                  <Input 
+                                    type="number"
+                                    value={target.exchangeAmount === 0 ? '' : target.exchangeAmount}
+                                    placeholder="0"
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      const sourceVol = waterMgmtData.sourceVolumeAvailable || 0;
+                                      let newFinal = 0;
+                                      
+                                      if (waterMgmtData.exchangeUnit === 'percent') {
+                                        newFinal = (val / 100) * sourceVol;
+                                      } else {
+                                        newFinal = val;
+                                      }
+
+                                      const targets = [...waterMgmtData.exchangeTargets];
+                                      targets[idx] = {
+                                        ...targets[idx],
+                                        exchangeAmount: val,
+                                        finalVolume: newFinal
+                                      };
+
+                                      const totalVol = targets.reduce((sum: number, t: any) => sum + (t.finalVolume || 0), 0);
+                                      
+                                      setWaterMgmtData({ 
+                                        ...waterMgmtData, 
+                                        exchangeTargets: targets,
+                                        totalVolumeToFill: totalVol,
+                                        sourceFinalVolume: sourceVol - totalVol
+                                      });
+                                    }}
+                                    className="h-9 text-xs rounded-lg font-bold border-primary/30 focus:border-primary"
+                                  />
+                                </div>
+                            </div>
+                          ))}
+                        </div>
+
+                    {waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-destructive/10 border border-destructive/30 animate-pulse">
+                        <span className="text-[10px] font-black text-destructive uppercase tracking-wide">
+                          ⚠ Total exchange exceeds available source volume.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Field 5: Final Volumes in Tanks */}
+                    <div className="space-y-4 pt-4 border-t border-dashed animate-fade-in-up">
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        5. Final Volumes in Tanks
+                      </Label>
+                      
+                      <div className="space-y-3">
+                        <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">1) Source Tank (Final Volume)</Label>
+                        <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-sky-950 uppercase">
+                              {availableTanks.flatMap(s => s.tanks || []).find(t => t.id === waterMgmtData.exchangeSourceTankId)?.name || 'Source Tank'}
+                            </span>
+                            <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                          </div>
+                          <Input 
+                            type="number"
+                            value={waterMgmtData.sourceFinalVolume === 0 ? '' : waterMgmtData.sourceFinalVolume}
+                            onChange={(e) => setWaterMgmtData({ ...waterMgmtData, sourceFinalVolume: parseFloat(e.target.value) || 0 })}
+                            className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-[9px] uppercase font-bold text-muted-foreground ml-1">2) Filled tanks (Final Volumes)</Label>
+                        {waterMgmtData.exchangeTargets.map((target: any, idx: number) => (
+                          <div key={target.tankId} className="p-3 rounded-2xl bg-sky-50 border border-sky-100 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-sky-950 uppercase">{target.tankName}</span>
+                              <span className="text-[9px] font-bold text-sky-600 italic">Auto-filled - Editable</span>
+                            </div>
+                            <Input 
+                              type="number"
+                              value={target.finalVolume === 0 ? '' : target.finalVolume}
+                              onChange={(e) => {
+                                const targets = [...waterMgmtData.exchangeTargets];
+                                targets[idx].finalVolume = parseFloat(e.target.value) || 0;
+                                setWaterMgmtData({ ...waterMgmtData, exchangeTargets: targets });
+                              }}
+                              className="h-9 text-xs rounded-lg border-sky-200 bg-white font-bold"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+                {/* 4) Drain / Clean Operation - Temporarily hidden UI logic */}
+            {false && waterMgmtData.flowOperation === 'Drain / Clean' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                {/* Field 2: Choose Tank / Tanks for Drain */}
+                <div className="space-y-3 pt-4 border-t border-dashed">
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        2. Choose Tank / Tanks to Drain <span className="text-destructive">*</span>
+                      </Label>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                        {(() => {
+                          const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
+                          return farmSections
+                            .flatMap(s => s.tanks || [])
+                            .map(tank => {
+                              const isSelected = waterMgmtData.drainTargets.some((t: any) => t.tankId === tank.id);
+                              return (
+                                <button
+                                  key={tank.id}
+                                  onClick={() => {
+                                    const targets = [...waterMgmtData.drainTargets];
+                                    const idx = targets.findIndex((t: any) => t.tankId === tank.id);
+                                    if (idx >= 0) {
+                                      targets.splice(idx, 1);
+                                    } else {
+                                      targets.push({ tankId: tank.id, tankName: tank.name, drainAmount: 0, finalVolume: tankWaterVolumes[tank.id] || 0 });
+                                    }
+                                    setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
+                                  }}
+                                  className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${
+                                    isSelected 
+                                      ? 'bg-orange-50 border-orange-200 shadow-sm' 
+                                      : 'bg-background border-muted-foreground/10 hover:border-orange-200/30'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                                    isSelected ? 'bg-orange-500 border-orange-500' : 'border-muted-foreground/30'
+                                  }`}>
+                                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-orange-700' : 'text-muted-foreground'}`}>
+                                      {tank.name}
+                                    </span>
+                                    <span className="text-[8px] text-muted-foreground/60 leading-none">
+                                      {(tankWaterVolumes[tank.id] || 0).toLocaleString()}L
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            });
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Field 3: Volume to be Drained */}
+                    {waterMgmtData.drainTargets.length > 0 && (
+                      <div className="space-y-4 pt-4 border-t border-dashed">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            3. Volume to be Drained
+                          </Label>
+                          <Tabs 
+                            value={waterMgmtData.drainUnit} 
+                            onValueChange={(val: any) => {
+                              const newTargets = waterMgmtData.drainTargets.map((t: any) => {
+                                const currentVol = tankWaterVolumes[t.tankId] || 0;
+                                let newFinal = currentVol;
+                                if (val === 'percent') {
+                                  newFinal = currentVol - (t.drainAmount / 100) * currentVol;
+                                } else {
+                                  newFinal = currentVol - (t.drainAmount || 0);
+                                }
+                                return { ...t, finalVolume: Math.max(0, newFinal) };
+                              });
+                              setWaterMgmtData({ ...waterMgmtData, drainUnit: val, drainTargets: newTargets });
+                            }}
+                            className="h-8"
+                          >
+                            <TabsList className="bg-muted/50 h-8 p-0.5">
+                              <TabsTrigger value="volume" className="text-[10px] px-2 h-7">Tons/Ltrs</TabsTrigger>
+                              <TabsTrigger value="percent" className="text-[10px] px-2 h-7 text-xs">% of Water</TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </div>
+
+                        <div className="space-y-3">
+                          {waterMgmtData.drainTargets.map((target: any, idx: number) => (
+                            <div key={target.tankId} className="p-4 rounded-2xl bg-orange-50/30 border border-orange-100 space-y-4">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black text-orange-950 uppercase">{target.tankName}</span>
+                                <div className="text-[10px] text-orange-700 font-bold bg-orange-100 px-2 py-0.5 rounded-full">
+                                  Current: {(tankWaterVolumes[target.tankId] || 0).toLocaleString()}L
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-1.5">
+                                <Label className="text-[9px] uppercase font-bold text-orange-700 ml-1">
+                                  {waterMgmtData.drainUnit === 'volume' ? 'Drain Volume (L) *' : 'Drain Percentage (%) *'}
+                                </Label>
+                                <div className="relative">
+                                  <Input 
+                                    type="number"
+                                    placeholder={waterMgmtData.drainUnit === 'volume' ? 'e.g., 500' : 'e.g., 20'}
+                                    value={target.drainAmount === 0 ? '' : target.drainAmount}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      const targets = [...waterMgmtData.drainTargets];
+                                      const currentVol = tankWaterVolumes[target.tankId] || 0;
+                                      let newFinal = 0;
+                                      
+                                      if (waterMgmtData.drainUnit === 'percent') {
+                                        newFinal = currentVol - (val / 100) * currentVol;
+                                      } else {
+                                        newFinal = currentVol - val;
+                                      }
+                                      
+                                      targets[idx] = { 
+                                        ...targets[idx], 
+                                        drainAmount: val, 
+                                        finalVolume: Math.max(0, newFinal) 
+                                      };
+                                      setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
+                                    }}
+                                    className="h-10 text-sm rounded-xl border-orange-200 bg-white pr-10 focus:ring-orange-500"
+                                  />
+                                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-orange-400">
+                                    {waterMgmtData.drainUnit === 'volume' ? 'L' : '%'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Final Volume Preview */}
+                              <div className="pt-2 flex items-center justify-between border-t border-orange-100/50">
+                                <span className="text-[9px] font-bold text-orange-600/70 uppercase">Final Volume</span>
+                                <div className="flex items-center gap-2">
+                                  <Input 
+                                    type="number"
+                                    value={target.finalVolume === 0 ? '' : target.finalVolume}
+                                    onChange={(e) => {
+                                      const targets = [...waterMgmtData.drainTargets];
+                                      targets[idx] = { ...targets[idx], finalVolume: parseFloat(e.target.value) || 0 };
+                                      setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
+                                    }}
+                                    className="h-7 w-24 text-[10px] font-black text-right border-orange-200 bg-white"
+                                  />
+                                  <span className="text-[10px] font-bold text-orange-900">L</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+            {/* Common Fields for all Water Management operations - Restricted to first two for now */}
+            {(waterMgmtData.flowOperation === 'Water Filling' || waterMgmtData.flowOperation === 'Water Exchange') && (
+              <>
                 {/* Field 6: Water Quality Score */}
                 <div className="space-y-3 pt-4 border-t border-dashed">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">

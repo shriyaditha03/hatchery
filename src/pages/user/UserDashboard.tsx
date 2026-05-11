@@ -22,7 +22,7 @@ import logo from '../../assets/aqua-nexus-logo.png';
 const UserDashboard = () => {
     const navigate = useNavigate();
     const { 
-        user, logout,
+        user, loading: authLoading, logout,
         activeFarmId, setActiveFarmId,
         activeSectionId, setActiveSectionId,
         activeBroodstockBatchId, setActiveBroodstockBatchId,
@@ -30,7 +30,7 @@ const UserDashboard = () => {
         supervisorMode, setSupervisorMode
     } = useAuth();
 
-    const [loading, setLoading] = useState(true);
+    const [dashLoading, setDashLoading] = useState(true);
     const [instructions, setInstructions] = useState<any[]>([]);
     const [supervisorInstructions, setSupervisorInstructions] = useState<any[]>([]);
     const [maturationBatches, setMaturationBatches] = useState<any[]>([]);
@@ -88,7 +88,7 @@ const UserDashboard = () => {
     };
 
     useEffect(() => {
-        if (!loading && availableFarms.length > 0) {
+        if (!dashLoading && availableFarms.length > 0) {
             // Greedy auto-selection: find if there's exactly one farm and exactly one section available
             const needsFarmSelection = !activeFarmId && availableFarmsForModule.length === 1;
             const targetFarmId = needsFarmSelection ? availableFarmsForModule[0].id : activeFarmId;
@@ -132,22 +132,23 @@ const UserDashboard = () => {
                 setActiveSectionId(null);
             }
         }
-    }, [availableFarms, availableFarmsForModule, allMySections, filteredSections, activeFarmId, activeSectionId, loading, activeModule, setActiveFarmId, setActiveSectionId, setActiveBroodstockBatchId]);
+    }, [availableFarms, availableFarmsForModule, allMySections, filteredSections, activeFarmId, activeSectionId, dashLoading, activeModule, setActiveFarmId, setActiveSectionId, setActiveBroodstockBatchId]);
 
     // Maturation Batches Fetching
     useEffect(() => {
-        if (activeModule === 'MATURATION' && activeFarmId) {
+        if (!authLoading && activeModule === 'MATURATION' && activeFarmId) {
             fetchMaturationBatches();
         }
-    }, [activeModule, activeFarmId]);
+    }, [activeModule, activeFarmId, authLoading]);
 
     const fetchMaturationBatches = async () => {
+        if (!activeFarmId) return;
         setBatchesLoading(true);
         try {
             const { data, error } = await supabase
                 .from('activity_logs')
                 .select('*')
-                .in('activity_type', ['Stocking', 'Sourcing & Mating', 'Broodstock Discard'])
+                .in('activity_type', ['Stocking', 'Sourcing & Mating', 'Broodstock Discard', 'Nauplii Harvest', 'Nauplii Sale'])
                 .eq('farm_id', activeFarmId)
                 .order('created_at', { ascending: false });
 
@@ -159,15 +160,19 @@ const UserDashboard = () => {
             const closedIds = new Set();
 
             (data || []).forEach(log => {
-                if (log.activity_type === 'Broodstock Discard' && (log.data?.isCompleteDiscard || log.data?.is_complete_discard)) {
-                    const sId = log.stockingId || log.data?.stockingId;
+                const isCompleteDiscard = log.activity_type === 'Broodstock Discard' && (log.data?.isCompleteDiscard || log.data?.is_complete_discard);
+                const isBatchClosedSale = log.activity_type === 'Nauplii Sale' && (log.data?.isBatchClosed || log.data?.is_batch_closed);
+                
+                if (isCompleteDiscard || isBatchClosedSale) {
+                    const sId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.stocking_id || log.data?.batchId || log.data?.batch_id;
                     if (sId) closedIds.add(sId);
                 }
             });
 
             (data || []).forEach(log => {
-                const sId = log.data?.stockingId || log.stockingId;
-                if (sId && !seenIds.has(sId) && (log.activity_type === 'Stocking' || log.activity_type === 'Sourcing & Mating')) {
+                const sId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.stocking_id || log.data?.batchId || log.data?.batch_id;
+                // Any of these activity types can "introduce" or "be linked to" a batch ID
+                if (sId && !seenIds.has(sId)) {
                     seenIds.add(sId);
                     batchesList.push({
                         id: sId,
@@ -180,8 +185,11 @@ const UserDashboard = () => {
 
             setMaturationBatches(batchesList);
 
-            // Auto-select if exactly 1
-            if (batchesList.length === 1 && !activeBroodstockBatchId) {
+            // Auto-select if exactly 1 open batch, or only 1 batch total
+            const openBatches = batchesList.filter(b => !b.is_closed);
+            if (openBatches.length === 1 && !activeBroodstockBatchId) {
+                setActiveBroodstockBatchId(openBatches[0].id);
+            } else if (batchesList.length === 1 && !activeBroodstockBatchId) {
                 setActiveBroodstockBatchId(batchesList[0].id);
             }
         } catch (err) {
@@ -204,11 +212,11 @@ const UserDashboard = () => {
         // Don't load instructions until a farm is selected
         if (!activeFarmId) {
             setInstructions([]);
-            setLoading(false);
+            setDashLoading(false);
             return;
         }
 
-        setLoading(true);
+        setDashLoading(true);
         const today = getTodayStr();
         
         try {
@@ -254,7 +262,7 @@ const UserDashboard = () => {
             (window as any).TASK_DEBUG_ERROR = error.message || 'Unknown Error';
             toast.error('Failed to load pending tasks');
         } finally {
-            setLoading(false);
+            setDashLoading(false);
         }
     };
 
@@ -607,18 +615,61 @@ const UserDashboard = () => {
                                 {activeBroodstockBatchId === 'new' ? 'Create New BS Batch' : 'Select a Batch ID'}
                             </h3>
                             <p className="text-sm text-slate-500 mt-2 px-6 leading-relaxed">
-                                {activeBroodstockBatchId === 'new' 
+                            {activeBroodstockBatchId === 'new' 
                                     ? 'Fill out the stocking form to initialize this batch. The ID will be auto-generated based on supplier details.' 
-                                    : 'Please choose an active Broodstock Batch from the dropdown above to continue working. Tanks will be auto-populated based on the selected batch.'}
+                                    : maturationBatches.length > 0 
+                                        ? 'Choose one of your active batches below or start a new one.'
+                                        : 'Please choose an active Broodstock Batch from the dropdown above to continue working. Tanks will be auto-populated based on the selected batch.'}
                             </p>
                         </div>
-                        <Button 
-                            variant={activeBroodstockBatchId === 'new' ? 'default' : 'outline'} 
-                            className={`mt-6 h-12 px-6 rounded-xl border-dashed border-2 hover:border-primary hover:bg-primary/5 font-bold transition-all group ${activeBroodstockBatchId === 'new' ? 'ocean-gradient border-none' : 'text-primary'}`} 
-                            onClick={() => navigate(`/user/activity/stocking?category=MATURATION&mode=activity`)}>
-                            <Plus className={`w-5 h-5 mr-3 group-hover:rotate-90 transition-transform duration-300 ${activeBroodstockBatchId === 'new' ? 'text-white' : ''}`} /> 
-                            {activeBroodstockBatchId === 'new' ? 'Create New Stocking' : 'Start New Broodstock Stocking'}
-                        </Button>
+
+                        {batchesLoading ? (
+                            <div className="flex flex-col items-center gap-2 mt-4">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary opacity-50" />
+                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Finding active batches...</p>
+                            </div>
+                        ) : activeBroodstockBatchId !== 'new' && maturationBatches.length > 0 && (
+                            <div className="w-full max-w-sm space-y-2 mt-2">
+                                {maturationBatches.filter(b => !b.is_closed).map(batch => (
+                                    <Button
+                                        key={batch.id}
+                                        variant="outline"
+                                        className="w-full h-14 justify-start gap-3 bg-white border-dashed border-2 hover:border-primary hover:bg-primary/5 rounded-2xl px-4 group transition-all"
+                                        onClick={() => setActiveBroodstockBatchId(batch.id)}
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary flex items-center justify-center transition-colors">
+                                            <Database className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex flex-col items-start min-w-0">
+                                            <span className="text-xs font-bold text-slate-700">{batch.name}</span>
+                                            <span className="text-[9px] text-slate-400">ID: {batch.id.slice(0, 12)}...</span>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 ml-auto text-slate-300 group-hover:text-primary transition-colors" />
+                                    </Button>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
+                            <Button 
+                                variant={activeBroodstockBatchId === 'new' ? 'default' : 'ghost'} 
+                                className={`h-11 px-6 rounded-xl font-bold transition-all group ${activeBroodstockBatchId === 'new' ? 'ocean-gradient border-none shadow-md shadow-indigo-200' : 'text-primary hover:bg-primary/5'}`} 
+                                onClick={() => navigate(`/user/activity/stocking?category=MATURATION&mode=activity`)}>
+                                <Plus className={`w-5 h-5 mr-3 group-hover:rotate-90 transition-transform duration-300 ${activeBroodstockBatchId === 'new' ? 'text-white' : ''}`} /> 
+                                {activeBroodstockBatchId === 'new' ? 'Create New Stocking' : 'Start New Broodstock Stocking'}
+                            </Button>
+
+                            {!batchesLoading && (
+                                <Button
+                                    variant="ghost"
+                                    className="h-11 px-6 rounded-xl text-slate-400 hover:text-slate-600 font-medium text-xs gap-2"
+                                    onClick={() => fetchMaturationBatches()}
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    Re-sync Batches
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </div>
             ) : (
@@ -688,7 +739,7 @@ const UserDashboard = () => {
                     )}
                 </div>
 
-                {loading ? (
+                {dashLoading ? (
                     <div className="space-y-3">
                         {[1, 2].map(i => (
                             <div key={i} className="h-24 w-full bg-muted animate-pulse rounded-2xl" />
