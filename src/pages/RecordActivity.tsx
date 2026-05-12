@@ -408,10 +408,8 @@ const RecordActivity = () => {
           .eq('activity_type', 'Water Management')
           .order('created_at', { ascending: false });
 
+        // Initialize all tanks to 0 — only populate from actual Water Management activity logs
         const latestVolumes: Record<string, number> = {};
-        tanks?.forEach(t => {
-          latestVolumes[t.id] = parseFloat(t.volume_litres || '0') || 0;
-        });
 
         const foundTanks = new Set<string>();
         
@@ -4061,6 +4059,7 @@ const RecordActivity = () => {
                         const allTanks = availableTanks
                           .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                           .flatMap(s => s.tanks || [])
+                          .filter(t => (tankWaterVolumes[t.id] || 0) > 0) // Only tanks with water
                           .map(t => t.id);
                         
                         let sourceIds = waterMgmtData.sourceTankIds;
@@ -4135,6 +4134,7 @@ const RecordActivity = () => {
                             {availableTanks
                               .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                               .flatMap(s => s.tanks || [])
+                              .filter(t => (tankWaterVolumes[t.id] || 0) > 0) // Only show tanks with water
                               .map(t => (
                                 <SelectItem key={t.id} value={t.id}>
                                   <div className="flex items-center justify-between w-full gap-4">
@@ -4212,6 +4212,7 @@ const RecordActivity = () => {
                           {availableTanks
                             .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                             .flatMap(s => s.tanks || [])
+                            .filter(t => (tankWaterVolumes[t.id] || 0) > 0) // Only show tanks with water
                             .map(t => {
                               const isSelected = waterMgmtData.sourceType === 'tank' && waterMgmtData.sourceTankIds.includes(t.id);
                               return (
@@ -4295,7 +4296,7 @@ const RecordActivity = () => {
                     </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
                     {(() => {
                       const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
                       return (waterMgmtData.selectedSectionFilter === 'all' 
@@ -4327,9 +4328,21 @@ const RecordActivity = () => {
                           }`}>
                             {isSelected && <Check className="w-3 h-3 text-white" />}
                           </div>
-                          <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                            {tank.name}
-                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                              {tank.name}
+                            </span>
+                            <span className="text-[8px] text-muted-foreground font-medium">
+                              {(() => {
+                                const capacity = tank.volume_litres || 0;
+                                const current = tankWaterVolumes[tank.id] || 0;
+                                const remaining = Math.max(0, capacity - current);
+                                return capacity > 0 
+                                  ? `Avail: ${remaining.toLocaleString()}L / Cap: ${capacity.toLocaleString()}L`
+                                  : 'Cap: N/A';
+                              })()}
+                            </span>
+                          </div>
                         </button>
                       );
                     });
@@ -4353,15 +4366,38 @@ const RecordActivity = () => {
                             <span className="text-xs font-black text-foreground uppercase">{target.tankName}</span>
                           </div>
                           <div className="space-y-1">
-                              <Label className="text-[9px] uppercase font-bold text-primary">Fill (L) *</Label>
+                              <div className="flex justify-between items-center">
+                                <Label className="text-[9px] uppercase font-bold text-primary">Fill (L) *</Label>
+                                {(() => {
+                                  const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === target.tankId);
+                                  const capacity = tank?.volume_litres || 0;
+                                  const current = tankWaterVolumes[target.tankId] || 0;
+                                  const remaining = Math.max(0, capacity - current);
+                                  const isOver = (current + target.volumeToFill) > capacity;
+                                  return (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[8px] font-bold text-muted-foreground uppercase">
+                                        Current: {current.toLocaleString()}L | Avail: {remaining.toLocaleString()}L | Cap: {capacity.toLocaleString()}L
+                                      </span>
+                                      {isOver && capacity > 0 && (
+                                        <span className="text-[8px] font-black text-destructive animate-pulse uppercase">
+                                          Exceeds Capacity!
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                               <Input 
                                 type="number"
                                 value={target.volumeToFill === 0 ? '' : target.volumeToFill}
                                 placeholder="0"
                                 onChange={(e) => {
                                   const targets = [...waterMgmtData.fillTargets];
-                                  targets[idx].volumeToFill = parseFloat(e.target.value) || 0;
-                                  targets[idx].finalVolume = targets[idx].volumeToFill;
+                                  const val = parseFloat(e.target.value) || 0;
+                                  targets[idx].volumeToFill = val;
+                                  const currentVol = tankWaterVolumes[target.tankId] || 0;
+                                  targets[idx].finalVolume = currentVol + val;
                                   
                                   const total = targets.reduce((sum: number, t: any) => sum + t.volumeToFill, 0);
                                   setWaterMgmtData({ 
@@ -4371,7 +4407,16 @@ const RecordActivity = () => {
                                     sourceFinalVolume: waterMgmtData.sourceVolumeAvailable - total
                                   });
                                 }}
-                                className={`h-9 text-xs rounded-lg font-bold placeholder:text-muted-foreground/30 transition-all ${waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable ? 'border-destructive focus:border-destructive' : 'border-primary/30 focus:border-primary'}`}
+                                className={`h-9 text-xs rounded-lg font-bold placeholder:text-muted-foreground/30 transition-all ${
+                                  (() => {
+                                    const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === target.tankId);
+                                    const capacity = tank?.volume_litres || 0;
+                                    const current = tankWaterVolumes[target.tankId] || 0;
+                                    return (current + target.volumeToFill) > capacity && capacity > 0;
+                                  })() || waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable 
+                                    ? 'border-destructive focus:border-destructive ring-1 ring-destructive/20' 
+                                    : 'border-primary/30 focus:border-primary'
+                                }`}
                               />
                             </div>
                         </div>
@@ -4475,8 +4520,9 @@ const RecordActivity = () => {
                           {availableTanks
                             .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                             .flatMap(s => s.tanks || [])
+                            .filter(t => (tankWaterVolumes[t.id] || 0) > 0) // Only show tanks with water
                             .map(t => (
-                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              <SelectItem key={t.id} value={t.id}>{t.name} ({(tankWaterVolumes[t.id] || 0).toLocaleString()} L)</SelectItem>
                             ))}
                         </SelectContent>
                       </Select>
@@ -4499,7 +4545,7 @@ const RecordActivity = () => {
                     3. Choose Tank / Tanks for Exchange <span className="text-destructive">*</span>
                   </Label>
                   
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
                     {(() => {
                       const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
                       // Only Animal Tanks (not in Water Section)
@@ -4532,9 +4578,14 @@ const RecordActivity = () => {
                               }`}>
                                 {isSelected && <Check className="w-3 h-3 text-white" />}
                               </div>
-                              <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                {tank.name}
-                              </span>
+                              <div className="flex flex-col min-w-0">
+                                <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                  {tank.name}
+                                </span>
+                                <span className="text-[8px] text-muted-foreground font-medium">
+                                  {(tankWaterVolumes[tank.id] || 0).toLocaleString()} L / {tank.volume_litres?.toLocaleString() || 'N/A'} L
+                                </span>
+                              </div>
                             </button>
                           );
                         });
@@ -4557,13 +4608,14 @@ const RecordActivity = () => {
                               
                               const newTargets = waterMgmtData.exchangeTargets.map((t: any) => {
                                 let newFinal = 0;
+                                const currentVol = tankWaterVolumes[t.tankId] || 0;
                                 if (val === 'percent') {
-                                  newFinal = (t.exchangeAmount / 100) * sourceVol;
+                                  newFinal = (t.exchangeAmount / 100) * currentVol;
                                 } else {
                                   newFinal = t.exchangeAmount || 0;
                                 }
                                 totalVol += newFinal;
-                                return { ...t, finalVolume: newFinal };
+                                return { ...t, finalVolume: currentVol + newFinal };
                               });
                               
                               setWaterMgmtData({ 
@@ -4588,6 +4640,9 @@ const RecordActivity = () => {
                             <div key={target.tankId} className="p-3 rounded-2xl bg-muted/20 border space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-xs font-black text-foreground uppercase">{target.tankName}</span>
+                                <span className="text-[9px] font-bold text-muted-foreground uppercase">
+                                  Current: {(tankWaterVolumes[target.tankId] || 0).toLocaleString()} L
+                                </span>
                               </div>
                               <div className="space-y-1">
                                   <Label className="text-[9px] uppercase font-bold text-primary">
@@ -4600,10 +4655,11 @@ const RecordActivity = () => {
                                     onChange={(e) => {
                                       const val = parseFloat(e.target.value) || 0;
                                       const sourceVol = waterMgmtData.sourceVolumeAvailable || 0;
+                                      const destVol = tankWaterVolumes[target.tankId] || 0;
                                       let newFinal = 0;
                                       
                                       if (waterMgmtData.exchangeUnit === 'percent') {
-                                        newFinal = (val / 100) * sourceVol;
+                                        newFinal = (val / 100) * destVol;
                                       } else {
                                         newFinal = val;
                                       }
@@ -4612,7 +4668,7 @@ const RecordActivity = () => {
                                       targets[idx] = {
                                         ...targets[idx],
                                         exchangeAmount: val,
-                                        finalVolume: newFinal
+                                        finalVolume: (tankWaterVolumes[target.tankId] || 0) + newFinal
                                       };
 
                                       const totalVol = targets.reduce((sum: number, t: any) => sum + (t.finalVolume || 0), 0);
