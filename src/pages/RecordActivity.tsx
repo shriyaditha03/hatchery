@@ -26,7 +26,7 @@ import {
   Layers
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import RatingScale from '@/modules/shared/components/RatingScale';
 import StockingForm from '@/modules/shared/components/StockingForm';
 import ObservationForm from '@/modules/shared/components/ObservationForm';
@@ -66,6 +66,69 @@ const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Dis
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
 const MAINTENANCE_ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Observation'];
 
+
+
+
+const TimeInputGroup = ({ label, value, onChange }: { label: string, value: string, onChange: (val: string) => void }) => {
+  const [hStr, mStr] = (value || "00:00").split(':');
+  const hNum = parseInt(hStr) || 0;
+  const m = mStr || "00";
+  const isPM = hNum >= 12;
+  const displayH = (hNum % 12).toString().padStart(2, '0');
+
+  const update = (newH: string, newM: string, newPM: boolean) => {
+    let hour = parseInt(newH) % 12;
+    if (newPM) hour += 12;
+    onChange(`${hour.toString().padStart(2, '0')}:${newM}`);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[10px] uppercase font-black text-sky-700/60 ml-1 tracking-widest">{label}</Label>
+      <div className="flex items-center gap-1.5 bg-sky-50/50 p-2 rounded-[1.25rem] border border-sky-100/50 shadow-inner">
+        <div className="flex-1">
+          <Select value={displayH} onValueChange={(v) => update(v, m, isPM)}>
+            <SelectTrigger className="h-12 bg-white rounded-xl border-none shadow-sm font-black text-base text-center justify-center focus:ring-2 focus:ring-sky-500/20">
+               <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-sky-100 shadow-xl">
+              {['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11'].map(v => (
+                <SelectItem key={v} value={v} className="rounded-lg font-bold">{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[8px] text-center mt-1 font-black text-sky-900/30 uppercase tracking-tighter">Hour</p>
+        </div>
+        <span className="font-black text-sky-200 mb-4">:</span>
+        <div className="flex-1">
+          <Select value={m} onValueChange={(v) => update(displayH, v, isPM)}>
+            <SelectTrigger className="h-12 bg-white rounded-xl border-none shadow-sm font-black text-base text-center justify-center focus:ring-2 focus:ring-sky-500/20">
+               <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-sky-100 shadow-xl">
+              {['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map(v => (
+                <SelectItem key={v} value={v} className="rounded-lg font-bold">{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[8px] text-center mt-1 font-black text-sky-900/30 uppercase tracking-tighter">Min</p>
+        </div>
+        <div className="flex flex-col gap-1 ml-1 self-start">
+           <button 
+             type="button"
+             onClick={() => update(displayH, m, false)}
+             className={`px-3 h-6 rounded-lg text-[10px] font-black transition-all ${!isPM ? 'bg-sky-500 text-white shadow-md' : 'bg-white text-sky-400 opacity-60'}`}
+           >AM</button>
+           <button 
+             type="button"
+             onClick={() => update(displayH, m, true)}
+             className={`px-3 h-6 rounded-lg text-[10px] font-black transition-all ${isPM ? 'bg-sky-500 text-white shadow-md' : 'bg-white text-sky-400 opacity-60'}`}
+           >PM</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 
 const RecordActivity = () => {
@@ -298,7 +361,7 @@ const RecordActivity = () => {
       case 'Nauplii Sale':
         return ['NAUPLII'];
       default:
-        return null; // Feed, Treatment, Water Quality, Observation → all sections
+        return null; // Feed, Treatment, Water Quality, Observation ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ all sections
     }
   };
 
@@ -408,7 +471,7 @@ const RecordActivity = () => {
           .eq('activity_type', 'Water Management')
           .order('created_at', { ascending: false });
 
-        // Initialize all tanks to 0 — only populate from actual Water Management activity logs
+        // Initialize all tanks to 0 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â only populate from actual Water Management activity logs
         const latestVolumes: Record<string, number> = {};
 
         const foundTanks = new Set<string>();
@@ -637,7 +700,7 @@ const RecordActivity = () => {
     } else {
       // Supervisor or no farm selected: get all workers in the hatchery
       // Supervisors can see profiles via the "Select Profiles" policy if they share a hatchery
-      // But the policy requires auth_user_id = auth.uid() OR is_hatchery_owner — so supervisors 
+      // But the policy requires auth_user_id = auth.uid() OR is_hatchery_owner ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â so supervisors 
       // can only see their own profile. We need a workaround.
       
       // Use farm_access to get user_ids first (supervisor can see their own farm_access rows),
@@ -657,7 +720,7 @@ const RecordActivity = () => {
               setAvailableWorkers([]);
               return;
             }
-            // Now try to get profile names — this may fail for supervisors due to RLS
+            // Now try to get profile names ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this may fail for supervisors due to RLS
             const { data: profiles, error: profileError } = await supabase
               .from('profiles')
               .select('id, full_name, username, role')
@@ -667,12 +730,12 @@ const RecordActivity = () => {
             if (!profileError && profiles && profiles.length > 0) {
               setAvailableWorkers(profiles.map(p => ({ id: p.id, name: p.full_name || p.username })));
             } else {
-              // RLS blocked profile access — use user_ids with generic names
+              // RLS blocked profile access ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â use user_ids with generic names
               setAvailableWorkers(userIds.map((id: string, i: number) => ({ id, name: `Worker ${i + 1}` })));
             }
           });
       } else {
-        // No farm selected — try hatchery-level query
+        // No farm selected ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â try hatchery-level query
         supabase.from('profiles')
           .select('id, full_name, username, role')
           .eq('hatchery_id', user.hatchery_id)
@@ -772,7 +835,7 @@ const RecordActivity = () => {
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
-        toast.info('Editing instruction Ã¢â‚¬â€ make changes and save.');
+        toast.info('Editing instruction ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â make changes and save.');
       }
     } catch (err) {
       console.error('Error loading instruction for edit:', err);
@@ -1276,7 +1339,7 @@ const RecordActivity = () => {
     drainTargets: [], // Array of { tankId: string, tankName: string, drainAmount: number, finalVolume: number }
     // New fields for Recirculation
     recirculationUnit: 'percent',
-    recirculationTargets: [] // Array of { tankId: string, tankName: string, recircAmount: number, finalVolume: number }
+    recirculationTargets: [] // Array of { tankId: string, tankName: string, recircHours: string, startTime: string, endTime: string, timeMode: 'duration' | 'slot' }
   });
 
   // Water Quality Calculation for Water Management
@@ -1942,6 +2005,22 @@ const RecordActivity = () => {
         });
         if (exceedsCapacity) {
           toast.error('Drain amount exceeds current tank volume for one or more tanks');
+          return;
+        }
+      }
+
+      if (waterMgmtData.flowOperation === 'Recirculation') {
+        if (waterMgmtData.recirculationTargets.length === 0) {
+          toast.error('Please select at least one tank for recirculation');
+          return;
+        }
+        const hasMissingTime = waterMgmtData.recirculationTargets.some((t: any) => {
+          const mode = t.timeMode || 'duration';
+          if (mode === 'duration') return !t.recircHours?.trim();
+          return !t.startTime?.trim() || !t.endTime?.trim();
+        });
+        if (hasMissingTime) {
+          toast.error('Please provide Recirculation Time details for all selected tanks');
           return;
         }
       }
@@ -2996,7 +3075,7 @@ const RecordActivity = () => {
                   {activeFarmCategory}
                 </span>
                 <div className="text-xs text-white/70 font-medium flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-0.5">
-                  <span>{activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}</span>
+                  <span>{activeFarmName} {activeSection?.name ? `ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${activeSection.name}` : ''}</span>
                   {activeFarmCategory === 'MATURATION' && (
                     (() => {
                       const displayId = (activeBroodstockBatchId === 'new' && activity === 'Stocking' && stockingData?.stockingId)
@@ -4426,7 +4505,7 @@ const RecordActivity = () => {
                     {waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable && (
                       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-destructive/10 border border-destructive/30 animate-pulse">
                         <span className="text-[10px] font-black text-destructive uppercase tracking-wide">
-                          ⚠ Total fill ({waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds source volume ({waterMgmtData.sourceVolumeAvailable.toLocaleString()} L). Please reduce fill amounts.
+                          ÃƒÂ¢Ã…Â¡Ã‚Â  Total fill ({waterMgmtData.totalVolumeToFill.toLocaleString()} L) exceeds source volume ({waterMgmtData.sourceVolumeAvailable.toLocaleString()} L). Please reduce fill amounts.
                         </span>
                       </div>
                     )}
@@ -4690,7 +4769,7 @@ const RecordActivity = () => {
                     {waterMgmtData.totalVolumeToFill > waterMgmtData.sourceVolumeAvailable && (
                       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-destructive/10 border border-destructive/30 animate-pulse">
                         <span className="text-[10px] font-black text-destructive uppercase tracking-wide">
-                          ⚠ Total exchange exceeds available source volume.
+                          ÃƒÂ¢Ã…Â¡Ã‚Â  Total exchange exceeds available source volume.
                         </span>
                       </div>
                     )}
@@ -4746,171 +4825,276 @@ const RecordActivity = () => {
               </>
             )}
 
-                {/* 4) Drain / Clean Operation - Temporarily hidden UI logic */}
-            {false && waterMgmtData.flowOperation === 'Drain / Clean' && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-                {/* Field 2: Choose Tank / Tanks for Drain */}
-                <div className="space-y-3 pt-4 border-t border-dashed">
-                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        2. Choose Tank / Tanks to Drain <span className="text-destructive">*</span>
-                      </Label>
-                      
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
-                        {(() => {
-                          const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
-                          return farmSections
+
+
+            {waterMgmtData.flowOperation === 'Recirculation' && (
+              <>
+                {/* Field 2: Choose Tank for Recirculation */}
+                <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      2. Choose Tank for Recirculation <span className="text-destructive">*</span>
+                    </Label>
+                    <Tabs 
+                      value={waterMgmtData.sourceScope || 'single'} 
+                      onValueChange={(val: any) => {
+                        const allFilledTanks = availableTanks
+                          .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                          .flatMap(s => s.tanks || [])
+                          .filter(t => (tankWaterVolumes[t.id] || 0) > 0)
+                          .map(t => t.id);
+                        
+                        if (val === 'all') {
+                          setWaterMgmtData({
+                            ...waterMgmtData,
+                            sourceScope: val,
+                            recirculationTargets: allFilledTanks.map(id => {
+                              const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === id);
+                              return { tankId: id, tankName: tank?.name || 'Tank', recircHours: '', startTime: '', endTime: '', timeMode: 'duration' };
+                            })
+                          });
+                        } else {
+                          setWaterMgmtData({ ...waterMgmtData, sourceScope: val, recirculationTargets: [] });
+                        }
+                      }} 
+                      className="h-8"
+                    >
+                      <TabsList className="bg-muted/50 h-8 p-0.5">
+                        <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>
+                        <TabsTrigger value="all" className="text-[10px] px-2 h-7 text-xs">All</TabsTrigger>
+                        <TabsTrigger value="custom" className="text-[10px] px-2 h-7">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {waterMgmtData.sourceScope === 'single' ? (
+                      <Select 
+                        value={waterMgmtData.recirculationTargets[0]?.tankId || ''} 
+                        onValueChange={(val) => {
+                          const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === val);
+                          setWaterMgmtData({ 
+                            ...waterMgmtData, 
+                            recirculationTargets: [{ tankId: val, tankName: tank?.name || 'Tank', recircHours: '', startTime: '', endTime: '', timeMode: 'duration' }]
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="h-12 rounded-2xl border-muted-foreground/20 focus:ring-2 focus:ring-primary/50 shadow-sm bg-background/50">
+                          <SelectValue placeholder="Select Tank (Water Section)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTanks
+                            .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
                             .flatMap(s => s.tanks || [])
-                            .map(tank => {
-                              const isSelected = waterMgmtData.drainTargets.some((t: any) => t.tankId === tank.id);
-                              return (
-                                <button
-                                  key={tank.id}
-                                  onClick={() => {
-                                    const targets = [...waterMgmtData.drainTargets];
-                                    const idx = targets.findIndex((t: any) => t.tankId === tank.id);
-                                    if (idx >= 0) {
-                                      targets.splice(idx, 1);
-                                    } else {
-                                      targets.push({ tankId: tank.id, tankName: tank.name, drainAmount: 0, finalVolume: tankWaterVolumes[tank.id] || 0 });
-                                    }
-                                    setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
-                                  }}
-                                  className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${
-                                    isSelected 
-                                      ? 'bg-orange-50 border-orange-200 shadow-sm' 
-                                      : 'bg-background border-muted-foreground/10 hover:border-orange-200/30'
-                                  }`}
-                                >
-                                  <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                                    isSelected ? 'bg-orange-500 border-orange-500' : 'border-muted-foreground/30'
-                                  }`}>
-                                    {isSelected && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-orange-700' : 'text-muted-foreground'}`}>
-                                      {tank.name}
-                                    </span>
-                                    <span className="text-[8px] text-muted-foreground/60 leading-none">
-                                      {(tankWaterVolumes[tank.id] || 0).toLocaleString()}L
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            });
-                        })()}
+                            .filter(t => (tankWaterVolumes[t.id] || 0) > 0)
+                            .map(t => (
+                              <SelectItem key={t.id} value={t.id}>
+                                <div className="flex items-center justify-between w-full gap-4">
+                                  <span className="font-bold">{t.name}</span>
+                                  <span className="text-[9px] font-black text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100">
+                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L Available
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    ) : waterMgmtData.sourceScope === 'all' ? (
+                      <div className="h-12 flex items-center px-4 bg-sky-50 text-sky-700 rounded-2xl border border-sky-100 text-sm font-black gap-2 shadow-sm">
+                        <Check className="w-4 h-4" />
+                        RECIRCULATING ALL FILLED TANKS IN WATER SECTION
                       </div>
+                    ) : (
+                      <div className="h-12 flex items-center px-4 bg-muted/30 rounded-2xl border border-dashed border-muted-foreground/20 text-sm font-bold text-muted-foreground shadow-inner">
+                        {waterMgmtData.recirculationTargets.length} tank(s) selected for recirculation
+                      </div>
+                    )}
+                  </div>
+
+                  {waterMgmtData.sourceScope === 'custom' && (
+                    <div className="pt-2 border-t border-dashed">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground/60 mb-3 block tracking-widest text-center">Select Tanks for this Activity</Label>
+                      <div className="grid grid-cols-2 xs:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {availableTanks
+                          .filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId))
+                          .flatMap(s => s.tanks || [])
+                          .filter(t => (tankWaterVolumes[t.id] || 0) > 0)
+                          .map(t => {
+                            const isSelected = waterMgmtData.recirculationTargets.some((target: any) => target.tankId === t.id);
+                            return (
+                              <div 
+                                key={t.id}
+                                onClick={() => {
+                                  const targets = [...waterMgmtData.recirculationTargets];
+                                  const idx = targets.findIndex((target: any) => target.tankId === t.id);
+                                  if (idx >= 0) {
+                                    targets.splice(idx, 1);
+                                  } else {
+                                    targets.push({ tankId: t.id, tankName: t.name, recircHours: '', startTime: '', endTime: '', timeMode: 'duration' });
+                                  }
+                                  setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                                }}
+                                className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                                  isSelected 
+                                    ? 'bg-sky-50 border-sky-400 text-sky-900 shadow-md scale-[1.02]' 
+                                    : 'bg-card border-border hover:border-sky-300 hover:bg-sky-50/30'
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-muted-foreground/20'}`}>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  <span className={`text-xs font-black break-all uppercase tracking-tighter ${isSelected ? 'text-sky-950' : 'text-foreground'}`}>{t.name}</span>
+                                  <span className={`text-[8px] font-black leading-tight shrink-0 ${isSelected ? 'text-sky-600' : 'text-muted-foreground'}`}>
+                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                      {availableTanks.filter(s => s.section_type === 'WATER' && s.farm_id === (selectedFarmId || activeFarmId)).flatMap(s => s.tanks || []).filter(t => (tankWaterVolumes[t.id] || 0) > 0).length === 0 && (
+                        <p className="text-[10px] text-muted-foreground italic text-center py-4 bg-muted/10 rounded-xl mt-2">No tanks with water found in Water Section</p>
+                      )}
                     </div>
+                  )}
 
-                    {/* Field 3: Volume to be Drained */}
-                    {waterMgmtData.drainTargets.length > 0 && (
-                      <div className="space-y-4 pt-4 border-t border-dashed">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            3. Volume to be Drained
-                          </Label>
-                          <Tabs 
-                            value={waterMgmtData.drainUnit} 
-                            onValueChange={(val: any) => {
-                              const newTargets = waterMgmtData.drainTargets.map((t: any) => {
-                                const currentVol = tankWaterVolumes[t.tankId] || 0;
-                                let newFinal = currentVol;
-                                if (val === 'percent') {
-                                  newFinal = currentVol - (t.drainAmount / 100) * currentVol;
-                                } else {
-                                  newFinal = currentVol - (t.drainAmount || 0);
-                                }
-                                return { ...t, finalVolume: Math.max(0, newFinal) };
-                              });
-                              setWaterMgmtData({ ...waterMgmtData, drainUnit: val, drainTargets: newTargets });
-                            }}
-                            className="h-8"
-                          >
-                            <TabsList className="bg-muted/50 h-8 p-0.5">
-                              <TabsTrigger value="volume" className="text-[10px] px-2 h-7">Tons/Ltrs</TabsTrigger>
-                              <TabsTrigger value="percent" className="text-[10px] px-2 h-7 text-xs">% of Water</TabsTrigger>
-                            </TabsList>
-                          </Tabs>
+                  {waterMgmtData.recirculationTargets.length > 0 && waterMgmtData.sourceScope === 'single' && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 to-blue-500/10 border border-sky-200 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center">
+                          <Droplets className="w-5 h-5 text-sky-500" />
                         </div>
-
-                        <div className="space-y-3">
-                          {waterMgmtData.drainTargets.map((target: any, idx: number) => (
-                            <div key={target.tankId} className="p-4 rounded-2xl bg-orange-50/30 border border-orange-100 space-y-4">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-black text-orange-950 uppercase">{target.tankName}</span>
-                                <div className="text-[10px] text-orange-700 font-bold bg-orange-100 px-2 py-0.5 rounded-full">
-                                  Current: {(tankWaterVolumes[target.tankId] || 0).toLocaleString()}L
-                                </div>
-                              </div>
-                              
-                              <div className="space-y-1.5">
-                                <Label className="text-[9px] uppercase font-bold text-orange-700 ml-1">
-                                  {waterMgmtData.drainUnit === 'volume' ? 'Drain Volume (L) *' : 'Drain Percentage (%) *'}
-                                </Label>
-                                <div className="relative">
-                                  <Input 
-                                    type="number"
-                                    placeholder={waterMgmtData.drainUnit === 'volume' ? 'e.g., 500' : 'e.g., 20'}
-                                    value={target.drainAmount === 0 ? '' : target.drainAmount}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      const targets = [...waterMgmtData.drainTargets];
-                                      const currentVol = tankWaterVolumes[target.tankId] || 0;
-                                      let newFinal = 0;
-                                      
-                                      if (waterMgmtData.drainUnit === 'percent') {
-                                        newFinal = currentVol - (val / 100) * currentVol;
-                                      } else {
-                                        newFinal = currentVol - val;
-                                      }
-                                      
-                                      targets[idx] = { 
-                                        ...targets[idx], 
-                                        drainAmount: val, 
-                                        finalVolume: Math.max(0, newFinal) 
-                                      };
-                                      setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
-                                    }}
-                                    className="h-10 text-sm rounded-xl border-orange-200 bg-white pr-10 focus:ring-orange-500"
-                                  />
-                                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-orange-400">
-                                    {waterMgmtData.drainUnit === 'volume' ? 'L' : '%'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Final Volume Preview */}
-                              <div className="pt-2 flex items-center justify-between border-t border-orange-100/50">
-                                <span className="text-[9px] font-bold text-orange-600/70 uppercase">Final Volume</span>
-                                <div className="flex items-center gap-2">
-                                  <Input 
-                                    type="number"
-                                    value={target.finalVolume === 0 ? '' : target.finalVolume}
-                                    onChange={(e) => {
-                                      const targets = [...waterMgmtData.drainTargets];
-                                      targets[idx] = { ...targets[idx], finalVolume: parseFloat(e.target.value) || 0 };
-                                      setWaterMgmtData({ ...waterMgmtData, drainTargets: targets });
-                                    }}
-                                    className="h-7 w-24 text-[10px] font-black text-right border-orange-200 bg-white"
-                                  />
-                                  <span className="text-[10px] font-bold text-orange-900">L</span>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        <span className="text-xs font-black text-sky-900 uppercase tracking-tight">Water Volume Available</span>
+                      </div>
+                      <span className="text-lg font-black text-sky-950">
+                        {(tankWaterVolumes[waterMgmtData.recirculationTargets[0].tankId] || 0).toLocaleString()} <span className="text-xs opacity-60">L</span>
+                      </span>
                     </div>
                   )}
                 </div>
-              )}
+
+                {/* Field 3: Time for Recirculation */}
+                {waterMgmtData.recirculationTargets.length > 0 && (
+                  <div className="space-y-4 pt-6 border-t border-dashed">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      3. Time for Recirculation <span className="text-destructive">*</span>
+                    </Label>
+                    
+                    <div className="space-y-4">
+                      {waterMgmtData.recirculationTargets.map((target: any, idx: number) => (
+                        <div key={target.tankId} className="p-5 rounded-[2rem] bg-background border-2 border-muted-foreground/5 shadow-xl shadow-muted/20 space-y-5 animate-fade-in-up relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 p-3">
+                             <div className="bg-sky-500/10 text-sky-600 text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest">Active Recirculation</div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center relative z-10">
+                            <span className="text-sm font-black text-foreground uppercase tracking-tighter flex items-center gap-2">
+                              <Database className="w-4 h-4 text-sky-400" />
+                              {target.tankName}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-5 relative z-10">
+                            <Tabs 
+                              value={target.timeMode || 'duration'} 
+                              onValueChange={(val) => {
+                                const targets = [...waterMgmtData.recirculationTargets];
+                                targets[idx].timeMode = val;
+                                setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                              }}
+                              className="w-full"
+                            >
+                              <TabsList className="grid grid-cols-2 bg-sky-50/50 p-1 rounded-2xl h-11 border border-sky-100/50">
+                                <TabsTrigger value="duration" className="rounded-xl text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-lg">Duration</TabsTrigger>
+                                <TabsTrigger value="slot" className="rounded-xl text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-lg">Time Slot</TabsTrigger>
+                              </TabsList>
+                              
+                              <TabsContent value="duration" className="pt-4 space-y-4 animate-in fade-in slide-in-from-left-2">
+                                <div className="space-y-2">
+                                  <Label className="text-[9px] uppercase font-black text-sky-700/60 ml-1 tracking-widest">Select Duration (Hours)</Label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {[0.5, 1, 2, 3, 4, 6, 8, 12, 24].map(h => (
+                                      <Button
+                                        key={h}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          const targets = [...waterMgmtData.recirculationTargets];
+                                          targets[idx].recircHours = h.toString();
+                                          setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                                        }}
+                                        className={`h-10 px-3 rounded-xl border-2 transition-all font-black text-xs ${
+                                          target.recircHours === h.toString() 
+                                            ? 'bg-sky-500 border-sky-500 text-white shadow-md scale-105' 
+                                            : 'bg-white border-sky-100 text-sky-700 hover:border-sky-300'
+                                        }`}
+                                      >
+                                        {h}h
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label className="text-[9px] uppercase font-black text-sky-700/60 ml-1 tracking-widest">Or Manual Hours</Label>
+                                  <div className="relative">
+                                    <Input 
+                                      type="number"
+                                      placeholder="0.0"
+                                      value={target.recircHours || ''}
+                                      onChange={(e) => {
+                                        const targets = [...waterMgmtData.recirculationTargets];
+                                        targets[idx].recircHours = e.target.value;
+                                        setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                                      }}
+                                      className="h-12 text-base rounded-2xl border-sky-100 bg-sky-50/30 font-black placeholder:text-sky-900/20 pr-12 focus:ring-sky-500"
+                                    />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-sky-400 uppercase">Hours</div>
+                                  </div>
+                                </div>
+                              </TabsContent>
+                              
+                              <TabsContent value="slot" className="pt-4 grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-right-2">
+                                <TimeInputGroup 
+                                  label="Start Time"
+                                  value={target.startTime}
+                                  onChange={(val) => {
+                                    const targets = [...waterMgmtData.recirculationTargets];
+                                    targets[idx].startTime = val;
+                                    setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                                  }}
+                                />
+                                <TimeInputGroup 
+                                  label="End Time"
+                                  value={target.endTime}
+                                  onChange={(val) => {
+                                    const targets = [...waterMgmtData.recirculationTargets];
+                                    targets[idx].endTime = val;
+                                    setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
+                                  }}
+                                />
+                              </TabsContent>
+                            </Tabs>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
 
-            {/* Common Fields for all Water Management operations - Restricted to first two for now */}
-            {(waterMgmtData.flowOperation === 'Water Filling' || waterMgmtData.flowOperation === 'Water Exchange') && (
+            {/* Common Fields for all Water Management operations */}
+            {(waterMgmtData.flowOperation === 'Water Filling' || waterMgmtData.flowOperation === 'Water Exchange' || waterMgmtData.flowOperation === 'Recirculation') && (
               <>
                 {/* Field 6: Water Quality Score */}
                 <div className="space-y-3 pt-4 border-t border-dashed">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
-                    6. Water Quality Score
+                    {waterMgmtData.flowOperation === 'Recirculation' ? '4.' : '6.'} Water Quality Score
                     {waterMgmtAvg > 0 && <span className="text-emerald-600 font-black">{waterMgmtAvg.toFixed(1)} / 10</span>}
                   </Label>
                   
@@ -5016,12 +5200,14 @@ const RecordActivity = () => {
 
                 {!isPlanningMode && (
                   <div className="space-y-1.5 pt-2 border-t border-dashed">
-                    <Label className="text-xs">Activity Photo (Optional)</Label>
+                    <Label className="text-xs">{waterMgmtData.flowOperation === 'Recirculation' ? '5. Photos' : 'Activity Photo (Optional)'}</Label>
                     <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
+                  <Label className="text-xs">
+                    {waterMgmtData.flowOperation === 'Recirculation' ? '6. Comments' : (isPlanningMode ? 'Instructions' : 'Comments')}
+                  </Label>
                   <Textarea 
                     value={comments} 
                     onChange={e => setComments(e.target.value)} 
