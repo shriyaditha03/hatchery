@@ -1339,7 +1339,17 @@ const RecordActivity = () => {
     drainTargets: [], // Array of { tankId: string, tankName: string, drainAmount: number, finalVolume: number }
     // New fields for Recirculation
     recirculationUnit: 'percent',
-    recirculationTargets: [] // Array of { tankId: string, tankName: string, recircHours: string, startTime: string, endTime: string, timeMode: 'duration' | 'slot' }
+    recirculationTargets: [], // Array of { tankId: string, tankName: string, recircHours: string, startTime: string, endTime: string, timeMode: 'duration' | 'slot' }
+    // New fields for Drain / Clean
+    cleanTargets: [], // Array of { tankId: string, tankName: string }
+    cleanSectionFilter: 'all',
+    cleanQuality: {
+      surface: 0,
+      paint: 0,
+      cleanliness: 0,
+      dryStatus: 0,
+      lastWashDate: ''
+    }
   });
 
   // Water Quality Calculation for Water Management
@@ -1373,6 +1383,13 @@ const RecordActivity = () => {
   const waterMgmtAvg = waterMgmtFilledCount > 0
     ? waterMgmtValues.filter(v => v !== null).reduce((a, b) => (a || 0) + (b || 0), 0) / waterMgmtFilledCount
     : 0;
+
+  const cleanQualityAvg = useMemo(() => {
+    const { surface, paint, cleanliness, dryStatus } = waterMgmtData.cleanQuality || {};
+    const scores = [surface, paint, cleanliness, dryStatus].filter(s => s > 0);
+    if (scores.length === 0) return 0;
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }, [waterMgmtData.cleanQuality]);
 
   const [comments, setComments] = useState('');
 
@@ -1989,22 +2006,17 @@ const RecordActivity = () => {
       }
 
       if (waterMgmtData.flowOperation === 'Drain / Clean') {
-        if (waterMgmtData.drainTargets.length === 0) {
-          toast.error('Please select at least one tank to drain');
+        if (waterMgmtData.cleanTargets.length === 0) {
+          toast.error('Please select at least one tank to drain / clean');
           return;
         }
-        const hasZeroDrain = waterMgmtData.drainTargets.some((t: any) => (t.drainAmount || 0) === 0);
-        if (hasZeroDrain) {
-          toast.error('Please enter a drain amount for all selected tanks');
+        const { surface, paint, cleanliness, dryStatus, lastWashDate } = waterMgmtData.cleanQuality || {};
+        if (!surface || !paint || !cleanliness || !dryStatus) {
+          toast.error('Please provide all quality scores (1-10)');
           return;
         }
-        const exceedsCapacity = waterMgmtData.drainTargets.some((t: any) => {
-          const available = tankWaterVolumes[t.tankId] || 0;
-          const drain = waterMgmtData.drainUnit === 'percent' ? (t.drainAmount / 100) * available : t.drainAmount;
-          return drain > available + 0.1; // Small buffer for floats
-        });
-        if (exceedsCapacity) {
-          toast.error('Drain amount exceeds current tank volume for one or more tanks');
+        if (!lastWashDate) {
+          toast.error('Please provide the last clean/wash date');
           return;
         }
       }
@@ -3157,6 +3169,7 @@ const RecordActivity = () => {
                 <Input
                   type="date"
                   value={date}
+                  max={isPlanningMode ? undefined : getTodayStr()}
                   onChange={e => {
                     setDate(e.target.value);
                     setIsLiveTime(false);
@@ -5111,126 +5124,279 @@ const RecordActivity = () => {
               </>
             )}
 
+            {waterMgmtData.flowOperation === 'Drain / Clean' && (
+              <>
+                {/* Field 2: Choose Tank to Drain / Clean */}
+                <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      2. Choose Tank to Drain / Clean <span className="text-destructive">*</span>
+                    </Label>
+                    <Select 
+                      value={waterMgmtData.cleanSectionFilter} 
+                      onValueChange={(val) => setWaterMgmtData({ ...waterMgmtData, cleanSectionFilter: val })}
+                    >
+                      <SelectTrigger className="h-8 w-40 text-[10px] rounded-lg border-muted-foreground/20 shadow-sm">
+                        <SelectValue placeholder="Filter Section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sections</SelectItem>
+                        {availableTanks
+                          .filter(s => s.farm_id === (selectedFarmId || activeFarmId))
+                          .map(s => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 rounded-xl bg-muted/5 border border-dashed">
+                    {(() => {
+                      const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
+                      const filteredTanks = waterMgmtData.cleanSectionFilter === 'all'
+                        ? farmSections.flatMap(s => s.tanks || [])
+                        : farmSections.find(s => s.id === waterMgmtData.cleanSectionFilter)?.tanks || [];
+                      
+                      return filteredTanks.map(tank => {
+                        const isSelected = waterMgmtData.cleanTargets.some((t: any) => t.tankId === tank.id);
+                        return (
+                          <button
+                            key={tank.id}
+                            onClick={() => {
+                              const targets = [...waterMgmtData.cleanTargets];
+                              const idx = targets.findIndex((t: any) => t.tankId === tank.id);
+                              if (idx >= 0) {
+                                targets.splice(idx, 1);
+                              } else {
+                                targets.push({ tankId: tank.id, tankName: tank.name });
+                              }
+                              setWaterMgmtData({ ...waterMgmtData, cleanTargets: targets });
+                            }}
+                            className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border transition-all text-center min-h-[70px] ${
+                              isSelected 
+                                ? 'bg-primary/10 border-primary shadow-sm scale-[1.02]' 
+                                : 'bg-background border-muted-foreground/10 hover:border-primary/30'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <span className={`text-[10px] font-black leading-tight uppercase tracking-tighter break-all ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                              {tank.name}
+                            </span>
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-black italic uppercase tracking-widest text-center py-1">
+                    {waterMgmtData.cleanTargets.length} tank(s) selected
+                  </div>
+                </div>
+
+                {/* Field 3: Tank Quality Score */}
+                <div className="space-y-6 pt-6 border-t border-dashed animate-fade-in-up">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-emerald-500" />
+                      3. Tank Quality Score
+                    </Label>
+                    {cleanQualityAvg > 0 && (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-200 animate-in zoom-in">
+                        <span className="text-[10px] font-black uppercase tracking-widest">AVG SCORE: {cleanQualityAvg.toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-6 space-y-8 bg-background border-2 border-muted-foreground/5 rounded-[2.5rem] shadow-xl shadow-muted/20">
+                    <div className="grid grid-cols-1 gap-8">
+                      <RatingScale 
+                        label="1) Tank Surface Quality"
+                        value={waterMgmtData.cleanQuality?.surface || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          cleanQuality: { ...waterMgmtData.cleanQuality, surface: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="2) Tank Paint Quality"
+                        value={waterMgmtData.cleanQuality?.paint || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          cleanQuality: { ...waterMgmtData.cleanQuality, paint: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="3) Tank Cleanliness Condition"
+                        value={waterMgmtData.cleanQuality?.cleanliness || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          cleanQuality: { ...waterMgmtData.cleanQuality, cleanliness: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="4) Tank Dry Status"
+                        value={waterMgmtData.cleanQuality?.dryStatus || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          cleanQuality: { ...waterMgmtData.cleanQuality, dryStatus: val }
+                        })}
+                      />
+                    </div>
+
+                    <div className="pt-6 border-t border-dashed">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-3 block">
+                        5) Tank Last Clean/ Wash Date
+                      </Label>
+                      <div className="relative group">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-40 group-focus-within:opacity-100 transition-opacity" />
+                        <Input 
+                          type="date"
+                          value={waterMgmtData.cleanQuality?.lastWashDate || ''}
+                          max={isPlanningMode ? undefined : getTodayStr()}
+                          onChange={(e) => setWaterMgmtData({
+                            ...waterMgmtData,
+                            cleanQuality: { ...waterMgmtData.cleanQuality, lastWashDate: e.target.value }
+                          })}
+                          className="h-12 pl-12 rounded-2xl border-muted-foreground/20 bg-muted/5 font-black focus:ring-2 focus:ring-primary/50 text-sm shadow-inner"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
 
             {/* Common Fields for all Water Management operations */}
-            {(waterMgmtData.flowOperation === 'Water Filling' || waterMgmtData.flowOperation === 'Water Exchange' || waterMgmtData.flowOperation === 'Recirculation') && (
+            {(['Water Filling', 'Water Exchange', 'Recirculation', 'Drain / Clean'].includes(waterMgmtData.flowOperation)) && (
               <>
-                {/* Field 6: Water Quality Score */}
-                <div className="space-y-3 pt-4 border-t border-dashed">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
-                    {waterMgmtData.flowOperation === 'Recirculation' ? '4.' : '6.'} Water Quality Score
-                    {waterMgmtAvg > 0 && <span className="text-emerald-600 font-black">{waterMgmtAvg.toFixed(1)} / 10</span>}
-                  </Label>
-                  
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className={`w-full h-20 justify-between px-4 rounded-2xl border-2 border-dashed transition-all hover:bg-emerald-50/50 hover:border-emerald-500/50 group ${waterMgmtAvg > 0 ? 'bg-emerald-50/30 border-emerald-500/30' : 'border-muted-foreground/20'}`}>
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${waterMgmtAvg > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-muted/30 text-muted-foreground opacity-40'}`}>
-                            <Droplets className="w-6 h-6" />
-                          </div>
-                          <div className="text-left">
-                            <p className={`text-base font-black ${waterMgmtAvg > 0 ? 'text-emerald-950' : 'text-foreground'}`}>
-                              {waterMgmtAvg > 0 ? 'Water Quality Recorded' : 'Record Water Quality'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-                              {waterMgmtFilledCount} of {waterFields.length} parameters entered
-                            </p>
-                          </div>
-                        </div>
-                        {waterMgmtAvg > 0 && (
-                          <div className="text-right flex flex-col items-end">
-                            <p className="text-2xl font-black text-emerald-600 leading-none">{waterMgmtAvg.toFixed(1)}</p>
-                            <p className="text-[9px] text-emerald-600/60 uppercase font-black tracking-tighter">Compliance Score</p>
-                          </div>
-                        )}
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
-                      <DialogHeader className="p-6 pb-4 bg-emerald-50/50 sticky top-0 z-10 backdrop-blur-md border-b border-emerald-100">
-                        <DialogTitle className="text-xl font-black flex items-center gap-2 text-emerald-950">
-                          <Droplets className="w-6 h-6 text-emerald-600" />
-                          Water Quality Assessment
-                        </DialogTitle>
-                      </DialogHeader>
-                      <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                        <div className="grid grid-cols-1 gap-5">
-                          {waterFields.map(field => {
-                            const rangeLabel = WATER_QUALITY_RANGES[field];
-                            const isFilled = waterMgmtData.waterQualityData?.[field] !== undefined && waterMgmtData.waterQualityData?.[field] !== '';
-                            return (
-                              <div key={field} className="space-y-1.5 group">
-                                <Label className={`text-[10px] font-black flex justify-between uppercase tracking-wider transition-colors ${isFilled ? 'text-emerald-700' : 'text-muted-foreground group-focus-within:text-emerald-600'}`}>
-                                  {field} *
-                                  {rangeLabel && <span className="text-[9px] font-bold opacity-60 font-mono">{rangeLabel}</span>}
-                                </Label>
-                                <Input
-                                  type={field === 'Other' ? 'text' : 'number'}
-                                  min="0"
-                                  step="any"
-                                  value={waterMgmtData.waterQualityData?.[field] || ''}
-                                  onChange={e => {
-                                    setWaterMgmtData(prev => ({
-                                      ...prev,
-                                      waterQualityData: {
-                                        ...prev.waterQualityData,
-                                        [field]: e.target.value
-                                      }
-                                    }));
-                                  }}
-                                  placeholder="0.0"
-                                  className={`h-11 font-bold text-sm rounded-xl transition-all ${isFilled ? 'border-emerald-200 bg-emerald-50/20 focus:border-emerald-500' : 'border-muted-foreground/10 focus:border-emerald-400'}`}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Summary Score Card inside Modal */}
-                        <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5 space-y-3 shadow-inner">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-emerald-900 uppercase tracking-widest">Compliance Score</span>
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-4xl font-black text-emerald-600">{waterMgmtAvg.toFixed(1)}</span>
-                              <span className="text-sm font-black text-emerald-600/40">/ 10</span>
+                {/* Field 6: Water Quality Score - Skip for Drain / Clean as it has its own quality score */}
+                {waterMgmtData.flowOperation !== 'Drain / Clean' && (
+                  <div className="space-y-3 pt-4 border-t border-dashed">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                      {waterMgmtData.flowOperation === 'Recirculation' ? '4.' : '6.'} Water Quality Score
+                      {waterMgmtAvg > 0 && <span className="text-emerald-600 font-black">{waterMgmtAvg.toFixed(1)} / 10</span>}
+                    </Label>
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className={`w-full h-20 justify-between px-4 rounded-2xl border-2 border-dashed transition-all hover:bg-emerald-50/50 hover:border-emerald-500/50 group ${waterMgmtAvg > 0 ? 'bg-emerald-50/30 border-emerald-500/30' : 'border-muted-foreground/20'}`}>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${waterMgmtAvg > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-muted/30 text-muted-foreground opacity-40'}`}>
+                              <Droplets className="w-6 h-6" />
+                            </div>
+                            <div className="text-left">
+                              <p className={`text-base font-black ${waterMgmtAvg > 0 ? 'text-emerald-950' : 'text-foreground'}`}>
+                                {waterMgmtAvg > 0 ? 'Water Quality Recorded' : 'Record Water Quality'}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                                {waterMgmtFilledCount} of {waterFields.length} parameters entered
+                              </p>
                             </div>
                           </div>
-                          <div className="w-full h-2.5 bg-emerald-200/50 rounded-full overflow-hidden border border-emerald-200">
-                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${(waterMgmtAvg / 10) * 100}%` }} />
+                          {waterMgmtAvg > 0 && (
+                            <div className="text-right flex flex-col items-end">
+                              <p className="text-2xl font-black text-emerald-600 leading-none">{waterMgmtAvg.toFixed(1)}</p>
+                              <p className="text-[9px] text-emerald-600/60 uppercase font-black tracking-tighter">Compliance Score</p>
+                            </div>
+                          )}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
+                        <DialogHeader className="p-6 pb-4 bg-emerald-50/50 sticky top-0 z-10 backdrop-blur-md border-b border-emerald-100">
+                          <DialogTitle className="text-xl font-black flex items-center gap-2 text-emerald-950">
+                            <Droplets className="w-6 h-6 text-emerald-600" />
+                            Water Quality Assessment
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                          <div className="grid grid-cols-1 gap-5">
+                            {waterFields.map(field => {
+                              const rangeLabel = WATER_QUALITY_RANGES[field];
+                              const isFilled = waterMgmtData.waterQualityData?.[field] !== undefined && waterMgmtData.waterQualityData?.[field] !== '';
+                              return (
+                                <div key={field} className="space-y-1.5 group">
+                                  <Label className={`text-[10px] font-black flex justify-between uppercase tracking-wider transition-colors ${isFilled ? 'text-emerald-700' : 'text-muted-foreground group-focus-within:text-emerald-600'}`}>
+                                    {field} *
+                                    {rangeLabel && <span className="text-[9px] font-bold opacity-60 font-mono">{rangeLabel}</span>}
+                                  </Label>
+                                  <Input
+                                    type={field === 'Other' ? 'text' : 'number'}
+                                    min="0"
+                                    step="any"
+                                    value={waterMgmtData.waterQualityData?.[field] || ''}
+                                    onChange={e => {
+                                      setWaterMgmtData(prev => ({
+                                        ...prev,
+                                        waterQualityData: {
+                                          ...prev.waterQualityData,
+                                          [field]: e.target.value
+                                        }
+                                      }));
+                                    }}
+                                    placeholder="0.0"
+                                    className={`h-11 font-bold text-sm rounded-xl transition-all ${isFilled ? 'border-emerald-200 bg-emerald-50/20 focus:border-emerald-500' : 'border-muted-foreground/10 focus:border-emerald-400'}`}
+                                  />
+                                </div>
+                              );
+                            })}
                           </div>
-                          <p className="text-[10px] text-emerald-700/70 text-center font-bold italic tracking-wide">
-                            Calculated compliance average of {waterMgmtFilledCount} parameters
-                          </p>
+
+                          {/* Summary Score Card inside Modal */}
+                          <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5 space-y-3 shadow-inner">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-emerald-900 uppercase tracking-widest">Compliance Score</span>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-4xl font-black text-emerald-600">{waterMgmtAvg.toFixed(1)}</span>
+                                <span className="text-sm font-black text-emerald-600/40">/ 10</span>
+                              </div>
+                            </div>
+                            <div className="w-full h-2.5 bg-emerald-200/50 rounded-full overflow-hidden border border-emerald-200">
+                              <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${(waterMgmtAvg / 10) * 100}%` }} />
+                            </div>
+                            <p className="text-[10px] text-emerald-700/70 text-center font-bold italic tracking-wide">
+                              Calculated compliance average of {waterMgmtFilledCount} parameters
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <DialogFooter className="p-4 bg-emerald-50/50 border-t border-emerald-100 sticky bottom-0 z-10">
-                        <DialogClose asChild>
-                          <Button
-                            className="w-full h-12 rounded-xl font-black text-base shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700 text-white border-none transition-all active:scale-[0.98]"
-                            onClick={() => {
-                              setWaterMgmtData(prev => ({
-                                ...prev,
-                                waterQualityScore: parseFloat(waterMgmtAvg.toFixed(1))
-                              }));
-                            }}
-                          >
-                            Save Water Quality Assessment
-                          </Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
+                        <DialogFooter className="p-4 bg-emerald-50/50 border-t border-emerald-100 sticky bottom-0 z-10">
+                          <DialogClose asChild>
+                            <Button
+                              className="w-full h-12 rounded-xl font-black text-base shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700 text-white border-none transition-all active:scale-[0.98]"
+                              onClick={() => {
+                                setWaterMgmtData(prev => ({
+                                  ...prev,
+                                  waterQualityScore: parseFloat(waterMgmtAvg.toFixed(1))
+                                }));
+                              }}
+                            >
+                              Save Water Quality Assessment
+                            </Button>
+                          </DialogClose>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                )}
 
                 {!isPlanningMode && (
                   <div className="space-y-1.5 pt-2 border-t border-dashed">
-                    <Label className="text-xs">{waterMgmtData.flowOperation === 'Recirculation' ? '5. Photos' : 'Activity Photo (Optional)'}</Label>
+                    <Label className="text-xs">
+                      {waterMgmtData.flowOperation === 'Recirculation' ? '5. Photos' : 
+                       waterMgmtData.flowOperation === 'Drain / Clean' ? '4. Photos' : 
+                       'Activity Photo (Optional)'}
+                    </Label>
                     <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
                   </div>
                 )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">
-                    {waterMgmtData.flowOperation === 'Recirculation' ? '6. Comments' : (isPlanningMode ? 'Instructions' : 'Comments')}
+                    {waterMgmtData.flowOperation === 'Recirculation' ? '6. Comments' : 
+                     waterMgmtData.flowOperation === 'Drain / Clean' ? '5. Comments' : 
+                     (isPlanningMode ? 'Instructions' : 'Comments')}
                   </Label>
                   <Textarea 
                     value={comments} 
