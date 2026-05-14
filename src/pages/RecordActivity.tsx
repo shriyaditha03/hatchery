@@ -4850,7 +4850,15 @@ const RecordActivity = () => {
                             sourceScope: val,
                             recirculationTargets: allFilledTanks.map(id => {
                               const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === id);
-                              return { tankId: id, tankName: tank?.name || 'Tank', recircHours: '', startTime: '', endTime: '', timeMode: 'duration' };
+                              return { 
+                                tankId: id, 
+                                tankName: tank?.name || 'Tank', 
+                                recircHours: '', 
+                                startTime: '', 
+                                endTime: '', 
+                                timeMode: 'duration',
+                                finalVolume: tankWaterVolumes[id] || 0
+                              };
                             })
                           });
                         } else {
@@ -4875,7 +4883,15 @@ const RecordActivity = () => {
                           const tank = availableTanks.flatMap(s => s.tanks || []).find(t => t.id === val);
                           setWaterMgmtData({ 
                             ...waterMgmtData, 
-                            recirculationTargets: [{ tankId: val, tankName: tank?.name || 'Tank', recircHours: '', startTime: '', endTime: '', timeMode: 'duration' }]
+                            recirculationTargets: [{ 
+                              tankId: val, 
+                              tankName: tank?.name || 'Tank', 
+                              recircHours: '', 
+                              startTime: '', 
+                              endTime: '', 
+                              timeMode: 'duration',
+                              finalVolume: tankWaterVolumes[val] || 0
+                            }]
                           });
                         }}
                       >
@@ -4930,7 +4946,15 @@ const RecordActivity = () => {
                                   if (idx >= 0) {
                                     targets.splice(idx, 1);
                                   } else {
-                                    targets.push({ tankId: t.id, tankName: t.name, recircHours: '', startTime: '', endTime: '', timeMode: 'duration' });
+                                    targets.push({ 
+                                      tankId: t.id, 
+                                      tankName: t.name, 
+                                      recircHours: '', 
+                                      startTime: '', 
+                                      endTime: '', 
+                                      timeMode: 'duration',
+                                      finalVolume: tankWaterVolumes[t.id] || 0
+                                    });
                                   }
                                   setWaterMgmtData({ ...waterMgmtData, recirculationTargets: targets });
                                 }}
