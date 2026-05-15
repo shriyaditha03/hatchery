@@ -1349,6 +1349,17 @@ const RecordActivity = () => {
       cleanliness: 0,
       dryStatus: 0,
       lastWashDate: ''
+    },
+    // New fields for Observations
+    observationTargets: [], // Array of { tankId: string, tankName: string }
+    observationScope: 'single', // 'single', 'all', 'custom'
+    observationSectionFilter: 'all',
+    observationQuality: {
+      surface: 0,
+      paint: 0,
+      cleanliness: 0,
+      dryStatus: 0,
+      lastWashDate: ''
     }
   });
 
@@ -1390,6 +1401,13 @@ const RecordActivity = () => {
     if (scores.length === 0) return 0;
     return scores.reduce((a, b) => a + b, 0) / scores.length;
   }, [waterMgmtData.cleanQuality]);
+
+  const observationQualityAvg = useMemo(() => {
+    const { surface, paint, cleanliness, dryStatus } = waterMgmtData.observationQuality || {};
+    const scores = [surface, paint, cleanliness, dryStatus].filter(s => s > 0);
+    if (scores.length === 0) return 0;
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }, [waterMgmtData.observationQuality]);
 
   const [comments, setComments] = useState('');
 
@@ -2011,6 +2029,22 @@ const RecordActivity = () => {
           return;
         }
         const { surface, paint, cleanliness, dryStatus, lastWashDate } = waterMgmtData.cleanQuality || {};
+        if (!surface || !paint || !cleanliness || !dryStatus) {
+          toast.error('Please provide all quality scores (1-10)');
+          return;
+        }
+        if (!lastWashDate) {
+          toast.error('Please provide the last clean/wash date');
+          return;
+        }
+      }
+
+      if (waterMgmtData.flowOperation === 'Observations') {
+        if (waterMgmtData.observationTargets.length === 0) {
+          toast.error('Please select at least one tank to observe');
+          return;
+        }
+        const { surface, paint, cleanliness, dryStatus, lastWashDate } = waterMgmtData.observationQuality || {};
         if (!surface || !paint || !cleanliness || !dryStatus) {
           toast.error('Please provide all quality scores (1-10)');
           return;
@@ -5269,15 +5303,160 @@ const RecordActivity = () => {
               </>
             )}
 
+            {waterMgmtData.flowOperation === 'Observations' && (
+              <>
+                {/* Field 2: Choose Tank Observation */}
+                <div className="glass-card rounded-2xl p-4 space-y-4 border border-muted-foreground/10 shadow-sm animate-fade-in-up mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      2. Choose Tank Observation <span className="text-destructive">*</span>
+                    </Label>
+                    <Select 
+                      value={waterMgmtData.observationSectionFilter} 
+                      onValueChange={(val) => setWaterMgmtData({ ...waterMgmtData, observationSectionFilter: val })}
+                    >
+                      <SelectTrigger className="h-8 w-40 text-[10px] rounded-lg border-muted-foreground/20 shadow-sm">
+                        <SelectValue placeholder="Filter Section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sections</SelectItem>
+                        {availableTanks
+                          .filter(s => s.farm_id === (selectedFarmId || activeFarmId))
+                          .map(s => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 rounded-xl bg-muted/5 border border-dashed">
+                    {(() => {
+                      const farmSections = availableTanks.filter(s => s.farm_id === (selectedFarmId || activeFarmId));
+                      const filteredTanks = waterMgmtData.observationSectionFilter === 'all'
+                        ? farmSections.flatMap(s => s.tanks || [])
+                        : farmSections.find(s => s.id === waterMgmtData.observationSectionFilter)?.tanks || [];
+                      
+                      return filteredTanks.map(tank => {
+                        const isSelected = waterMgmtData.observationTargets.some((t: any) => t.tankId === tank.id);
+                        return (
+                          <button
+                            key={tank.id}
+                            onClick={() => {
+                              const targets = [...waterMgmtData.observationTargets];
+                              const idx = targets.findIndex((t: any) => t.tankId === tank.id);
+                              if (idx >= 0) {
+                                targets.splice(idx, 1);
+                              } else {
+                                targets.push({ tankId: tank.id, tankName: tank.name });
+                              }
+                              setWaterMgmtData({ ...waterMgmtData, observationTargets: targets });
+                            }}
+                            className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border transition-all text-center min-h-[70px] ${
+                              isSelected 
+                                ? 'bg-primary/10 border-primary shadow-sm scale-[1.02]' 
+                                : 'bg-background border-muted-foreground/10 hover:border-primary/30'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <span className={`text-[10px] font-black leading-tight uppercase tracking-tighter break-all ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                              {tank.name}
+                            </span>
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-black italic uppercase tracking-widest text-center py-1">
+                    {waterMgmtData.observationTargets.length} tank(s) selected
+                  </div>
+                </div>
+
+                {/* Field 3: Tank Quality Score */}
+                <div className="space-y-6 pt-6 border-t border-dashed animate-fade-in-up">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-emerald-500" />
+                      3. Tank Quality Score
+                    </Label>
+                    {observationQualityAvg > 0 && (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-200 animate-in zoom-in">
+                        <span className="text-[10px] font-black uppercase tracking-widest">AVG SCORE: {observationQualityAvg.toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-6 space-y-8 bg-background border-2 border-muted-foreground/5 rounded-[2.5rem] shadow-xl shadow-muted/20">
+                    <div className="grid grid-cols-1 gap-8">
+                      <RatingScale 
+                        label="1) Tank Surface Quality"
+                        value={waterMgmtData.observationQuality?.surface || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          observationQuality: { ...waterMgmtData.observationQuality, surface: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="2) Tank Paint Quality"
+                        value={waterMgmtData.observationQuality?.paint || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          observationQuality: { ...waterMgmtData.observationQuality, paint: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="3) Tank Cleanliness Condition"
+                        value={waterMgmtData.observationQuality?.cleanliness || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          observationQuality: { ...waterMgmtData.observationQuality, cleanliness: val }
+                        })}
+                      />
+                      <RatingScale 
+                        label="4) Tank Dry Status"
+                        value={waterMgmtData.observationQuality?.dryStatus || 0}
+                        onChange={(val) => setWaterMgmtData({
+                          ...waterMgmtData,
+                          observationQuality: { ...waterMgmtData.observationQuality, dryStatus: val }
+                        })}
+                      />
+                    </div>
+
+                    <div className="pt-6 border-t border-dashed">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-3 block">
+                        5) Tank Last Clean/ Wash Date
+                      </Label>
+                      <div className="relative group">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-40 group-focus-within:opacity-100 transition-opacity" />
+                        <Input 
+                          type="date"
+                          value={waterMgmtData.observationQuality?.lastWashDate || ''}
+                          max={isPlanningMode ? undefined : getTodayStr()}
+                          onChange={(e) => setWaterMgmtData({
+                            ...waterMgmtData,
+                            observationQuality: { ...waterMgmtData.observationQuality, lastWashDate: e.target.value }
+                          })}
+                          className="h-12 pl-12 rounded-2xl border-muted-foreground/20 bg-muted/5 font-black focus:ring-2 focus:ring-primary/50 text-sm shadow-inner"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
 
             {/* Common Fields for all Water Management operations */}
-            {(['Water Filling', 'Water Exchange', 'Recirculation', 'Drain / Clean'].includes(waterMgmtData.flowOperation)) && (
+            {(['Water Filling', 'Water Exchange', 'Recirculation', 'Drain / Clean', 'Observations'].includes(waterMgmtData.flowOperation)) && (
               <>
                 {/* Field 6: Water Quality Score - Skip for Drain / Clean as it has its own quality score */}
                 {waterMgmtData.flowOperation !== 'Drain / Clean' && (
                   <div className="space-y-3 pt-4 border-t border-dashed">
                     <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
-                      {waterMgmtData.flowOperation === 'Recirculation' ? '4.' : '6.'} Water Quality Score
+                      {waterMgmtData.flowOperation === 'Recirculation' ? '4.' : waterMgmtData.flowOperation === 'Observations' ? '4.' : '6.'} Water Quality Score
                       {waterMgmtAvg > 0 && <span className="text-emerald-600 font-black">{waterMgmtAvg.toFixed(1)} / 10</span>}
                     </Label>
                     
@@ -5387,6 +5566,7 @@ const RecordActivity = () => {
                     <Label className="text-xs">
                       {waterMgmtData.flowOperation === 'Recirculation' ? '5. Photos' : 
                        waterMgmtData.flowOperation === 'Drain / Clean' ? '4. Photos' : 
+                       waterMgmtData.flowOperation === 'Observations' ? '5. Photos' : 
                        'Activity Photo (Optional)'}
                     </Label>
                     <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
@@ -5396,6 +5576,7 @@ const RecordActivity = () => {
                   <Label className="text-xs">
                     {waterMgmtData.flowOperation === 'Recirculation' ? '6. Comments' : 
                      waterMgmtData.flowOperation === 'Drain / Clean' ? '5. Comments' : 
+                     waterMgmtData.flowOperation === 'Observations' ? '6. Comments' : 
                      (isPlanningMode ? 'Instructions' : 'Comments')}
                   </Label>
                   <Textarea 
