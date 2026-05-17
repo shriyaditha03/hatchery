@@ -4283,7 +4283,7 @@ const RecordActivity = () => {
                                   <div className="flex items-center justify-between w-full gap-4">
                                     <span>{t.name}</span>
                                     <span className="text-[9px] font-bold text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
-                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L / {t.volume_litres?.toLocaleString() || 'N/A'} L
                                     </span>
                                   </div>
                                 </SelectItem>
@@ -4389,7 +4389,7 @@ const RecordActivity = () => {
                                       {t.name}
                                     </span>
                                     <span className="text-[8px] font-bold text-muted-foreground leading-tight shrink-0">
-                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                      {(tankWaterVolumes[t.id] || 0).toLocaleString()} L / {t.volume_litres?.toLocaleString() || 'N/A'} L
                                     </span>
                                   </div>
                                 </div>
@@ -4666,7 +4666,7 @@ const RecordActivity = () => {
                             .flatMap(s => s.tanks || [])
                             .filter(t => (tankWaterVolumes[t.id] || 0) > 0) // Only show tanks with water
                             .map(t => (
-                              <SelectItem key={t.id} value={t.id}>{t.name} ({(tankWaterVolumes[t.id] || 0).toLocaleString()} L)</SelectItem>
+                              <SelectItem key={t.id} value={t.id}>{t.name} ({(tankWaterVolumes[t.id] || 0).toLocaleString()} L / {t.volume_litres?.toLocaleString() || 'N/A'} L)</SelectItem>
                             ))}
                         </SelectContent>
                       </Select>
@@ -4974,7 +4974,7 @@ const RecordActivity = () => {
                                 <div className="flex items-center justify-between w-full gap-4">
                                   <span className="font-bold">{t.name}</span>
                                   <span className="text-[9px] font-black text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100">
-                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L Available
+                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L / {t.volume_litres?.toLocaleString() || 'N/A'} L
                                   </span>
                                 </div>
                               </SelectItem>
@@ -5036,7 +5036,7 @@ const RecordActivity = () => {
                                 <div className="flex flex-col min-w-0">
                                   <span className={`text-xs font-black break-all uppercase tracking-tighter ${isSelected ? 'text-sky-950' : 'text-foreground'}`}>{t.name}</span>
                                   <span className={`text-[8px] font-black leading-tight shrink-0 ${isSelected ? 'text-sky-600' : 'text-muted-foreground'}`}>
-                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L
+                                    {(tankWaterVolumes[t.id] || 0).toLocaleString()} L / {t.volume_litres?.toLocaleString() || 'N/A'} L
                                   </span>
                                 </div>
                               </div>
@@ -5239,6 +5239,9 @@ const RecordActivity = () => {
                             <span className={`text-[10px] font-black leading-tight uppercase tracking-tighter break-all ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
                               {tank.name}
                             </span>
+                            <span className="text-[8px] text-muted-foreground font-medium">
+                              {(tankWaterVolumes[tank.id] || 0).toLocaleString()} L / {tank.volume_litres?.toLocaleString() || 'N/A'} L
+                            </span>
                           </button>
                         );
                       });
@@ -5384,6 +5387,9 @@ const RecordActivity = () => {
                             <span className={`text-[10px] font-black leading-tight uppercase tracking-tighter break-all ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
                               {tank.name}
                             </span>
+                            <span className="text-[8px] text-muted-foreground font-medium">
+                              {(tankWaterVolumes[tank.id] || 0).toLocaleString()} L / {tank.volume_litres?.toLocaleString() || 'N/A'} L
+                            </span>
                           </button>
                         );
                       });
@@ -5516,6 +5522,9 @@ const RecordActivity = () => {
                             </div>
                             <span className={`text-[10px] font-black leading-tight uppercase tracking-tighter break-all ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
                               {tank.name}
+                            </span>
+                            <span className="text-[8px] text-muted-foreground font-medium">
+                              {(tankWaterVolumes[tank.id] || 0).toLocaleString()} L / {tank.volume_litres?.toLocaleString() || 'N/A'} L
                             </span>
                           </button>
                         );
