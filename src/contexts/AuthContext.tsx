@@ -23,6 +23,7 @@ export interface UserProfile {
     section_name: string | null;
     tank_id: string | null;
   }>;
+  modules?: string[];
 }
 
 interface AuthContextType {
@@ -36,8 +37,8 @@ interface AuthContextType {
   setActiveFarmId: (id: string | null) => void;
   activeSectionId: string | null;
   setActiveSectionId: (id: string | null) => void;
-  activeModule: 'LRT' | 'MATURATION';
-  setActiveModule: (module: 'LRT' | 'MATURATION') => void;
+  activeModule: 'LRT' | 'MATURATION' | 'FARMS';
+  setActiveModule: (module: 'LRT' | 'MATURATION' | 'FARMS') => void;
   activeBroodstockBatchId: string | null;
   setActiveBroodstockBatchId: (id: string | null) => void;
   supervisorMode: 'instruction' | 'activity';
@@ -56,9 +57,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [activeSectionId, setActiveSectionIdState] = useState<string | null>(() => {
     return localStorage.getItem('activeSectionId');
   });
-  const [activeModule, setActiveModuleState] = useState<'LRT' | 'MATURATION'>(() => {
+  const [activeModule, setActiveModuleState] = useState<'LRT' | 'MATURATION' | 'FARMS'>(() => {
     const saved = localStorage.getItem('activeDashboardModule');
-    if (saved === 'LRT' || saved === 'MATURATION') return saved;
+    if (saved === 'LRT' || saved === 'MATURATION' || saved === 'FARMS') return saved;
     return 'LRT';
   });
   const [activeBroodstockBatchId, setActiveBroodstockBatchIdState] = useState<string | null>(() => {
@@ -124,16 +125,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let location = '';
 
       // 2. Get Hatchery Details if linked
+      let hatcheryModules: string[] = ['LRT', 'MATURATION']; // Default for old hatcheries
       if (profile.hatchery_id) {
         const { data: hatchery, error: hatcheryError } = await supabase
           .from('hatcheries')
-          .select('name, location')
+          .select('name, location, modules')
           .eq('id', profile.hatchery_id)
           .maybeSingle();
 
         if (hatchery) {
           hatcheryName = hatchery.name;
           location = hatchery.location;
+          if (hatchery.modules && Array.isArray(hatchery.modules) && hatchery.modules.length > 0) {
+            hatcheryModules = hatchery.modules;
+          }
         }
       }
 
@@ -244,8 +249,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: email || profile.email || '',
         phone: profile.phone || '',
         assigned_farms: assignedFarms,
-        access: fullAccess
+        access: fullAccess,
+        modules: hatcheryModules
       };
+
+      // Ensure current active module is one of the available modules
+      const savedModule = localStorage.getItem('activeDashboardModule') as 'LRT' | 'MATURATION' | 'FARMS' | null;
+      if (hatcheryModules.length > 0) {
+        if (!savedModule || !hatcheryModules.includes(savedModule)) {
+          setActiveModuleState(hatcheryModules[0] as any);
+          localStorage.setItem('activeDashboardModule', hatcheryModules[0]);
+        }
+      }
 
       // --- SESSION ENFORCEMENT CHECK ---
       const localSessionKey = localStorage.getItem(`session_key_${profile.id}`);
@@ -410,7 +425,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const setActiveModule = useCallback((module: 'LRT' | 'MATURATION') => {
+  const setActiveModule = useCallback((module: 'LRT' | 'MATURATION' | 'FARMS') => {
     setActiveModuleState(module);
     localStorage.setItem('activeDashboardModule', module);
   }, []);

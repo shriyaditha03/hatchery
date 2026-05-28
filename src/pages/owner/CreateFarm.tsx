@@ -127,7 +127,13 @@ const CreateFarm = () => {
     const [step, setStep] = useState(1);
 
     const [farmName, setFarmName] = useState('');
-    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION'>('LRT');
+    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION' | 'FARMS'>(() => {
+        const userModules = user?.modules || ['LRT', 'MATURATION'];
+        if (userModules.length > 0) {
+            return userModules[0] as 'LRT' | 'MATURATION' | 'FARMS';
+        }
+        return 'LRT';
+    });
     const [sectionCount, setSectionCount] = useState<number | string>(1);
     
     // Maturation specific counts
@@ -774,8 +780,15 @@ const CreateFarm = () => {
                                         <SelectValue placeholder="Select Module Type" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
-                                        <SelectItem value="MATURATION">Maturation</SelectItem>
+                                        {(user?.modules || ['LRT', 'MATURATION']).includes('LRT') && (
+                                            <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
+                                        )}
+                                        {(user?.modules || ['LRT', 'MATURATION']).includes('MATURATION') && (
+                                            <SelectItem value="MATURATION">Maturation</SelectItem>
+                                        )}
+                                        {(user?.modules || ['LRT', 'MATURATION']).includes('FARMS') && (
+                                            <SelectItem value="FARMS">Farm / Firm</SelectItem>
+                                        )}
                                     </SelectContent>
                                 </Select>
                                 <p className="text-[10px] text-muted-foreground">Choose the appropriate module for this farm</p>

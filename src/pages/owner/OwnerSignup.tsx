@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Waves, Loader2, MapPin, LocateFixed } from 'lucide-react';
+import { Eye, EyeOff, Waves, Loader2, MapPin, LocateFixed, Check, Sparkles, Heart, Warehouse } from 'lucide-react';
 
 interface AddressConfig {
     plotNumber: string;
@@ -27,6 +27,8 @@ interface AddressConfig {
 
 const OwnerSignup = () => {
     const navigate = useNavigate();
+    const [step, setStep] = useState(1);
+    const [selectedModules, setSelectedModules] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [showPass, setShowPass] = useState(false);
     const [addressLoading, setAddressLoading] = useState(false);
@@ -75,18 +77,14 @@ const OwnerSignup = () => {
                 const data = await res.json();
                 const addr = data.address || {};
 
-                // Helper to clean address values (remove Plus Codes, Ward numbers etc)
                 const cleanValue = (val: string | undefined) => {
                     if (!val) return '';
                     const plusCodeRegex = /[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}/i;
                     let cleaned = val.replace(plusCodeRegex, '').trim();
                     cleaned = cleaned.replace(/Ward\s*(No\s*)?\d+/i, '').trim();
-                    // Also remove "Sector X", "Phase X" if it's too robotic, but maybe keep it?
-                    // For now, let's keep it but remove robotic "No" prefixes
                     return cleaned.replace(/^,|,$/g, '').trim();
                 };
 
-                // Robust extraction
                 const plotNo = cleanValue(addr.house_number || addr.housenumber || addr.building || addr.office || addr.shop || addr.place);
                 const street = cleanValue(addr.road || addr.street || addr.pedestrian || addr.cycleway);
                 const areaParts = [
@@ -101,14 +99,12 @@ const OwnerSignup = () => {
                     addr.hamlet
                 ].map(cleanValue).filter(Boolean);
 
-                // Take the most specific area name that isn't empty
                 const areaName = areaParts[0] || '';
 
                 setAddress(prev => {
                     const rawDisplayName = data.display_name || '';
                     const newFullAddress = providedAddress || rawDisplayName || prev.fullAddress;
 
-                    // Enhanced Coordinate Check & Construction
                     const isCoordsOnly = /^Lat:.*Lng:/.test(newFullAddress);
                     let constructedAddress = newFullAddress;
 
@@ -117,10 +113,6 @@ const OwnerSignup = () => {
                             .filter(Boolean)
                             .join(', ');
                     }
-
-                    // If the user's manual search was very specific (like "5310 Rome Dr"),
-                    // and the API returned a generic neighborhood name, we should trust the user's query more
-                    // for the display but keep the API's parsed parts for the DB.
 
                     return {
                         ...prev,
@@ -151,11 +143,19 @@ const OwnerSignup = () => {
         toast.info(`Plot area detected: ${area.toFixed(2)} sqm`);
     }, []);
 
+    const toggleModule = (module: string) => {
+        setSelectedModules(prev => 
+            prev.includes(module) 
+                ? prev.filter(m => m !== module) 
+                : [...prev, module]
+        );
+    };
+
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
 
         // Specific field validation with descriptive toasts
-        if (!formData.hatcheryName) return toast.error("Hatchery Name is required");
+        if (!formData.hatcheryName) return toast.error("Name is required");
         if (!formData.username) return toast.error("Username is required");
         if (!formData.password) return toast.error("Password is required");
 
@@ -170,9 +170,14 @@ const OwnerSignup = () => {
             return;
         }
 
+        if (selectedModules.length === 0) {
+            toast.error("Please select at least one module");
+            setStep(1);
+            return;
+        }
+
         try {
             setLoading(true);
-            // ... (rest of handlesignup stays same)
 
             // 1. Sign Up Auth User
             const emailToUse = formData.email || `${formData.username.toLowerCase().replace(/\s+/g, '')}@shrimpit.local`;
@@ -193,7 +198,7 @@ const OwnerSignup = () => {
 
             const userId = authData.user.id;
 
-            // 2. Create Hatchery with Address Details
+            // 2. Create Hatchery/Farm with Address Details and selected modules
             const { data: hatcheryData, error: hatcheryError } = await supabase
                 .from('hatcheries')
                 .insert([{
@@ -208,6 +213,7 @@ const OwnerSignup = () => {
                     plot_length_m: address.plotLength,
                     plot_width_m: address.plotWidth,
                     created_by: userId,
+                    modules: selectedModules,
                 }])
                 .select()
                 .single();
@@ -232,7 +238,7 @@ const OwnerSignup = () => {
                 throw new Error(`Failed to create profile: ${profileError.message}`);
             }
 
-            toast.success("Hatchery Owner Account Created!");
+            toast.success("Account Created Successfully!");
             navigate('/login');
 
         } catch (error: any) {
@@ -243,161 +249,301 @@ const OwnerSignup = () => {
         }
     };
 
+    const isFarmSelected = selectedModules.includes('FARMS');
+    const isHatcherySelected = selectedModules.includes('LRT') || selectedModules.includes('MATURATION');
+    
+    let entityLabel = "Hatchery Name";
+    let entityPlaceholder = "e.g. Sunrise Aqua";
+    let pageTitle = "Hatchery Owner Registration";
+    let pageSubtitle = "Create your Hatchery Account";
+
+    if (isFarmSelected && isHatcherySelected) {
+        entityLabel = "Hatchery / Farm (Firm) Name";
+        entityPlaceholder = "e.g. Sunrise Aquaculture Group";
+        pageTitle = "Hatchery & Farm Owner Registration";
+        pageSubtitle = "Create your Hatchery & Farm Account";
+    } else if (isFarmSelected) {
+        entityLabel = "Farm/Firm Name";
+        entityPlaceholder = "e.g. Sunrise Farm";
+        pageTitle = "Farm/Firm Owner Registration";
+        pageSubtitle = "Create your Farm/Firm Account";
+    }
+
     return (
         <div className="min-h-screen ocean-gradient flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-card rounded-2xl p-6 sm:p-8 shadow-2xl my-8">
+            <div className="w-full max-w-2xl bg-card rounded-2xl p-6 sm:p-8 shadow-2xl my-8 transition-all duration-300">
                 <div className="flex flex-col items-center mb-6">
                     <div className="flex items-center gap-2 mb-2">
-                        <Waves className="w-6 h-6 text-primary" />
+                        <Waves className="w-6 h-6 text-primary animate-pulse" />
                         <span className="text-xl font-bold">AquaNexus</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-foreground">Owner Registration</h1>
-                    <p className="text-muted-foreground text-sm">Create your Hatchery Account</p>
+                    <h1 className="text-2xl font-bold text-foreground">
+                        {step === 1 ? "Select Modules" : pageTitle}
+                    </h1>
+                    <p className="text-muted-foreground text-sm">
+                        {step === 1 ? "Choose which modules will be active for your account" : pageSubtitle}
+                    </p>
                 </div>
 
-                <form onSubmit={handleSignup} className="space-y-6">
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b pb-2">
-                            <h3 className="font-semibold text-lg">Account Details</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="hatcheryName">Hatchery Name *</Label>
-                                <Input id="hatcheryName" value={formData.hatcheryName} onChange={handleChange} placeholder="e.g. Sunrise Aqua" required />
+                {step === 1 ? (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 gap-4">
+                            {/* LRT Card */}
+                            <div 
+                                onClick={() => toggleModule('LRT')}
+                                className={`cursor-pointer border-2 rounded-2xl p-4 sm:p-5 flex items-start gap-4 transition-all duration-200 select-none ${
+                                    selectedModules.includes('LRT') 
+                                        ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' 
+                                        : 'border-muted hover:border-slate-300 bg-background/50'
+                                }`}
+                            >
+                                <div className={`p-2.5 rounded-xl ${selectedModules.includes('LRT') ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                    <Waves className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="font-bold text-base text-foreground">Larval Rearing (LRT)</h3>
+                                        {selectedModules.includes('LRT') && (
+                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Track larval cycles, water quality metrics, feeding regimes, Artemia/Algae preparation, stocking, observations, and shifting activities.
+                                    </p>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="username">Username *</Label>
-                                <Input id="username" value={formData.username} onChange={handleChange} placeholder="e.g. raju_owner" required />
+
+                            {/* MATURATION Card */}
+                            <div 
+                                onClick={() => toggleModule('MATURATION')}
+                                className={`cursor-pointer border-2 rounded-2xl p-4 sm:p-5 flex items-start gap-4 transition-all duration-200 select-none ${
+                                    selectedModules.includes('MATURATION') 
+                                        ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' 
+                                        : 'border-muted hover:border-slate-300 bg-background/50'
+                                }`}
+                            >
+                                <div className={`p-2.5 rounded-xl ${selectedModules.includes('MATURATION') ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                    <Sparkles className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="font-bold text-base text-foreground">Maturation</h3>
+                                        {selectedModules.includes('MATURATION') && (
+                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Advanced broodstock tracking, sourcing & mating, spawning logs, egg count records, nauplii harvest entries, and sales tracking.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* FARMS Card */}
+                            <div 
+                                onClick={() => toggleModule('FARMS')}
+                                className={`cursor-pointer border-2 rounded-2xl p-4 sm:p-5 flex items-start gap-4 transition-all duration-200 select-none ${
+                                    selectedModules.includes('FARMS') 
+                                        ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' 
+                                        : 'border-muted hover:border-slate-300 bg-background/50'
+                                }`}
+                            >
+                                <div className={`p-2.5 rounded-xl ${selectedModules.includes('FARMS') ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                    <Warehouse className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="font-bold text-base text-foreground">Farm / Firm</h3>
+                                        {selectedModules.includes('FARMS') && (
+                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Activate the standalone Farm/Firm module to configure customized grow-out operations, pond tracking, and site management.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email (Optional)</Label>
-                                <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="For recovery" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="phone">Phone (Optional)</Label>
-                                <Input id="phone" value={formData.phone} onChange={handleChange} placeholder="+91..." />
-                            </div>
+                        <div className="pt-2">
+                            <Button 
+                                type="button" 
+                                className="w-full h-12 text-base font-semibold shadow-lg shadow-primary/20"
+                                disabled={selectedModules.length === 0}
+                                onClick={() => setStep(2)}
+                            >
+                                Continue to Account Details
+                            </Button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="password">Password *</Label>
-                                <div className="relative">
+                        <div className="text-center">
+                            <Link to="/login" className="text-sm text-primary hover:underline">
+                                Already have an account? Login
+                            </Link>
+                        </div>
+                    </div>
+                ) : (
+                    <form onSubmit={handleSignup} className="space-y-6">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between border-b pb-2">
+                                <h3 className="font-semibold text-lg">Account Details</h3>
+                                <Button 
+                                    type="button" 
+                                    variant="link" 
+                                    onClick={() => setStep(1)} 
+                                    className="p-0 text-xs font-semibold h-auto"
+                                >
+                                    Modify Selected Modules
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="hatcheryName">{entityLabel} *</Label>
+                                    <Input id="hatcheryName" value={formData.hatcheryName} onChange={handleChange} placeholder={entityPlaceholder} required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="username">Username *</Label>
+                                    <Input id="username" value={formData.username} onChange={handleChange} placeholder="e.g. raju_owner" required />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email (Optional)</Label>
+                                    <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="For recovery" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="phone">Phone (Optional)</Label>
+                                    <Input id="phone" value={formData.phone} onChange={handleChange} placeholder="+91..." />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="password">Password *</Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="password"
+                                            type={showPass ? 'text' : 'password'}
+                                            value={formData.password}
+                                            onChange={handleChange}
+                                            required
+                                        />
+                                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-2.5 text-muted-foreground">
+                                            {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="confirmPassword">Confirm *</Label>
                                     <Input
-                                        id="password"
-                                        type={showPass ? 'text' : 'password'}
-                                        value={formData.password}
+                                        id="confirmPassword"
+                                        type="password"
+                                        value={formData.confirmPassword}
                                         onChange={handleChange}
                                         required
                                     />
-                                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-2.5 text-muted-foreground">
-                                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
                                 </div>
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="confirmPassword">Confirm *</Label>
-                                <Input
-                                    id="confirmPassword"
-                                    type="password"
-                                    value={formData.confirmPassword}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b pb-2 pt-2">
-                            <h3 className="font-semibold text-lg flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-primary" /> Location & Address
-                            </h3>
-                            <Dialog open={mapOpen} onOpenChange={setMapOpen}>
-                                <DialogTrigger asChild>
-                                    <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
-                                        <LocateFixed className="w-4 h-4" /> Pick on Map
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
-                                    <DialogHeader className="p-6 pb-2">
-                                        <DialogTitle className="text-2xl font-bold flex items-center gap-3">
-                                            <LocateFixed className="w-6 h-6 text-primary" />
-                                            Select Hatchery Location & Plot Area
-                                        </DialogTitle>
-                                    </DialogHeader>
-                                    <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
-                                        <MapPicker
-                                            onLocationSelect={handleLocationSelect}
-                                            onPlotAreaSelect={handlePlotAreaSelect}
-                                        />
-                                    </div>
-                                    <div className="p-4 bg-card flex justify-end gap-3">
-                                        <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
-                                        <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
-                                    </div>
-                                </DialogContent>
-                            </Dialog>
                         </div>
 
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between border-b pb-2 pt-2">
+                                <h3 className="font-semibold text-lg flex items-center gap-2">
+                                    <MapPin className="w-5 h-5 text-primary" /> Location & Address
+                                </h3>
+                                <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
+                                            <LocateFixed className="w-4 h-4" /> Pick on Map
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
+                                        <DialogHeader className="p-6 pb-2">
+                                            <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                                                <LocateFixed className="w-6 h-6 text-primary" />
+                                                Select Location & Plot Area
+                                            </DialogTitle>
+                                        </DialogHeader>
+                                        <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
+                                            <MapPicker
+                                                onLocationSelect={handleLocationSelect}
+                                                onPlotAreaSelect={handlePlotAreaSelect}
+                                            />
+                                        </div>
+                                        <div className="p-4 bg-card flex justify-end gap-3">
+                                            <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
+                                            <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
+                                        </div>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
 
-                        <div className="space-y-2 relative">
-                            <Label htmlFor="fullAddress" className="text-muted-foreground text-xs uppercase font-bold flex items-center gap-2">
-                                Full Address {addressLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-                            </Label>
-                            <Textarea
-                                id="fullAddress"
-                                value={address.fullAddress}
-                                onChange={(e) => setAddress(prev => ({ ...prev, fullAddress: e.target.value }))}
-                                placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
-                                className="h-20"
-                            />
+                            <div className="space-y-2 relative">
+                                <Label htmlFor="fullAddress" className="text-muted-foreground text-xs uppercase font-bold flex items-center gap-2">
+                                    Full Address {addressLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                                </Label>
+                                <Textarea
+                                    id="fullAddress"
+                                    value={address.fullAddress}
+                                    onChange={(e) => setAddress(prev => ({ ...prev, fullAddress: e.target.value }))}
+                                    placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
+                                    className="h-20"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3 bg-muted/30 p-3 rounded-xl border border-dashed">
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plot Area (m²)</Label>
+                                    <Input
+                                        type="number"
+                                        value={address.plotArea || ''}
+                                        onChange={(e) => setAddress(prev => ({ ...prev, plotArea: parseFloat(e.target.value) || 0 }))}
+                                        className="h-8 text-sm bg-background"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Length (m)</Label>
+                                    <Input
+                                        type="number"
+                                        value={address.plotLength || ''}
+                                        onChange={(e) => setAddress(prev => ({ ...prev, plotLength: parseFloat(e.target.value) || 0 }))}
+                                        className="h-8 text-sm bg-background"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Width (m)</Label>
+                                    <Input
+                                        type="number"
+                                        value={address.plotWidth || ''}
+                                        onChange={(e) => setAddress(prev => ({ ...prev, plotWidth: parseFloat(e.target.value) || 0 }))}
+                                        className="h-8 text-sm bg-background"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3 bg-muted/30 p-3 rounded-xl border border-dashed">
-                            <div className="space-y-1">
-                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plot Area (m²)</Label>
-                                <Input
-                                    type="number"
-                                    value={address.plotArea || ''}
-                                    onChange={(e) => setAddress(prev => ({ ...prev, plotArea: parseFloat(e.target.value) || 0 }))}
-                                    className="h-8 text-sm bg-background"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Length (m)</Label>
-                                <Input
-                                    type="number"
-                                    value={address.plotLength || ''}
-                                    onChange={(e) => setAddress(prev => ({ ...prev, plotLength: parseFloat(e.target.value) || 0 }))}
-                                    className="h-8 text-sm bg-background"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Width (m)</Label>
-                                <Input
-                                    type="number"
-                                    value={address.plotWidth || ''}
-                                    onChange={(e) => setAddress(prev => ({ ...prev, plotWidth: parseFloat(e.target.value) || 0 }))}
-                                    className="h-8 text-sm bg-background"
-                                />
-                            </div>
+                        <div className="flex gap-4">
+                            <Button type="button" variant="outline" className="h-12 w-28" onClick={() => setStep(1)} disabled={loading}>
+                                Back
+                            </Button>
+                            <Button type="submit" className="flex-1 h-12 text-lg shadow-lg shadow-primary/20" disabled={loading}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Account'}
+                            </Button>
                         </div>
-                    </div>
 
-                    <Button type="submit" className="w-full h-12 text-lg shadow-lg shadow-primary/20" disabled={loading}>
-                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Hatchery Account'}
-                    </Button>
-
-                    <div className="text-center mt-4">
-                        <Link to="/login" className="text-sm text-primary hover:underline">
-                            Already have an account? Login
-                        </Link>
-                    </div>
-                </form>
+                        <div className="text-center mt-4">
+                            <Link to="/login" className="text-sm text-primary hover:underline">
+                                Already have an account? Login
+                            </Link>
+                        </div>
+                    </form>
+                )}
             </div>
         </div>
     );

@@ -452,12 +452,32 @@ const UserDashboard = () => {
 
                 {/* Module Toggle */}
                 <div className="mt-4 flex justify-center">
-                    <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-[280px]">
-                        <TabsList className="grid grid-cols-2 bg-black/20 text-white rounded-xl h-8">
-                            <TabsTrigger value="LRT" className="text-[10px] font-bold">LRT</TabsTrigger>
-                            <TabsTrigger value="MATURATION" className="text-[10px] font-bold">MATURATION</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+                    {(user?.modules || ['LRT', 'MATURATION']).length === 1 ? (
+                        <span className="bg-black/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            {activeModule === 'FARMS' 
+                                ? 'FARM / FIRM MANAGEMENT' 
+                                : activeModule === 'MATURATION' 
+                                    ? 'MATURATION MODULE' 
+                                    : 'LRT MODULE'}
+                        </span>
+                    ) : (
+                        <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-full max-w-[280px]">
+                            <TabsList className={`grid w-full bg-black/20 text-white rounded-xl h-8 p-0.5 ${
+                                (user?.modules || ['LRT', 'MATURATION']).length === 3 ? 'grid-cols-3' : 'grid-cols-2'
+                            }`}>
+                                {(user?.modules || ['LRT', 'MATURATION']).includes('LRT') && (
+                                    <TabsTrigger value="LRT" className="text-[10px] font-bold">LRT</TabsTrigger>
+                                )}
+                                {(user?.modules || ['LRT', 'MATURATION']).includes('MATURATION') && (
+                                    <TabsTrigger value="MATURATION" className="text-[10px] font-bold">MATURATION</TabsTrigger>
+                                )}
+                                {(user?.modules || ['LRT', 'MATURATION']).includes('FARMS') && (
+                                    <TabsTrigger value="FARMS" className="text-[10px] font-bold">FARM/FIRM</TabsTrigger>
+                                )}
+                            </TabsList>
+                        </Tabs>
+                    )}
                 </div>
 
                 <div className="mt-4 flex flex-col sm:flex-row gap-2">
@@ -476,7 +496,7 @@ const UserDashboard = () => {
                             {availableFarmsForModule.map(f => (
                                 <DropdownMenuItem key={f.id} onClick={() => {
                                     setActiveFarmId(f.id);
-                                    const farmModule = (f.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION';
+                                    const farmModule = (f.category || 'LRT').toUpperCase() as 'LRT' | 'MATURATION' | 'FARMS';
                                     if (farmModule !== activeModule) setActiveModule(farmModule);
                                 }}>
                                     {f.name} ({f.category})
@@ -701,28 +721,40 @@ const UserDashboard = () => {
 
             {/* Grid */}
             <div className="px-4 mt-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {activities.map(act => (
+                {activeModule === 'FARMS' ? (
+                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
+                        <Warehouse className="w-10 h-10 text-indigo-500 opacity-80" />
+                        <div>
+                            <h3 className="font-bold text-sm text-slate-800">Farm / Firm Site Operations</h3>
+                            <p className="text-xs text-muted-foreground mt-1 px-4 leading-normal">
+                                Daily tasks, feeding cards, and harvesting entries for this grow-out site will appear here as soon as configured by your owner.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {activities.map(act => (
+                            <Button 
+                                key={act.name} 
+                                variant="outline" 
+                                className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
+                                onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId || ''}&batch=${activeBroodstockBatchId || ''}&category=${activeModule}`)}
+                            >
+                                <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
+                                <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
+                            </Button>
+                        ))}
                         <Button 
-                            key={act.name} 
                             variant="outline" 
-                            className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
-                            onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId || ''}&batch=${activeBroodstockBatchId || ''}&category=${activeModule}`)}
+                            data-testid="daily-report-button"
+                            className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" 
+                            onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
                         >
-                            <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
-                            <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
+                            <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
+                            <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
                         </Button>
-                    ))}
-                    <Button 
-                        variant="outline" 
-                        data-testid="daily-report-button"
-                        className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" 
-                        onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
-                    >
-                        <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
-                        <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
-                    </Button>
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Today's Tasks/Instructions - For workers OR supervisors in activity mode */}

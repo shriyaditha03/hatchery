@@ -1,62 +1,62 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-    User, LogOut, PlusCircle, Warehouse, Users,
-    Utensils, Beaker, Eye, Search, Layers, UserPlus, Waves, FileText, ChevronDown, Tags,
-    FlaskConical, Leaf, MapPin, Scissors, MoveRight, Heart, Sparkles, ShoppingCart, ArrowUpRight, Database, Droplets
+import { 
+    Utensils, Beaker, Waves, Search, Layers, Eye, Scissors, 
+    MoveRight, FlaskConical, Leaf, Droplets, Heart, Sparkles, 
+    ArrowUpRight, ShoppingCart, UserPlus, PlusCircle, LogOut, 
+    User, Warehouse, Users, FileText, Tags, ChevronDown, MapPin, 
+    ClipboardList, CheckCircle2, TrendingUp, ShieldAlert, MonitorPlay
 } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
+    DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
 import logo from '@/assets/aqua-nexus-logo.png';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
 
 const OwnerDashboard = () => {
-    const { 
-        user, logout, 
-        activeFarmId, setActiveFarmId, 
-        activeModule, setActiveModule,
-        activeBroodstockBatchId, setActiveBroodstockBatchId
-    } = useAuth();
     const navigate = useNavigate();
+    const { user, logout, activeFarmId, setActiveFarmId, activeModule, setActiveModule, setActiveBroodstockBatchId } = useAuth();
     const [farms, setFarms] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // Fetch Farms
     useEffect(() => {
         if (user?.hatchery_id) {
-            supabase
-                .from('farms')
-                .select('id, name, category, address')
-                .eq('hatchery_id', user.hatchery_id)
-                .order('created_at', { ascending: true })
-                .then(({ data, error }) => {
-                    if (error) {
-                        console.error('Error fetching farms:', error);
-                        return;
-                    }
-                    setFarms(data || []);
-                });
+            fetchFarms();
         }
-    }, [user?.hatchery_id]);
+    }, [user]);
 
-    // State validation logic - ensuring active selections match accessibility/module
+    const fetchFarms = async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('farms')
+                .select('*')
+                .eq('hatchery_id', user.hatchery_id)
+                .order('name', { ascending: true });
+
+            if (error) throw error;
+            setFarms(data || []);
+        } catch (error) {
+            console.error('Error fetching farms:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Auto-selection logic for active farm when activeModule or farms load
     useEffect(() => {
         if (farms.length > 0) {
-            const currentFarm = farms.find(f => f.id === activeFarmId);
             const farmsInModule = farms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
-
-            // 1. If we have an active farm, validate it against the current module
-            if (activeFarmId && currentFarm) {
-                if ((currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
+            
+            // 1. If currently selected farm is not in this module, select a default one or clear
+            if (activeFarmId) {
+                const currentFarm = farms.find(f => f.id === activeFarmId);
+                if (!currentFarm || (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
                     // Try to auto-select if exactly 1 farm in new module
                     if (farmsInModule.length === 1) {
                         setActiveFarmId(farmsInModule[0].id);
@@ -75,7 +75,7 @@ const OwnerDashboard = () => {
 
     // Handle module switch
     const handleModuleChange = (module: string) => {
-        const newModule = module as 'LRT' | 'MATURATION';
+        const newModule = module as 'LRT' | 'MATURATION' | 'FARMS';
         setActiveModule(newModule);
         
         // If current active farm project is not in the new module, clear selection or auto-select if exactly 1
@@ -91,6 +91,8 @@ const OwnerDashboard = () => {
     };
 
     if (!user) return null;
+
+    const userModules = user.modules || ['LRT', 'MATURATION'];
 
     const lrtActivities = [
         { name: 'Feed', icon: Utensils, route: '/owner/reports/feed', color: 'bg-orange-100 text-orange-600' },
@@ -186,26 +188,54 @@ const OwnerDashboard = () => {
 
                 {/* Module Toggle */}
                 <div className="mt-3 flex justify-center">
-                    <Tabs value={activeModule} onValueChange={handleModuleChange} className="w-full max-w-[280px]">
-                        <TabsList className="grid w-full grid-cols-2 bg-white/10 text-white rounded-xl h-8 p-0.5">
-                            <TabsTrigger 
-                                value="LRT" 
-                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
-                            >
-                                LRT
-                            </TabsTrigger>
-                            <TabsTrigger 
-                                value="MATURATION" 
-                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-xs"
-                            >
-                                MATURATION
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+                    {userModules.length === 1 ? (
+                        <span className="bg-white/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            {activeModule === 'FARMS' 
+                                ? 'FARM / FIRM MANAGEMENT' 
+                                : activeModule === 'MATURATION' 
+                                    ? 'MATURATION MODULE' 
+                                    : 'LRT MODULE'}
+                        </span>
+                    ) : (
+                        <Tabs value={activeModule} onValueChange={handleModuleChange} className="w-full max-w-[320px]">
+                            <TabsList className={`grid w-full bg-white/10 text-white rounded-xl h-8 p-0.5 ${
+                                userModules.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
+                            }`}>
+                                {userModules.includes('LRT') && (
+                                    <TabsTrigger 
+                                        value="LRT" 
+                                        className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]"
+                                    >
+                                        LRT
+                                    </TabsTrigger>
+                                )}
+                                {userModules.includes('MATURATION') && (
+                                    <TabsTrigger 
+                                        value="MATURATION" 
+                                        className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]"
+                                    >
+                                        MATURATION
+                                    </TabsTrigger>
+                                )}
+                                {userModules.includes('FARMS') && (
+                                    <TabsTrigger 
+                                        value="FARMS" 
+                                        className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]"
+                                    >
+                                        FARM/FIRM
+                                    </TabsTrigger>
+                                )}
+                            </TabsList>
+                        </Tabs>
+                    )}
                 </div>
 
+                {/* Active Farm Switcher - Only display if not FARMS module, or display as appropriate */}
                 <div className="mt-3 flex flex-col gap-1">
-                    <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">Active Farm</label>
+                    <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">
+                        {activeModule === 'FARMS' ? 'Active Farm/Firm Site' : 'Active Farm'}
+                    </label>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-64 justify-between bg-white/10 hover:bg-white/20 text-white border-none h-9 font-semibold text-sm">
@@ -214,7 +244,7 @@ const OwnerDashboard = () => {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-full sm:w-64">
-                            <DropdownMenuLabel>Switch Farm</DropdownMenuLabel>
+                            <DropdownMenuLabel>Switch Site</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             {filteredFarms.length > 0 ? (
                                 filteredFarms.map(farm => (
@@ -227,11 +257,11 @@ const OwnerDashboard = () => {
                                     </DropdownMenuItem>
                                 ))
                             ) : (
-                                <DropdownMenuItem disabled>No {activeModule} farms</DropdownMenuItem>
+                                <DropdownMenuItem disabled>No {activeModule} sites</DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => navigate('/owner/create-farm')}>
-                                <PlusCircle className="mr-2 h-4 w-4" /> Add New Farm
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add New Site
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -242,13 +272,77 @@ const OwnerDashboard = () => {
                         </p>
                     )}
                 </div>
-
-                {/* Quick Stats or Info could go here */}
             </div>
 
             {/* Main Grid */}
             <div className="px-4 -mt-6 relative z-10">
-                {filteredFarms.length === 0 ? (
+                {activeModule === 'FARMS' ? (
+                    /* Highly Polished Premium Farm/Firm Module Panel */
+                    <div className="bg-card/80 backdrop-blur-md rounded-3xl border shadow-xl p-6 sm:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div className="flex flex-col items-center text-center gap-4 border-b pb-6 border-muted">
+                            <div className="w-16 h-16 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-200/50">
+                                <Warehouse className="w-9 h-9 text-white" />
+                            </div>
+                            <div className="space-y-1">
+                                <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider border border-indigo-100">
+                                    Farm / Firm Console Active
+                                </span>
+                                <h3 className="font-extrabold text-xl text-slate-800 tracking-tight mt-2">Grow-out & Pond Management</h3>
+                                <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                                    Configure customized grow-out operations, pond parameters, staff rosters, feed logs, and bulk harvesting operations for your commercial sites.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* Feature 1 */}
+                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
+                                <div className="p-2 rounded-xl bg-blue-100 text-blue-600 mt-0.5">
+                                    <Layers className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-slate-800">Custom Grow-out Logs</h4>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Pond stocking densities, daily biological growth rates, and survivor counts.</p>
+                                </div>
+                            </div>
+
+                            {/* Feature 2 */}
+                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
+                                <div className="p-2 rounded-xl bg-orange-100 text-orange-600 mt-0.5">
+                                    <TrendingUp className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-slate-800">Commercial Analytics</h4>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Visual charts representing feed conversion ratios (FCR) and weekly biomass growth.</p>
+                                </div>
+                            </div>
+
+                            {/* Feature 3 */}
+                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
+                                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-600 mt-0.5">
+                                    <PlusCircle className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-slate-800">Dynamic Sites</h4>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Add concrete or earthen grow-out ponds with precise coordinates and surface areas.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-indigo-50/30 border border-dashed border-indigo-100 rounded-2xl p-5 text-center flex flex-col items-center justify-center gap-3">
+                            <ShieldAlert className="w-6 h-6 text-indigo-500" />
+                            <div>
+                                <h4 className="text-xs font-bold text-indigo-900">Custom Farm Module Configuration</h4>
+                                <p className="text-[10px] text-indigo-700/80 max-w-sm mt-1 mx-auto leading-normal">
+                                    You have successfully initialized the Farm module structure. Farm activity logs, telemetry dashboard, and operations config will appear here.
+                                </p>
+                            </div>
+                            <Button onClick={() => navigate('/owner/create-farm')} className="mt-1 h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">
+                                <PlusCircle className="w-4 h-4 mr-2" /> Add Grow-out Site
+                            </Button>
+                        </div>
+                    </div>
+                ) : filteredFarms.length === 0 ? (
                     <div className="bg-card p-8 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-4">
                         <Warehouse className="w-12 h-12 text-muted-foreground opacity-50" />
                         <div>
@@ -273,7 +367,7 @@ const OwnerDashboard = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {/* 6 Activity Icons */}
+                        {/* Activity Icons */}
                         {activities.map((act) => {
                             const Icon = act.icon;
                             return (

@@ -99,7 +99,7 @@ const LoginPage = () => {
         </p>
 
         <div className="mt-8 pt-6 border-t text-center">
-          <Link to="/owner/signup" className="text-sm text-primary hover:underline">Register Hatchery (Owner Only)</Link>
+          <Link to="/owner/signup" className="text-sm text-primary hover:underline">Register Hatchery/Firm (Owner Only)</Link>
         </div>
       </div>
     </div>
