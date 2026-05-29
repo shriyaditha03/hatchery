@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,8 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Cylinder, Plus, Check, Trash2, Copy, ChevronDown, ChevronUp, Utensils, Waves, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Plus, Copy, Trash2, ArrowRight, LocateFixed, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
@@ -144,6 +147,104 @@ const CreateFarm = () => {
 
     const [sections, setSections] = useState<SectionConfig[]>([]);
     const [collapsedSections, setCollapsedSections] = useState<number[]>([]);
+
+    const [address, setAddress] = useState<AddressConfig>({
+        plotNumber: '',
+        areaName: '',
+        street: '',
+        city: '',
+        state: '',
+        pincode: '',
+        fullAddress: '',
+        latitude: null,
+        longitude: null,
+        plotArea: 0,
+        plotLength: 0,
+        plotWidth: 0
+    });
+    const [addressLoading, setAddressLoading] = useState(false);
+    const [mapOpen, setMapOpen] = useState(false);
+
+    const handleLocationSelect = useCallback(async (lat: number, lng: number, providedAddress?: string) => {
+        setAddress(prev => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            fullAddress: providedAddress || prev.fullAddress || `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`
+        }));
+
+        setAddressLoading(true);
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            if (res.ok) {
+                const data = await res.json();
+                const addr = data.address || {};
+
+                const cleanValue = (val: string | undefined) => {
+                    if (!val) return '';
+                    const plusCodeRegex = /[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}/i;
+                    let cleaned = val.replace(plusCodeRegex, '').trim();
+                    cleaned = cleaned.replace(/Ward\s*(No\s*)?\d+/i, '').trim();
+                    return cleaned.replace(/^,|,$/g, '').trim();
+                };
+
+                const plotNo = cleanValue(addr.house_number || addr.housenumber || addr.building || addr.office || addr.shop || addr.place);
+                const street = cleanValue(addr.road || addr.street || addr.pedestrian || addr.cycleway);
+                const areaParts = [
+                    addr.suburb,
+                    addr.neighbourhood,
+                    addr.residential,
+                    addr.subdistrict,
+                    addr.district,
+                    addr.quarter,
+                    addr.city_district,
+                    addr.village,
+                    addr.hamlet
+                ].map(cleanValue).filter(Boolean);
+
+                const areaName = areaParts[0] || '';
+
+                setAddress(prev => {
+                    const rawDisplayName = data.display_name || '';
+                    const newFullAddress = providedAddress || rawDisplayName || prev.fullAddress;
+
+                    const isCoordsOnly = /^Lat:.*Lng:/.test(newFullAddress);
+                    let constructedAddress = newFullAddress;
+
+                    if (isCoordsOnly || (rawDisplayName.length < 20 && !rawDisplayName.includes(','))) {
+                        constructedAddress = [plotNo, street, areaName, addr.city || addr.town || addr.village, addr.state, addr.postcode]
+                            .filter(Boolean)
+                            .join(', ');
+                    }
+
+                    return {
+                        ...prev,
+                        plotNumber: plotNo || prev.plotNumber,
+                        street: street || prev.street,
+                        areaName: areaName || prev.areaName,
+                        city: addr.city || addr.town || addr.village || addr.municipality || prev.city,
+                        state: addr.state || prev.state,
+                        pincode: addr.postcode || prev.pincode,
+                        fullAddress: constructedAddress || prev.fullAddress
+                    };
+                });
+            }
+        } catch (error) {
+            console.error("Failed to fetch address:", error);
+        } finally {
+            setAddressLoading(false);
+        }
+    }, []);
+
+    const handlePlotAreaSelect = useCallback((area: number, length: number, width: number) => {
+        setAddress(prev => ({
+            ...prev,
+            plotArea: Math.round(area * 100) / 100,
+            plotLength: Math.round(length * 100) / 100,
+            plotWidth: Math.round(width * 100) / 100
+        }));
+        toast.info(`Plot area detected: ${area.toFixed(2)} sqm`);
+    }, []);
 
     const calculateTank = (tank: TankConfig): { volume: number, area: number } => {
         let volume = 0;
@@ -497,7 +598,18 @@ const CreateFarm = () => {
             // 1. Create Farm
             const { data: farm, error: farmError } = await supabase
                 .from('farms')
-                .insert([{ hatchery_id: user.hatchery_id, name: farmName, category: farmCategory }])
+                .insert([{ 
+                    hatchery_id: user.hatchery_id, 
+                    name: farmName, 
+                    category: farmCategory,
+                    location: address.city || address.areaName || 'Unknown',
+                    address: address.fullAddress,
+                    latitude: address.latitude,
+                    longitude: address.longitude,
+                    plot_area_sqm: address.plotArea,
+                    plot_length_m: address.plotLength,
+                    plot_width_m: address.plotWidth
+                }])
                 .select().single();
 
             if (farmError) throw farmError;
@@ -888,6 +1000,82 @@ const CreateFarm = () => {
                                      <p className="text-[10px] text-muted-foreground">You can add more sections later</p>
                                 </div>
                             )}
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between border-b pb-2 pt-2">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                                        <MapPin className="w-5 h-5 text-primary" /> Location & Address
+                                    </h3>
+                                    <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
+                                                <LocateFixed className="w-4 h-4" /> Pick on Map
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
+                                            <DialogHeader className="p-6 pb-2">
+                                                <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                                                    <LocateFixed className="w-6 h-6 text-primary" />
+                                                    Select Location & Plot Area
+                                                </DialogTitle>
+                                            </DialogHeader>
+                                            <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
+                                                <MapPicker
+                                                    onLocationSelect={handleLocationSelect}
+                                                    onPlotAreaSelect={handlePlotAreaSelect}
+                                                />
+                                            </div>
+                                            <div className="p-4 bg-card flex justify-end gap-3">
+                                                <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
+                                                <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+
+                                <div className="space-y-2 relative">
+                                    <Label htmlFor="fullAddress" className="text-muted-foreground text-xs uppercase font-bold flex items-center gap-2">
+                                        Full Address {addressLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                                    </Label>
+                                    <Textarea
+                                        id="fullAddress"
+                                        value={address.fullAddress}
+                                        onChange={(e) => setAddress(prev => ({ ...prev, fullAddress: e.target.value }))}
+                                        placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
+                                        className="h-20"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3 bg-muted/30 p-3 rounded-xl border border-dashed">
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plot Area (m²)</Label>
+                                        <Input
+                                            type="number"
+                                            value={address.plotArea || ''}
+                                            onChange={(e) => setAddress(prev => ({ ...prev, plotArea: parseFloat(e.target.value) || 0 }))}
+                                            className="h-8 text-sm bg-background"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Length (m)</Label>
+                                        <Input
+                                            type="number"
+                                            value={address.plotLength || ''}
+                                            onChange={(e) => setAddress(prev => ({ ...prev, plotLength: parseFloat(e.target.value) || 0 }))}
+                                            className="h-8 text-sm bg-background"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Width (m)</Label>
+                                        <Input
+                                            type="number"
+                                            value={address.plotWidth || ''}
+                                            onChange={(e) => setAddress(prev => ({ ...prev, plotWidth: parseFloat(e.target.value) || 0 }))}
+                                            className="h-8 text-sm bg-background"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
                             <Button onClick={handleContinueToSetup} className="w-full h-12 rounded-xl text-md font-bold shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
                                 Continue to Tank Setup <ArrowRight className="ml-2 w-5 h-5" />

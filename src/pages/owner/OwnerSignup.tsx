@@ -164,12 +164,6 @@ const OwnerSignup = () => {
             return;
         }
 
-        if (!address.latitude || !address.longitude) {
-            toast.error("Please pick a location on the map");
-            setMapOpen(true);
-            return;
-        }
-
         if (selectedModules.length === 0) {
             toast.error("Please select at least one module");
             setStep(1);
@@ -203,15 +197,15 @@ const OwnerSignup = () => {
                 .from('hatcheries')
                 .insert([{
                     name: formData.hatcheryName,
-                    location: address.city || address.areaName || 'Unknown',
-                    address: address.fullAddress,
-                    plot_number: address.plotNumber,
-                    area_name: address.areaName,
-                    latitude: address.latitude,
-                    longitude: address.longitude,
-                    plot_area_sqm: address.plotArea,
-                    plot_length_m: address.plotLength,
-                    plot_width_m: address.plotWidth,
+                    location: 'Unknown',
+                    address: null,
+                    plot_number: null,
+                    area_name: null,
+                    latitude: null,
+                    longitude: null,
+                    plot_area_sqm: null,
+                    plot_length_m: null,
+                    plot_width_m: null,
                     created_by: userId,
                     modules: selectedModules,
                 }])
@@ -252,22 +246,10 @@ const OwnerSignup = () => {
     const isFarmSelected = selectedModules.includes('FARMS');
     const isHatcherySelected = selectedModules.includes('LRT') || selectedModules.includes('MATURATION');
     
-    let entityLabel = "Hatchery Name";
-    let entityPlaceholder = "e.g. Sunrise Aqua";
-    let pageTitle = "Hatchery Owner Registration";
-    let pageSubtitle = "Create your Hatchery Account";
-
-    if (isFarmSelected && isHatcherySelected) {
-        entityLabel = "Hatchery / Farm (Firm) Name";
-        entityPlaceholder = "e.g. Sunrise Aquaculture Group";
-        pageTitle = "Hatchery & Farm Owner Registration";
-        pageSubtitle = "Create your Hatchery & Farm Account";
-    } else if (isFarmSelected) {
-        entityLabel = "Farm/Firm Name";
-        entityPlaceholder = "e.g. Sunrise Farm";
-        pageTitle = "Farm/Firm Owner Registration";
-        pageSubtitle = "Create your Farm/Firm Account";
-    }
+    let entityLabel = "Firm Name";
+    let entityPlaceholder = "e.g. Sunrise Aquaculture Group";
+    let pageTitle = "Firm Registration";
+    let pageSubtitle = "Create your Firm Account";
 
     return (
         <div className="min-h-screen ocean-gradient flex items-center justify-center p-4">
@@ -288,6 +270,39 @@ const OwnerSignup = () => {
                 {step === 1 ? (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 gap-4">
+                            {/* FARMS Card */}
+                            <div 
+                                onClick={() => toggleModule('FARMS')}
+                                className={`cursor-pointer border-2 rounded-2xl p-4 sm:p-5 flex items-start gap-4 transition-all duration-200 select-none ${
+                                    selectedModules.includes('FARMS') 
+                                        ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' 
+                                        : 'border-muted hover:border-slate-300 bg-background/50'
+                                }`}
+                            >
+                                <div className={`p-2.5 rounded-xl ${selectedModules.includes('FARMS') ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                    <Warehouse className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="font-bold text-base text-foreground">Farm / Culture</h3>
+                                        {selectedModules.includes('FARMS') && (
+                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Activate the standalone Farm/Culture module to configure customized grow-out operations, pond tracking, and site management.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 mb-1 pl-1">
+                                <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                                    <Waves className="w-5 h-5 text-primary" /> Hatchery
+                                </h2>
+                            </div>
+
                             {/* LRT Card */}
                             <div 
                                 onClick={() => toggleModule('LRT')}
@@ -338,33 +353,6 @@ const OwnerSignup = () => {
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Advanced broodstock tracking, sourcing & mating, spawning logs, egg count records, nauplii harvest entries, and sales tracking.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* FARMS Card */}
-                            <div 
-                                onClick={() => toggleModule('FARMS')}
-                                className={`cursor-pointer border-2 rounded-2xl p-4 sm:p-5 flex items-start gap-4 transition-all duration-200 select-none ${
-                                    selectedModules.includes('FARMS') 
-                                        ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' 
-                                        : 'border-muted hover:border-slate-300 bg-background/50'
-                                }`}
-                            >
-                                <div className={`p-2.5 rounded-xl ${selectedModules.includes('FARMS') ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                                    <Warehouse className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1 space-y-1">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="font-bold text-base text-foreground">Farm / Firm</h3>
-                                        {selectedModules.includes('FARMS') && (
-                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
-                                                <Check className="w-3 h-3 stroke-[3]" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                        Activate the standalone Farm/Firm module to configure customized grow-out operations, pond tracking, and site management.
                                     </p>
                                 </div>
                             </div>
@@ -447,82 +435,6 @@ const OwnerSignup = () => {
                                         value={formData.confirmPassword}
                                         onChange={handleChange}
                                         required
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b pb-2 pt-2">
-                                <h3 className="font-semibold text-lg flex items-center gap-2">
-                                    <MapPin className="w-5 h-5 text-primary" /> Location & Address
-                                </h3>
-                                <Dialog open={mapOpen} onOpenChange={setMapOpen}>
-                                    <DialogTrigger asChild>
-                                        <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
-                                            <LocateFixed className="w-4 h-4" /> Pick on Map
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
-                                        <DialogHeader className="p-6 pb-2">
-                                            <DialogTitle className="text-2xl font-bold flex items-center gap-3">
-                                                <LocateFixed className="w-6 h-6 text-primary" />
-                                                Select Location & Plot Area
-                                            </DialogTitle>
-                                        </DialogHeader>
-                                        <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
-                                            <MapPicker
-                                                onLocationSelect={handleLocationSelect}
-                                                onPlotAreaSelect={handlePlotAreaSelect}
-                                            />
-                                        </div>
-                                        <div className="p-4 bg-card flex justify-end gap-3">
-                                            <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
-                                            <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-
-                            <div className="space-y-2 relative">
-                                <Label htmlFor="fullAddress" className="text-muted-foreground text-xs uppercase font-bold flex items-center gap-2">
-                                    Full Address {addressLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-                                </Label>
-                                <Textarea
-                                    id="fullAddress"
-                                    value={address.fullAddress}
-                                    onChange={(e) => setAddress(prev => ({ ...prev, fullAddress: e.target.value }))}
-                                    placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
-                                    className="h-20"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-3 bg-muted/30 p-3 rounded-xl border border-dashed">
-                                <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plot Area (m²)</Label>
-                                    <Input
-                                        type="number"
-                                        value={address.plotArea || ''}
-                                        onChange={(e) => setAddress(prev => ({ ...prev, plotArea: parseFloat(e.target.value) || 0 }))}
-                                        className="h-8 text-sm bg-background"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Length (m)</Label>
-                                    <Input
-                                        type="number"
-                                        value={address.plotLength || ''}
-                                        onChange={(e) => setAddress(prev => ({ ...prev, plotLength: parseFloat(e.target.value) || 0 }))}
-                                        className="h-8 text-sm bg-background"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Width (m)</Label>
-                                    <Input
-                                        type="number"
-                                        value={address.plotWidth || ''}
-                                        onChange={(e) => setAddress(prev => ({ ...prev, plotWidth: parseFloat(e.target.value) || 0 }))}
-                                        className="h-8 text-sm bg-background"
                                     />
                                 </div>
                             </div>

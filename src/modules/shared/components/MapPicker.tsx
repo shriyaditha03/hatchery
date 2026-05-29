@@ -494,61 +494,63 @@ export const MapPicker = ({ onLocationSelect, onPlotAreaSelect, initialLat = 17.
                     )}
                 </button>
 
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (drawingMode && points.length >= 3) {
-                            // Finish Polygon
-                            if (polygonRef.current) {
-                                polygonRef.current.setStyle({ dashArray: '' }); // Make solid
+                {onPlotAreaSelect && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (drawingMode && points.length >= 3) {
+                                // Finish Polygon
+                                if (polygonRef.current) {
+                                    polygonRef.current.setStyle({ dashArray: '' }); // Make solid
 
-                                const area = calculatePolygonArea(points);
-                                if (onPlotAreaSelect) {
-                                    const bounds = polygonRef.current.getBounds();
-                                    const sw = bounds.getSouthWest();
-                                    const ne = bounds.getNorthEast();
-                                    const width = sw.distanceTo(L.latLng(sw.lat, ne.lng));
-                                    const height = sw.distanceTo(L.latLng(ne.lat, sw.lng));
-                                    onPlotAreaSelect(area, width, height);
+                                    const area = calculatePolygonArea(points);
+                                    if (onPlotAreaSelect) {
+                                        const bounds = polygonRef.current.getBounds();
+                                        const sw = bounds.getSouthWest();
+                                        const ne = bounds.getNorthEast();
+                                        const width = sw.distanceTo(L.latLng(sw.lat, ne.lng));
+                                        const height = sw.distanceTo(L.latLng(ne.lat, sw.lng));
+                                        onPlotAreaSelect(area, width, height);
 
-                                    // Move marker to center of plot and refresh address
-                                    const center = bounds.getCenter();
-                                    if (markerRef.current) {
-                                        markerRef.current.setLatLng(center);
-                                    } else {
-                                        markerRef.current = L.marker(center).addTo(mapRef.current!);
+                                        // Move marker to center of plot and refresh address
+                                        const center = bounds.getCenter();
+                                        if (markerRef.current) {
+                                            markerRef.current.setLatLng(center);
+                                        } else {
+                                            markerRef.current = L.marker(center).addTo(mapRef.current!);
+                                        }
+                                        fetchReverseGeocode(center.lat, center.lng);
                                     }
-                                    fetchReverseGeocode(center.lat, center.lng);
+                                }
+                                setHasPolygon(true);
+                                setDrawingMode(false);
+                                toast.success("Plot area defined!");
+                            } else {
+                                if (drawingMode) {
+                                    handleClearArea();
+                                } else {
+                                    // Start fresh: clear any previous polygon
+                                    handleClearArea();
+                                    setDrawingMode(true);
                                 }
                             }
-                            setHasPolygon(true);
-                            setDrawingMode(false);
-                            toast.success("Plot area defined!");
-                        } else {
-                            if (drawingMode) {
-                                handleClearArea();
-                            } else {
-                                // Start fresh: clear any previous polygon
-                                handleClearArea();
-                                setDrawingMode(true);
-                            }
-                        }
-                    }}
-                    className={`h-12 px-5 rounded-xl shadow-2xl font-black text-[10px] uppercase tracking-widest transform transition-all active:scale-95 border flex items-center gap-2 ${drawingMode
-                        ? (points.length >= 3 ? 'bg-green-600 border-green-700 text-white' : 'bg-red-500 text-white border-red-600')
-                        : 'bg-slate-900 text-white border-slate-800 hover:bg-slate-800'
-                        }`}
-                >
-                    {drawingMode ? (
-                        points.length >= 3 ? (
-                            <><Navigation className="w-4 h-4" /> Finish Area</>
+                        }}
+                        className={`h-12 px-5 rounded-xl shadow-2xl font-black text-[10px] uppercase tracking-widest transform transition-all active:scale-95 border flex items-center gap-2 ${drawingMode
+                            ? (points.length >= 3 ? 'bg-green-600 border-green-700 text-white' : 'bg-red-500 text-white border-red-600')
+                            : 'bg-slate-900 text-white border-slate-800 hover:bg-slate-800'
+                            }`}
+                    >
+                        {drawingMode ? (
+                            points.length >= 3 ? (
+                                <><Navigation className="w-4 h-4" /> Finish Area</>
+                            ) : (
+                                <><X className="w-4 h-4" /> Cancel</>
+                            )
                         ) : (
-                            <><X className="w-4 h-4" /> Cancel</>
-                        )
-                    ) : (
-                        <><div className="w-2 h-2 rounded-full bg-primary animate-pulse" /> Draw Area</>
-                    )}
-                </button>
+                            <><div className="w-2 h-2 rounded-full bg-primary animate-pulse" /> Draw Area</>
+                        )}
+                    </button>
+                )}
             </div>
 
             {/* Drawing Tooltip */}
