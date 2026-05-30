@@ -11,12 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from '@/components/ui/textarea';
 import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Layers, Plus, Copy, Trash2, ArrowRight, LocateFixed, MapPin } from 'lucide-react';
+import { Loader2, ArrowLeft, Layers, Plus, Copy, Trash2, ArrowRight, LocateFixed, MapPin, ChevronUp, ChevronDown, Utensils, Waves, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface TankConfig {
     name: string;
-    type: 'FRP' | 'CONCRETE';
+    type: 'FRP' | 'CONCRETE' | 'EARTHEN' | 'LINED' | string;
     shape: 'CIRCLE' | 'RECTANGLE';
     gender?: 'MALE' | 'FEMALE';
     waterTankType?: 'OPEN' | 'CLOSED';
@@ -125,12 +125,15 @@ const DuplicateTankPopover = ({ onDuplicate }: { onDuplicate: (count: number) =>
 
 const CreateFarm = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, activeModule } = useAuth();
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
 
     const [farmName, setFarmName] = useState('');
     const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION' | 'FARMS'>(() => {
+        if (activeModule) {
+            return activeModule as 'LRT' | 'MATURATION' | 'FARMS';
+        }
         const userModules = user?.modules || ['LRT', 'MATURATION'];
         if (userModules.length > 0) {
             return userModules[0] as 'LRT' | 'MATURATION' | 'FARMS';
@@ -363,7 +366,7 @@ const CreateFarm = () => {
                 } else {
                     tankName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
-                        : `${prefix}_T${currentTanks.length + 1}`;
+                        : (farmCategory === 'FARMS' ? `${prefix}_P${currentTanks.length + 1}` : `${prefix}_T${currentTanks.length + 1}`);
                 }
             }
 
@@ -374,7 +377,7 @@ const CreateFarm = () => {
                 usageCategory: currentSection.type === 'WATER' ? 'Storage' : undefined,
                 usageOther: '',
                 waterType: currentSection.type === 'WATER' ? 'SEA' : undefined,
-                type: currentTanks[currentTanks.length - 1]?.type || 'FRP',
+                type: currentTanks[currentTanks.length - 1]?.type || (farmCategory === 'FARMS' ? 'EARTHEN' : 'FRP'),
                 shape: 'RECTANGLE',
                 length: 0,
                 width: 0,
@@ -404,10 +407,10 @@ const CreateFarm = () => {
 
         if (type === 'LRT') {
             name = `Section ${nextNum}`;
-            typeLabel = 'Section';
+            typeLabel = farmCategory === 'FARMS' ? 'Grow-out Ponds' : 'Section';
         } else if (type === 'WATER') {
             name = `Water Storage Section ${nextNum}`;
-            typeLabel = 'Water Storage';
+            typeLabel = farmCategory === 'FARMS' ? 'Water Storage Ponds' : 'Water Storage';
         } else {
             typeLabel = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
             name = `${typeLabel} Section ${nextNum}`;
@@ -446,9 +449,12 @@ const CreateFarm = () => {
                 const prefix = getTankPrefix(newSections[sIdx], sIdx);
                 const farmPrefix = getFarmPrefix(farmName);
                 const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => {
-                    const name = farmCategory === 'MATURATION'
+                    let name = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
                         : `S${sIdx + 1}_T${currentTanks.length + i + 1}`;
+                    if (farmCategory === 'FARMS') {
+                        name = `${prefix}_P${currentTanks.length + i + 1}`;
+                    }
 
                     return {
                         name: name,
@@ -540,7 +546,7 @@ const CreateFarm = () => {
                 } else {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
-                        : `${prefix}_T${currentTanks.length + i + 1}`;
+                        : (farmCategory === 'FARMS' ? `${prefix}_P${currentTanks.length + i + 1}` : `${prefix}_T${currentTanks.length + i + 1}`);
                 }
                 return { ...tankToCopy, name: newName };
             });
@@ -564,7 +570,7 @@ const CreateFarm = () => {
         // Validation: Ensure at least one tank exists total
         const totalTanks = sections.reduce((acc, s) => acc + s.tanks.length, 0);
         if (totalTanks === 0) {
-            toast.error("Please add at least one tank to your farm");
+            toast.error(`Please add at least one ${farmCategory === 'FARMS' ? 'pond' : 'tank'} to your farm`);
             return;
         }
 
@@ -601,8 +607,7 @@ const CreateFarm = () => {
                 .insert([{ 
                     hatchery_id: user.hatchery_id, 
                     name: farmName, 
-                    category: farmCategory,
-                    location: address.city || address.areaName || 'Unknown',
+                    category: farmCategory === 'FARMS' ? 'FARM' : farmCategory,
                     address: address.fullAddress,
                     latitude: address.latitude,
                     longitude: address.longitude,
@@ -690,14 +695,23 @@ const CreateFarm = () => {
 
                 <div className="grid grid-cols-2 gap-4 pt-1">
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Material Type</Label>
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">{farmCategory === 'FARMS' ? 'Pond Type' : 'Material Type'}</Label>
                         <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
                             <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="FRP">FRP</SelectItem>
-                                <SelectItem value="CONCRETE">Concrete</SelectItem>
+                                {farmCategory === 'FARMS' ? (
+                                    <>
+                                        <SelectItem value="EARTHEN">Earthen</SelectItem>
+                                        <SelectItem value="SHEETED">Sheeted</SelectItem>
+                                    </>
+                                ) : (
+                                    <>
+                                        <SelectItem value="FRP">FRP</SelectItem>
+                                        <SelectItem value="CONCRETE">Concrete</SelectItem>
+                                    </>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
@@ -748,7 +762,7 @@ const CreateFarm = () => {
 
                 <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">{farmCategory === 'FARMS' ? 'Depth (m)' : 'Height (m)'}</Label>
                         <Input
                             type="number"
                             min="0"
@@ -854,7 +868,7 @@ const CreateFarm = () => {
                     <div>
                         <h1 className="text-2xl font-bold">Create New Farm</h1>
                         <p className="text-muted-foreground text-sm">
-                            {step === 1 ? 'Step 1: Farm Structure' : 'Step 2: Tank Configuration'}
+                            {step === 1 ? 'Step 1: Farm Structure' : (farmCategory === 'FARMS' ? 'Step 2: Pond Configuration' : 'Step 2: Tank Configuration')}
                         </p>
                     </div>
                     <div className="flex gap-1.5 pb-1">
@@ -880,29 +894,12 @@ const CreateFarm = () => {
 
                             <div className="space-y-2">
                                 <Label htmlFor="farmCategory" className="font-semibold">Module Type</Label>
-                                <Select value={farmCategory} onValueChange={(val: any) => {
-                                    setFarmCategory(val);
-                                    if (val === 'MATURATION') {
-                                        setSectionCount(3);
-                                    } else {
-                                        setSectionCount(1);
-                                    }
-                                }}>
-                                    <SelectTrigger id="farmCategory" className="h-12 text-md rounded-xl">
-                                        <SelectValue placeholder="Select Module Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {(user?.modules || ['LRT', 'MATURATION']).includes('LRT') && (
-                                            <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
-                                        )}
-                                        {(user?.modules || ['LRT', 'MATURATION']).includes('MATURATION') && (
-                                            <SelectItem value="MATURATION">Maturation</SelectItem>
-                                        )}
-                                        {(user?.modules || ['LRT', 'MATURATION']).includes('FARMS') && (
-                                            <SelectItem value="FARMS">Farm / Firm</SelectItem>
-                                        )}
-                                    </SelectContent>
-                                </Select>
+                                <Input 
+                                    id="farmCategory" 
+                                    readOnly 
+                                    value={farmCategory === 'LRT' ? 'LRT (Larval Rearing)' : farmCategory === 'MATURATION' ? 'Maturation' : 'Farm / Firm'} 
+                                    className="h-12 text-md rounded-xl bg-slate-50 font-medium text-slate-900 border-slate-200 focus-visible:ring-0 cursor-default" 
+                                />
                                 <p className="text-[10px] text-muted-foreground">Choose the appropriate module for this farm</p>
                             </div>
 
@@ -1085,7 +1082,7 @@ const CreateFarm = () => {
                 ) : (
                     <div className="space-y-8 animate-in fade-in duration-500">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-bold">Tank Setup</h2>
+                            <h2 className="text-xl font-bold">{farmCategory === 'FARMS' ? 'Pond Setup' : 'Tank Setup'}</h2>
                             <span className="text-[10px] bg-primary/10 text-primary px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-primary/20 animate-pulse">
                                 {farmCategory} MODULE
                             </span>
@@ -1116,7 +1113,7 @@ const CreateFarm = () => {
                                                 {collapsedSections.includes(sIdx) && (
                                                     <div className="flex items-center gap-1.5 ml-1 flex-wrap">
                                                         <span className="text-[9px] sm:text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
-                                                            {section.tanks.length}T
+                                                            {section.tanks.length}{farmCategory === 'FARMS' ? 'P' : 'T'}
                                                         </span>
                                                         <span className="text-[9px] sm:text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
                                                             <Utensils className="w-2.5 h-2.5" /> {totalVolume.toLocaleString()}L
@@ -1124,7 +1121,11 @@ const CreateFarm = () => {
                                                     </div>
                                                 )}
                                             </div>
-                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configure {section.type === 'LRT' ? 'LRT' : section.type} Section</p>
+                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                                {farmCategory === 'FARMS' 
+                                                    ? `Configure ${section.type === 'WATER' ? 'Water Storage Ponds' : 'Grow-out Ponds'}` 
+                                                    : `Configure ${section.type === 'LRT' ? 'LRT' : section.type} Section`}
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0 flex-wrap">
@@ -1174,7 +1175,7 @@ const CreateFarm = () => {
                                                     onClick={() => addTank(sIdx)}
                                                     className="h-8 sm:h-9 px-3 border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-[10px] sm:text-xs rounded-xl transition-all"
                                                 >
-                                                    <Plus className="w-3.5 h-3.5 mr-1" /> Tank
+                                                    <Plus className="w-3.5 h-3.5 mr-1" /> {farmCategory === 'FARMS' ? 'Pond' : 'Tank'}
                                                 </Button>
                                             )}
                                         </div>
@@ -1193,7 +1194,7 @@ const CreateFarm = () => {
                                     <div className="grid gap-6 pl-4 border-l-2 border-dashed border-muted ml-5 animate-in slide-in-from-top-2 duration-300">
                                         {section.tanks.length === 0 ? (
                                             <div className="py-8 bg-muted/20 border border-dashed rounded-2xl text-center">
-                                                <p className="text-xs text-muted-foreground font-medium italic">No tanks added to this section yet.</p>
+                                                <p className="text-xs text-muted-foreground font-medium italic">No {farmCategory === 'FARMS' ? 'ponds' : 'tanks'} added to this section yet.</p>
                                             </div>
                                         ) : section.type === 'ANIMAL' ? (
                                             <div className="space-y-8">

@@ -51,12 +51,19 @@ const OwnerDashboard = () => {
     // Auto-selection logic for active farm when activeModule or farms load
     useEffect(() => {
         if (farms.length > 0) {
-            const farmsInModule = farms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+            const farmsInModule = farms.filter(f => {
+                const dbCategory = (f.category || 'LRT').toUpperCase();
+                const mappedCategory = dbCategory === 'FARM' ? 'FARMS' : dbCategory;
+                return mappedCategory === activeModule.toUpperCase();
+            });
             
             // 1. If currently selected farm is not in this module, select a default one or clear
             if (activeFarmId) {
                 const currentFarm = farms.find(f => f.id === activeFarmId);
-                if (!currentFarm || (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
+                const currentDbCategory = (currentFarm?.category || 'LRT').toUpperCase();
+                const currentMappedCategory = currentDbCategory === 'FARM' ? 'FARMS' : currentDbCategory;
+                
+                if (!currentFarm || currentMappedCategory !== activeModule.toUpperCase()) {
                     // Try to auto-select if exactly 1 farm in new module
                     if (farmsInModule.length === 1) {
                         setActiveFarmId(farmsInModule[0].id);
@@ -80,8 +87,15 @@ const OwnerDashboard = () => {
         
         // If current active farm project is not in the new module, clear selection or auto-select if exactly 1
         const currentFarm = farms.find(f => f.id === activeFarmId);
-        if (!currentFarm || (currentFarm.category || 'LRT').toUpperCase() !== newModule.toUpperCase()) {
-            const newModuleFarms = farms.filter(f => (f.category || 'LRT').toUpperCase() === newModule.toUpperCase());
+        const currentDbCategory = (currentFarm?.category || 'LRT').toUpperCase();
+        const currentMappedCategory = currentDbCategory === 'FARM' ? 'FARMS' : currentDbCategory;
+        
+        if (!currentFarm || currentMappedCategory !== newModule.toUpperCase()) {
+            const newModuleFarms = farms.filter(f => {
+                const dbCat = (f.category || 'LRT').toUpperCase();
+                const mappedCat = dbCat === 'FARM' ? 'FARMS' : dbCat;
+                return mappedCat === newModule.toUpperCase();
+            });
             if (newModuleFarms.length === 1) {
                 setActiveFarmId(newModuleFarms[0].id);
             } else {
@@ -123,21 +137,42 @@ const OwnerDashboard = () => {
         { name: 'Water Management', icon: Droplets, route: '/owner/reports/water management', color: 'bg-blue-100 text-blue-700' },
     ];
 
-    const activities = activeModule === 'MATURATION' ? maturationActivities : lrtActivities;
+    const farmActivities = [
+        { name: 'Stocking', icon: Layers, route: '/owner/reports/stocking', color: 'bg-emerald-100 text-emerald-600' },
+        { name: 'Observation / Sampling', icon: Eye, route: '/owner/reports/observation', color: 'bg-purple-100 text-purple-600' },
+        { name: 'Feed', icon: Utensils, route: '/owner/reports/feed', color: 'bg-orange-100 text-orange-600' },
+        { name: 'Check Tray', icon: Search, route: '/owner/reports/check-tray', color: 'bg-yellow-100 text-yellow-600' },
+        { name: 'Treatment', icon: Beaker, route: '/owner/reports/treatment', color: 'bg-blue-100 text-blue-600' },
+        { name: 'Animal Quality', icon: Search, route: '/owner/reports/animal', color: 'bg-rose-100 text-rose-600' },
+        { name: 'Water Quality', icon: Waves, route: '/owner/reports/water', color: 'bg-cyan-100 text-cyan-600' },
+        { name: 'Harvest', icon: Scissors, route: '/owner/reports/harvest', color: 'bg-amber-100 text-amber-600' },
+        { name: 'Tank Shift', icon: MoveRight, route: '/owner/reports/shifting', color: 'bg-indigo-100 text-indigo-600' },
+        { name: 'Water Management', icon: Droplets, route: '/owner/reports/water management', color: 'bg-blue-100 text-blue-700' },
+    ];
+
+    const activities = activeModule === 'FARMS' 
+        ? farmActivities 
+        : activeModule === 'MATURATION' 
+            ? maturationActivities 
+            : lrtActivities;
 
     const handleLogout = async () => {
         await logout();
         navigate('/login');
     };
 
-    const filteredFarms = farms.filter(f => (f.category || 'LRT').toUpperCase() === activeModule.toUpperCase());
+    const filteredFarms = farms.filter(f => {
+        const dbCategory = (f.category || 'LRT').toUpperCase();
+        const mappedCategory = dbCategory === 'FARM' ? 'FARMS' : dbCategory;
+        return mappedCategory === activeModule.toUpperCase();
+    });
     const activeFarm = farms.find(f => f.id === activeFarmId);
     const activeFarmName = activeFarm?.name || 'Select Farm';
 
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
-            <div className="ocean-gradient p-3 sm:p-4 pb-6 rounded-b-3xl shadow-lg">
+            <div className="ocean-gradient p-3 sm:p-4 pb-8 sm:pb-10 rounded-b-3xl shadow-lg">
                 <Breadcrumbs lightTheme className="mb-2" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -276,83 +311,19 @@ const OwnerDashboard = () => {
 
             {/* Main Grid */}
             <div className="px-4 -mt-6 relative z-10">
-                {activeModule === 'FARMS' ? (
-                    /* Highly Polished Premium Farm/Firm Module Panel */
-                    <div className="bg-card/80 backdrop-blur-md rounded-3xl border shadow-xl p-6 sm:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        <div className="flex flex-col items-center text-center gap-4 border-b pb-6 border-muted">
-                            <div className="w-16 h-16 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-200/50">
-                                <Warehouse className="w-9 h-9 text-white" />
-                            </div>
-                            <div className="space-y-1">
-                                <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider border border-indigo-100">
-                                    Farm / Firm Console Active
-                                </span>
-                                <h3 className="font-extrabold text-xl text-slate-800 tracking-tight mt-2">Grow-out & Pond Management</h3>
-                                <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-                                    Configure customized grow-out operations, pond parameters, staff rosters, feed logs, and bulk harvesting operations for your commercial sites.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {/* Feature 1 */}
-                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
-                                <div className="p-2 rounded-xl bg-blue-100 text-blue-600 mt-0.5">
-                                    <Layers className="w-5 h-5" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-sm font-bold text-slate-800">Custom Grow-out Logs</h4>
-                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Pond stocking densities, daily biological growth rates, and survivor counts.</p>
-                                </div>
-                            </div>
-
-                            {/* Feature 2 */}
-                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
-                                <div className="p-2 rounded-xl bg-orange-100 text-orange-600 mt-0.5">
-                                    <TrendingUp className="w-5 h-5" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-sm font-bold text-slate-800">Commercial Analytics</h4>
-                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Visual charts representing feed conversion ratios (FCR) and weekly biomass growth.</p>
-                                </div>
-                            </div>
-
-                            {/* Feature 3 */}
-                            <div className="bg-slate-50/50 rounded-2xl border p-4 flex gap-3.5 items-start">
-                                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-600 mt-0.5">
-                                    <PlusCircle className="w-5 h-5" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-sm font-bold text-slate-800">Dynamic Sites</h4>
-                                    <p className="text-[11px] text-muted-foreground leading-relaxed">Add concrete or earthen grow-out ponds with precise coordinates and surface areas.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-indigo-50/30 border border-dashed border-indigo-100 rounded-2xl p-5 text-center flex flex-col items-center justify-center gap-3">
-                            <ShieldAlert className="w-6 h-6 text-indigo-500" />
-                            <div>
-                                <h4 className="text-xs font-bold text-indigo-900">Custom Farm Module Configuration</h4>
-                                <p className="text-[10px] text-indigo-700/80 max-w-sm mt-1 mx-auto leading-normal">
-                                    You have successfully initialized the Farm module structure. Farm activity logs, telemetry dashboard, and operations config will appear here.
-                                </p>
-                            </div>
-                            <Button onClick={() => navigate('/owner/create-farm')} className="mt-1 h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">
-                                <PlusCircle className="w-4 h-4 mr-2" /> Add Grow-out Site
-                            </Button>
-                        </div>
-                    </div>
-                ) : filteredFarms.length === 0 ? (
+                {filteredFarms.length === 0 ? (
                     <div className="bg-card p-8 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-4">
                         <Warehouse className="w-12 h-12 text-muted-foreground opacity-50" />
                         <div>
-                            <h3 className="font-bold text-lg">No {activeModule} Farms</h3>
+                            <h3 className="font-bold text-lg">
+                                {activeModule === 'FARMS' ? 'No Farms Created' : `No ${activeModule} Farms`}
+                            </h3>
                             <p className="text-sm text-muted-foreground mt-1">
-                                You haven't created any {activeModule} farms yet.
+                                {activeModule === 'FARMS' ? "You haven't created any farms yet." : `You haven't created any ${activeModule} farms yet.`}
                             </p>
                         </div>
                         <Button onClick={() => navigate('/owner/create-farm')} className="mt-2 text-xs h-9">
-                            <PlusCircle className="w-4 h-4 mr-2"/> Create {activeModule} Farm
+                            <PlusCircle className="w-4 h-4 mr-2"/> {activeModule === 'FARMS' ? 'Create Farm' : `Create ${activeModule} Farm`}
                         </Button>
                     </div>
                 ) : !activeFarm ? (

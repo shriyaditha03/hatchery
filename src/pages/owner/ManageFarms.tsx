@@ -73,7 +73,7 @@ interface Farm {
 
 const ManageFarms = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, activeModule } = useAuth();
     const [farms, setFarms] = useState<Farm[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -92,7 +92,7 @@ const ManageFarms = () => {
         if (user?.hatchery_id) {
             fetchFarms();
         }
-    }, [user]);
+    }, [user, activeModule]);
 
     const fetchFarms = async () => {
         try {
@@ -105,14 +105,21 @@ const ManageFarms = () => {
 
             if (farmError) throw farmError;
 
-            if (!farmsData || farmsData.length === 0) {
+            // Filter farms by active module
+            const filteredFarmsData = (farmsData || []).filter(f => {
+                const dbCategory = (f.category || 'LRT').toUpperCase();
+                const mappedCategory = dbCategory === 'FARM' ? 'FARMS' : dbCategory;
+                return mappedCategory === activeModule.toUpperCase();
+            });
+
+            if (filteredFarmsData.length === 0) {
                 setFarms([]);
                 setLoading(false);
                 return;
             }
 
             // 2. Get Sections for all these farms
-            const farmIds = farmsData.map(f => f.id);
+            const farmIds = filteredFarmsData.map(f => f.id);
             const { data: sectionsData, error: sectionError } = await supabase
                 .from('sections')
                 .select('*')
@@ -136,7 +143,7 @@ const ManageFarms = () => {
             }
 
             // 4. Assemble Hierarchy
-            const fullFarms = farmsData.map(farm => {
+            const fullFarms = filteredFarmsData.map(farm => {
                 const farmSections = sectionsData?.filter(s => s.farm_id === farm.id) || [];
                 const sectionsWithTanks = farmSections.map(section => ({
                     ...section,

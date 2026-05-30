@@ -112,20 +112,24 @@ const UserDashboard = () => {
 
             // Section and Farm validation (cleanup)
             const currentFarm = availableFarms.find(f => f.id === activeFarmId);
-            if (currentFarm && (currentFarm.category || 'LRT').toUpperCase() !== activeModule.toUpperCase()) {
-                if (availableFarmsForModule.length === 1) {
-                    setActiveFarmId(availableFarmsForModule[0].id);
-                } else {
-                    setActiveFarmId(null);
+            if (currentFarm) {
+                const dbCat = (currentFarm.category || 'LRT').toUpperCase();
+                const mappedCat = dbCat === 'FARM' ? 'FARMS' : dbCat;
+                if (mappedCat !== activeModule.toUpperCase()) {
+                    if (availableFarmsForModule.length === 1) {
+                        setActiveFarmId(availableFarmsForModule[0].id);
+                    } else {
+                        setActiveFarmId(null);
+                    }
+                    setActiveSectionId(null);
+                    setActiveBroodstockBatchId(null);
                 }
-                setActiveSectionId(null);
-                setActiveBroodstockBatchId(null);
             }
 
             const currentSection = allMySections.find(s => s.id === activeSectionId);
             const isWrongFarmOrModule = currentSection && (
                 currentSection.farm_id !== activeFarmId || 
-                (currentSection.farm_category || 'LRT').toUpperCase() !== activeModule.toUpperCase()
+                (currentSection.farm_category === 'FARM' ? 'FARMS' : (currentSection.farm_category || 'LRT').toUpperCase()) !== activeModule.toUpperCase()
             );
             
             if (activeSectionId && isWrongFarmOrModule) {
@@ -409,6 +413,19 @@ const UserDashboard = () => {
                 { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' },
                 { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' },
                 { name: 'Broodstock Discard', icon: Trash2, route: '/user/activity/broodstock-discard', color: 'bg-red-100 text-red-600' }
+            ];
+        } else if (activeModule.toUpperCase() === 'FARMS') {
+            return [
+                 { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
+                 { name: 'Observation / Sampling', icon: Eye, route: '/user/activity/observation', color: 'bg-purple-100 text-purple-600' },
+                 { name: 'Feed', icon: Utensils, route: '/user/activity/feed', color: 'bg-orange-100 text-orange-600' },
+                 { name: 'Check Tray', icon: Search, route: '/user/activity/check-tray', color: 'bg-yellow-100 text-yellow-600' },
+                 { name: 'Treatment', icon: Beaker, route: '/user/activity/treatment', color: 'bg-blue-100 text-blue-600' },
+                 { name: 'Animal Quality', icon: Search, route: '/user/activity/animal', color: 'bg-rose-100 text-rose-600' },
+                 { name: 'Water Quality', icon: Waves, route: '/user/activity/water', color: 'bg-cyan-100 text-cyan-600' },
+                 { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
+                 { name: 'Tank Shift', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
+                 { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' }
             ];
         }
         return base;
@@ -721,17 +738,6 @@ const UserDashboard = () => {
 
             {/* Grid */}
             <div className="px-4 mt-6">
-                {activeModule === 'FARMS' ? (
-                    <div className="bg-card p-6 rounded-2xl border shadow-sm text-center flex flex-col items-center justify-center gap-3">
-                        <Warehouse className="w-10 h-10 text-indigo-500 opacity-80" />
-                        <div>
-                            <h3 className="font-bold text-sm text-slate-800">Farm / Firm Site Operations</h3>
-                            <p className="text-xs text-muted-foreground mt-1 px-4 leading-normal">
-                                Daily tasks, feeding cards, and harvesting entries for this grow-out site will appear here as soon as configured by your owner.
-                            </p>
-                        </div>
-                    </div>
-                ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {activities.map(act => (
                             <Button 
@@ -754,7 +760,6 @@ const UserDashboard = () => {
                             <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
                         </Button>
                     </div>
-                )}
             </div>
 
             {/* Today's Tasks/Instructions - For workers OR supervisors in activity mode */}
