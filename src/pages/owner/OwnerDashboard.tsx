@@ -169,6 +169,26 @@ const OwnerDashboard = () => {
     const activeFarm = farms.find(f => f.id === activeFarmId);
     const activeFarmName = activeFarm?.name || 'Select Farm';
 
+    // Group all farms by module for the Switch Site dropdown
+    const farmsByModule: Record<string, typeof farms> = {};
+    farms.forEach(f => {
+        const dbCat = (f.category || 'LRT').toUpperCase();
+        const cat = dbCat === 'FARM' ? 'FARMS' : dbCat;
+        if (!farmsByModule[cat]) farmsByModule[cat] = [];
+        farmsByModule[cat].push(f);
+    });
+    const moduleOrder = ['LRT', 'MATURATION', 'FARMS'];
+    const moduleLabels: Record<string, string> = { LRT: 'LRT', MATURATION: 'Maturation', FARMS: 'Farm' };
+
+    const handleSwitchFarm = (farm: any) => {
+        const dbCat = (farm.category || 'LRT').toUpperCase();
+        const cat = (dbCat === 'FARM' ? 'FARMS' : dbCat) as 'LRT' | 'MATURATION' | 'FARMS';
+        if (cat !== activeModule) {
+            setActiveModule(cat);
+        }
+        setActiveFarmId(farm.id);
+    };
+
     return (
         <div className="min-h-screen bg-background pb-10">
             {/* Header */}
@@ -206,6 +226,9 @@ const OwnerDashboard = () => {
                             <DropdownMenuItem onClick={() => navigate('/owner/manage-types')}>
                                 <Tags className="mr-2 h-4 w-4" /> Manage Types
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate('/owner/manage-modules')}>
+                                <Layers className="mr-2 h-4 w-4" /> Manage Modules
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={handleLogout} className="text-red-600">
                                 <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -227,7 +250,7 @@ const OwnerDashboard = () => {
                         <span className="bg-white/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                             {activeModule === 'FARMS' 
-                                ? 'FARM / FIRM MANAGEMENT' 
+                                ? 'FARM MANAGEMENT' 
                                 : activeModule === 'MATURATION' 
                                     ? 'MATURATION MODULE' 
                                     : 'LRT MODULE'}
@@ -258,7 +281,7 @@ const OwnerDashboard = () => {
                                         value="FARMS" 
                                         className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]"
                                     >
-                                        FARM/FIRM
+                                        FARM
                                     </TabsTrigger>
                                 )}
                             </TabsList>
@@ -269,7 +292,7 @@ const OwnerDashboard = () => {
                 {/* Active Farm Switcher - Only display if not FARMS module, or display as appropriate */}
                 <div className="mt-3 flex flex-col gap-1">
                     <label className="text-white/70 text-xs font-semibold uppercase tracking-wider">
-                        {activeModule === 'FARMS' ? 'Active Farm/Firm Site' : 'Active Farm'}
+                        {activeModule === 'FARMS' ? 'Active Farm Site' : 'Active Farm'}
                     </label>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -281,18 +304,28 @@ const OwnerDashboard = () => {
                         <DropdownMenuContent className="w-full sm:w-64">
                             <DropdownMenuLabel>Switch Site</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {filteredFarms.length > 0 ? (
-                                filteredFarms.map(farm => (
-                                    <DropdownMenuItem 
-                                        key={farm.id} 
-                                        onClick={() => setActiveFarmId(farm.id)}
-                                        className={farm.id === activeFarmId ? "font-bold bg-muted" : ""}
-                                    >
-                                        <Warehouse className="mr-2 h-4 w-4 opacity-50" /> {farm.name}
-                                    </DropdownMenuItem>
-                                ))
+                            {farms.length > 0 ? (
+                                moduleOrder
+                                    .filter(mod => farmsByModule[mod]?.length > 0)
+                                    .map(mod => (
+                                        <React.Fragment key={mod}>
+                                            <DropdownMenuLabel className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60 px-2 py-1">
+                                                {moduleLabels[mod]}
+                                            </DropdownMenuLabel>
+                                            {farmsByModule[mod].map(farm => (
+                                                <DropdownMenuItem
+                                                    key={farm.id}
+                                                    onClick={() => handleSwitchFarm(farm)}
+                                                    className={farm.id === activeFarmId ? "font-bold bg-muted" : ""}
+                                                >
+                                                    <Warehouse className="mr-2 h-4 w-4 opacity-50" /> {farm.name}
+                                                    {farm.id === activeFarmId && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-primary" />}
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </React.Fragment>
+                                    ))
                             ) : (
-                                <DropdownMenuItem disabled>No {activeModule} sites</DropdownMenuItem>
+                                <DropdownMenuItem disabled>No sites created yet</DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => navigate('/owner/create-farm')}>
@@ -316,14 +349,14 @@ const OwnerDashboard = () => {
                         <Warehouse className="w-12 h-12 text-muted-foreground opacity-50" />
                         <div>
                             <h3 className="font-bold text-lg">
-                                {activeModule === 'FARMS' ? 'No Farms Created' : `No ${activeModule} Farms`}
+                                {activeModule === 'FARMS' ? 'No Farms Created' : `No ${activeModule} Setups`}
                             </h3>
                             <p className="text-sm text-muted-foreground mt-1">
-                                {activeModule === 'FARMS' ? "You haven't created any farms yet." : `You haven't created any ${activeModule} farms yet.`}
+                                {activeModule === 'FARMS' ? "You haven't created any farms yet." : `You haven't configured any ${activeModule} setups yet.`}
                             </p>
                         </div>
                         <Button onClick={() => navigate('/owner/create-farm')} className="mt-2 text-xs h-9">
-                            <PlusCircle className="w-4 h-4 mr-2"/> {activeModule === 'FARMS' ? 'Create Farm' : `Create ${activeModule} Farm`}
+                            <PlusCircle className="w-4 h-4 mr-2"/> {activeModule === 'FARMS' ? 'Create Farm' : `Create ${activeModule}`}
                         </Button>
                     </div>
                 ) : !activeFarm ? (

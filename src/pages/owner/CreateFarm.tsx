@@ -309,7 +309,7 @@ const CreateFarm = () => {
             }
         } else {
             const count = Number(sectionCount) || 1;
-            const wCount = Number(waterCount) || 0;
+            const wCount = farmCategory === 'FARMS' ? 0 : (Number(waterCount) || 0);
             for (let i = 0; i < count; i++) {
                 newSections.push({
                     name: `Section ${i + 1}`,
@@ -729,19 +729,28 @@ const CreateFarm = () => {
                     </div>
                 </div>
 
-                {sections[sIdx].type === 'WATER' && (
+                {(sections[sIdx].type === 'WATER' || farmCategory === 'FARMS') && (
                     <div className="grid grid-cols-2 gap-4 pt-1">
                         <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Usage</Label>
-                            <Select value={tank.usageCategory || 'Storage'} onValueChange={(val: any) => updateTank(sIdx, tIdx, { usageCategory: val })}>
+                            <Select value={tank.usageCategory || (farmCategory === 'FARMS' ? 'Culture' : 'Storage')} onValueChange={(val: any) => updateTank(sIdx, tIdx, { usageCategory: val })}>
                                 <SelectTrigger className="h-10 text-xs rounded-xl bg-background border-muted shadow-none">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Storage">Storage</SelectItem>
-                                    <SelectItem value="Settlement">Settlement</SelectItem>
-                                    <SelectItem value="Dechlorination">Dechlorination</SelectItem>
-                                    <SelectItem value="Others">Others</SelectItem>
+                                    {farmCategory === 'FARMS' ? (
+                                        <>
+                                            <SelectItem value="Storage/Reservoir">Storage / Reservoir</SelectItem>
+                                            <SelectItem value="Culture">Culture</SelectItem>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <SelectItem value="Storage">Storage</SelectItem>
+                                            <SelectItem value="Settlement">Settlement</SelectItem>
+                                            <SelectItem value="Dechlorination">Dechlorination</SelectItem>
+                                            <SelectItem value="Others">Others</SelectItem>
+                                        </>
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -828,7 +837,7 @@ const CreateFarm = () => {
                                     }}
                                 />
                             </div>
-                            {sections[sIdx].type === 'WATER' && tank.usageCategory === 'Others' && (
+                            {(sections[sIdx].type === 'WATER' || farmCategory === 'FARMS') && tank.usageCategory === 'Others' && (
                                 <div className="space-y-1.5 col-span-1 sm:col-span-2">
                                     <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Custom Usage</Label>
                                     <Input
@@ -866,9 +875,9 @@ const CreateFarm = () => {
 
                 <div className="flex justify-between items-end">
                     <div>
-                        <h1 className="text-2xl font-bold">Create New Farm</h1>
+                        <h1 className="text-2xl font-bold">{farmCategory === 'FARMS' ? 'Create New Farm' : `Create New ${farmCategory} Setup`}</h1>
                         <p className="text-muted-foreground text-sm">
-                            {step === 1 ? 'Step 1: Farm Structure' : (farmCategory === 'FARMS' ? 'Step 2: Pond Configuration' : 'Step 2: Tank Configuration')}
+                            {step === 1 ? (farmCategory === 'FARMS' ? 'Step 1: Farm Structure' : 'Step 1: Setup Structure') : (farmCategory === 'FARMS' ? 'Step 2: Pond Configuration' : 'Step 2: Tank Configuration')}
                         </p>
                     </div>
                     <div className="flex gap-1.5 pb-1">
@@ -881,7 +890,7 @@ const CreateFarm = () => {
                     <Card className="rounded-2xl border shadow-sm overflow-hidden">
                         <CardContent className="p-6 space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="farmName" className="font-semibold">Farm Name</Label>
+                                <Label htmlFor="farmName" className="font-semibold">{farmCategory === 'FARMS' ? 'Farm Name' : 'Setup Name'}</Label>
                                 <Input
                                     id="farmName"
                                     value={farmName}
@@ -897,7 +906,7 @@ const CreateFarm = () => {
                                 <Input 
                                     id="farmCategory" 
                                     readOnly 
-                                    value={farmCategory === 'LRT' ? 'LRT (Larval Rearing)' : farmCategory === 'MATURATION' ? 'Maturation' : 'Farm / Firm'} 
+                                    value={farmCategory === 'LRT' ? 'LRT (Larval Rearing)' : farmCategory === 'MATURATION' ? 'Maturation' : 'Farm'} 
                                     className="h-12 text-md rounded-xl bg-slate-50 font-medium text-slate-900 border-slate-200 focus-visible:ring-0 cursor-default" 
                                 />
                                 <p className="text-[10px] text-muted-foreground">Choose the appropriate module for this farm</p>
@@ -960,7 +969,7 @@ const CreateFarm = () => {
                             ) : (
                                 <div className="space-y-4">
                                      <Label className="font-semibold">Configure Initial Sections</Label>
-                                     <div className="grid grid-cols-2 gap-3">
+                                     <div className={farmCategory === 'FARMS' ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                                          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
                                              <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Production</Label>
                                              <Input
@@ -982,17 +991,19 @@ const CreateFarm = () => {
                                                  className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
                                              />
                                          </div>
-                                         <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
-                                             <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Water Storage</Label>
-                                             <Input
-                                                 type="number"
-                                                 min="0"
-                                                 max="20"
-                                                 value={waterCount}
-                                                 onChange={(e) => setWaterCount(e.target.value)}
-                                                 className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
-                                             />
-                                         </div>
+                                         {farmCategory === 'LRT' && (
+                                             <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
+                                                 <Label className="text-[10px] font-black text-primary uppercase tracking-widest">Water Storage</Label>
+                                                 <Input
+                                                     type="number"
+                                                     min="0"
+                                                     max="20"
+                                                     value={waterCount}
+                                                     onChange={(e) => setWaterCount(e.target.value)}
+                                                     className="h-10 text-center font-black text-lg bg-background rounded-xl ring-offset-background focus-visible:ring-primary/20"
+                                                 />
+                                             </div>
+                                         )}
                                      </div>
                                      <p className="text-[10px] text-muted-foreground">You can add more sections later</p>
                                 </div>
@@ -1357,14 +1368,16 @@ const CreateFarm = () => {
                                         <Plus className="w-6 h-6 text-primary/40" />
                                         <span className="font-bold text-sm uppercase tracking-wider">Add New Section</span>
                                     </Button>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => addSectionByType('WATER')}
-                                        className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
-                                    >
-                                        <Plus className="w-6 h-6 text-primary/40" />
-                                        <span className="font-bold text-sm uppercase tracking-wider">Add Water Section</span>
-                                    </Button>
+                                    {farmCategory === 'LRT' && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => addSectionByType('WATER')}
+                                            className="flex-1 border-dashed border-2 py-8 rounded-2xl text-muted-foreground hover:text-primary hover:border-primary transition-all flex flex-col gap-1"
+                                        >
+                                            <Plus className="w-6 h-6 text-primary/40" />
+                                            <span className="font-bold text-sm uppercase tracking-wider">Add Water Section</span>
+                                        </Button>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -1379,7 +1392,7 @@ const CreateFarm = () => {
                             >
                                 {loading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : (
                                     <div className="flex items-center justify-center gap-2 uppercase tracking-wide">
-                                        <Check className="w-6 h-6" /> Finalize & Create Farm
+                                        <Check className="w-6 h-6" /> {farmCategory === 'FARMS' ? 'Finalize & Create Farm' : `Finalize & Create ${farmCategory}`}
                                     </div>
                                 )}
                             </Button>

@@ -92,7 +92,7 @@ const ManageFarms = () => {
         if (user?.hatchery_id) {
             fetchFarms();
         }
-    }, [user, activeModule]);
+    }, [user]);
 
     const fetchFarms = async () => {
         try {
@@ -105,12 +105,7 @@ const ManageFarms = () => {
 
             if (farmError) throw farmError;
 
-            // Filter farms by active module
-            const filteredFarmsData = (farmsData || []).filter(f => {
-                const dbCategory = (f.category || 'LRT').toUpperCase();
-                const mappedCategory = dbCategory === 'FARM' ? 'FARMS' : dbCategory;
-                return mappedCategory === activeModule.toUpperCase();
-            });
+            const filteredFarmsData = farmsData || [];
 
             if (filteredFarmsData.length === 0) {
                 setFarms([]);
@@ -284,12 +279,12 @@ const ManageFarms = () => {
                         <ArrowLeft className="w-5 h-5 mr-1" /> Back to Dashboard
                     </Button>
                     <Button size="sm" onClick={() => navigate('/owner/create-farm')}>
-                        <Plus className="w-4 h-4 mr-1" /> Add Farm
+                        <Plus className="w-4 h-4 mr-1" /> Add Setup
                     </Button>
                 </div>
 
                 <div>
-                    <h1 className="text-2xl font-bold">Manage Farms</h1>
+                    <h1 className="text-2xl font-bold">Manage Farms &amp; Setups</h1>
                     <p className="text-muted-foreground">Overview of your hatchery infrastructure</p>
                 </div>
 
@@ -298,9 +293,9 @@ const ManageFarms = () => {
                 ) : farms.length === 0 ? (
                     <div className="text-center py-12 bg-card rounded-2xl border border-dashed">
                         <Warehouse className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                        <h3 className="text-lg font-semibold">No Farms Yet</h3>
-                        <p className="text-muted-foreground mb-4">You haven't created any farms.</p>
-                        <Button onClick={() => navigate('/owner/create-farm')}>Create First Farm</Button>
+                        <h3 className="text-lg font-semibold">No Setups Yet</h3>
+                        <p className="text-muted-foreground mb-4">You haven't created any farms or setups.</p>
+                        <Button onClick={() => navigate('/owner/create-farm')}>Create First Setup</Button>
                     </div>
                 ) : (
                     <div className="space-y-4">

@@ -473,7 +473,7 @@ const UserDashboard = () => {
                         <span className="bg-black/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                             {activeModule === 'FARMS' 
-                                ? 'FARM / FIRM MANAGEMENT' 
+                                ? 'FARM MANAGEMENT' 
                                 : activeModule === 'MATURATION' 
                                     ? 'MATURATION MODULE' 
                                     : 'LRT MODULE'}
@@ -490,7 +490,7 @@ const UserDashboard = () => {
                                     <TabsTrigger value="MATURATION" className="text-[10px] font-bold">MATURATION</TabsTrigger>
                                 )}
                                 {(user?.modules || ['LRT', 'MATURATION']).includes('FARMS') && (
-                                    <TabsTrigger value="FARMS" className="text-[10px] font-bold">FARM/FIRM</TabsTrigger>
+                                    <TabsTrigger value="FARMS" className="text-[10px] font-bold">FARM</TabsTrigger>
                                 )}
                             </TabsList>
                         </Tabs>

@@ -23,6 +23,7 @@ import ManageFarms from "./pages/owner/ManageFarms";
 import ManageTypes from "./pages/owner/ManageTypes";
 import OwnerActivityLogs from "./pages/owner/OwnerActivityLogs";
 import OwnerConsolidatedReports from "./pages/owner/OwnerConsolidatedReports";
+import ManageModules from "./pages/owner/ManageModules";
 
 // New User Pages
 import UserDashboard from "./pages/user/UserDashboard";
@@ -120,6 +121,7 @@ const App = () => (
             <Route path="/owner/manage-types" element={<OwnerRoute><ManageTypes /></OwnerRoute>} />
             <Route path="/owner/reports/:type" element={<OwnerRoute><OwnerActivityLogs /></OwnerRoute>} />
             <Route path="/owner/consolidated-reports" element={<ManagementRoute><OwnerConsolidatedReports /></ManagementRoute>} />
+            <Route path="/owner/manage-modules" element={<OwnerRoute><ManageModules /></OwnerRoute>} />
             <Route path="/owner/activity/:type" element={<ManagementRoute><RecordActivity /></ManagementRoute>} />
 
             {/* USER PORTAL */}

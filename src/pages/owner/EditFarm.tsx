@@ -430,19 +430,28 @@ const EditFarm = () => {
                     </div>
                 </div>
 
-                {sections[sIdx].type === 'WATER' && (
+                {(sections[sIdx].type === 'WATER' || farmCategory === 'FARMS') && (
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Usage</Label>
-                            <Select value={tank.usageCategory || 'Storage'} onValueChange={(val: any) => updateTank(sIdx, tIdx, { usageCategory: val })}>
+                            <Select value={tank.usageCategory || (farmCategory === 'FARMS' ? 'Culture' : 'Storage')} onValueChange={(val: any) => updateTank(sIdx, tIdx, { usageCategory: val })}>
                                 <SelectTrigger className="h-9 text-xs rounded-xl bg-background border-muted shadow-none">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Storage">Storage</SelectItem>
-                                    <SelectItem value="Settlement">Settlement</SelectItem>
-                                    <SelectItem value="Dechlorination">Dechlorination</SelectItem>
-                                    <SelectItem value="Others">Others</SelectItem>
+                                    {farmCategory === 'FARMS' ? (
+                                        <>
+                                            <SelectItem value="Storage/Reservoir">Storage / Reservoir</SelectItem>
+                                            <SelectItem value="Culture">Culture</SelectItem>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <SelectItem value="Storage">Storage</SelectItem>
+                                            <SelectItem value="Settlement">Settlement</SelectItem>
+                                            <SelectItem value="Dechlorination">Dechlorination</SelectItem>
+                                            <SelectItem value="Others">Others</SelectItem>
+                                        </>
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -509,7 +518,7 @@ const EditFarm = () => {
                                     onChange={(e) => updateTank(sIdx, tIdx, { width: Number(e.target.value) })}
                                 />
                             </div>
-                            {sections[sIdx].type === 'WATER' && tank.usageCategory === 'Others' && (
+                            {(sections[sIdx].type === 'WATER' || farmCategory === 'FARMS') && tank.usageCategory === 'Others' && (
                                 <div className="space-y-1.5 col-span-1 sm:col-span-2">
                                     <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-tight">Custom Usage</Label>
                                     <Input
@@ -679,7 +688,7 @@ const EditFarm = () => {
 
                 <div className="flex justify-between items-end">
                     <div>
-                        <h1 className="text-2xl font-bold">Edit Farm Configuration</h1>
+                        <h1 className="text-2xl font-bold">{farmCategory === 'FARMS' ? 'Edit Farm Configuration' : `Edit ${farmCategory} Configuration`}</h1>
                         <p className="text-muted-foreground">Modify sections and individual tanks</p>
                     </div>
                 </div>
@@ -688,7 +697,7 @@ const EditFarm = () => {
                     <CardContent className="p-6">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="farmName">Farm Name</Label>
+                                <Label htmlFor="farmName">{farmCategory === 'FARMS' ? 'Farm Name' : 'Setup Name'}</Label>
                                 <Input
                                     id="farmName"
                                     value={farmName}
@@ -947,9 +956,11 @@ const EditFarm = () => {
                                 <Button onClick={addSection} className="flex-1 h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
                                     <Plus className="w-5 h-5 mr-2" /> Add New Section
                                 </Button>
-                                <Button onClick={() => addSectionByType('WATER')} className="flex-1 h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
-                                    <Plus className="w-5 h-5 mr-2" /> Add Water Section
-                                </Button>
+                                {farmCategory === 'LRT' && (
+                                    <Button onClick={() => addSectionByType('WATER')} className="flex-1 h-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold transition-all">
+                                        <Plus className="w-5 h-5 mr-2" /> Add Water Section
+                                    </Button>
+                                )}
                             </div>
                         )}
                     </div>

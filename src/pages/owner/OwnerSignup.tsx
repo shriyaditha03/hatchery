@@ -246,10 +246,10 @@ const OwnerSignup = () => {
     const isFarmSelected = selectedModules.includes('FARMS');
     const isHatcherySelected = selectedModules.includes('LRT') || selectedModules.includes('MATURATION');
     
-    let entityLabel = "Firm Name";
+    let entityLabel = "Farm Name";
     let entityPlaceholder = "e.g. Sunrise Aquaculture Group";
-    let pageTitle = "Firm Registration";
-    let pageSubtitle = "Create your Firm Account";
+    let pageTitle = "Farm Registration";
+    let pageSubtitle = "Create your Farm Account";
 
     return (
         <div className="min-h-screen ocean-gradient flex items-center justify-center p-4">
