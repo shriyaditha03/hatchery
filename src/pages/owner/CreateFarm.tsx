@@ -177,8 +177,9 @@ const CreateFarm = () => {
         }));
 
         setAddressLoading(true);
+        const controller = new AbortController();
         try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, { signal: controller.signal });
             if (res.ok) {
                 const data = await res.json();
                 const addr = data.address || {};
@@ -232,8 +233,10 @@ const CreateFarm = () => {
                     };
                 });
             }
-        } catch (error) {
-            console.error("Failed to fetch address:", error);
+        } catch (error: any) {
+            if (error?.name !== 'AbortError') {
+                console.error("Failed to fetch address:", error);
+            }
         } finally {
             setAddressLoading(false);
         }

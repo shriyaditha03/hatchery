@@ -285,7 +285,7 @@ const ManageFarms = () => {
 
                 <div>
                     <h1 className="text-2xl font-bold">Manage Farms &amp; Setups</h1>
-                    <p className="text-muted-foreground">Overview of your hatchery infrastructure</p>
+                    <p className="text-muted-foreground">Overview of your firm infrastructure</p>
                 </div>
 
                 {loading ? (
