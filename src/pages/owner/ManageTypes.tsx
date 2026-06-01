@@ -24,7 +24,18 @@ const ManageTypes = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'feed' | 'treatment'>('feed');
-    const [activeModule, setActiveModule] = useState<'LRT' | 'MATURATION'>('LRT');
+    const userModules = user?.modules || ['LRT', 'MATURATION'];
+    const hatcheryMods = userModules.filter((m: string) => m === 'LRT' || m === 'MATURATION');
+    const hasFarms = userModules.includes('FARMS');
+    const hasHatchery = hatcheryMods.length > 0;
+
+    const defaultModule: 'LRT' | 'MATURATION' | 'FARMS' = hasFarms && !hasHatchery
+        ? 'FARMS'
+        : (hatcheryMods[0] as 'LRT' | 'MATURATION') || 'LRT';
+
+    const [activeModule, setActiveModule] = useState<'LRT' | 'MATURATION' | 'FARMS'>(defaultModule);
+    const isInHatchery = activeModule === 'LRT' || activeModule === 'MATURATION';
+    const isInFarm = activeModule === 'FARMS';
     
     const [items, setItems] = useState<TypeItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -252,7 +263,7 @@ const ManageTypes = () => {
                         Manage Types
                     </h1>
                     <p className="text-muted-foreground mt-1">
-                        Configure the options available in activity dropdowns for your hatchery.
+                        Configure the options available in activity dropdowns for your firm.
                     </p>
                 </div>
 
@@ -280,29 +291,97 @@ const ManageTypes = () => {
                     </button>
                 </div>
 
-                {/* Module Selector */}
-                <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50 overflow-hidden">
-                    <button
-                        onClick={() => setActiveModule('LRT')}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
-                            activeModule === 'LRT' 
-                                ? 'bg-blue-600 text-white shadow-md transform scale-[1.02]' 
-                                : 'text-blue-400 hover:text-blue-600'
-                        }`}
-                    >
-                        LRT Module
-                    </button>
-                    <button
-                        onClick={() => setActiveModule('MATURATION')}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
-                            activeModule === 'MATURATION' 
-                                ? 'bg-blue-600 text-white shadow-md transform scale-[1.02]' 
-                                : 'text-blue-400 hover:text-blue-600'
-                        }`}
-                    >
-                        MATURATION Module
-                    </button>
-                </div>
+                {/* Module Selector — two-level Hatchery | Farm */}
+                {(() => {
+                    // Only FARMS, no hatchery
+                    if (!hasHatchery && hasFarms) {
+                        return (
+                            <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50">
+                                <span className="flex-1 py-2 text-xs font-bold rounded-lg text-center bg-blue-600 text-white shadow-md">
+                                    Farm Module
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    // Only one hatchery mod, no FARMS
+                    if (hasHatchery && hatcheryMods.length === 1 && !hasFarms) {
+                        return (
+                            <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50">
+                                <span className="flex-1 py-2 text-xs font-bold rounded-lg text-center bg-blue-600 text-white shadow-md">
+                                    {hatcheryMods[0]} Module
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    // LRT + MATURATION only, no FARMS
+                    if (hasHatchery && hatcheryMods.length === 2 && !hasFarms) {
+                        return (
+                            <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50 overflow-hidden">
+                                {hatcheryMods.map((mod: string) => (
+                                    <button key={mod}
+                                        onClick={() => setActiveModule(mod as any)}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                                            activeModule === mod
+                                                ? 'bg-blue-600 text-white shadow-md scale-[1.02]'
+                                                : 'text-blue-400 hover:text-blue-600'
+                                        }`}
+                                    >
+                                        {mod} Module
+                                    </button>
+                                ))}
+                            </div>
+                        );
+                    }
+
+                    // Has FARMS + at least one hatchery mod — two-level
+                    return (
+                        <div className="space-y-2">
+                            {/* Top level: Hatchery | Farm */}
+                            <div className="flex bg-blue-50/50 p-1 rounded-xl border border-blue-100/50 overflow-hidden">
+                                <button
+                                    onClick={() => setActiveModule((hatcheryMods[0] || 'LRT') as any)}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                                        isInHatchery
+                                            ? 'bg-blue-600 text-white shadow-md scale-[1.02]'
+                                            : 'text-blue-400 hover:text-blue-600'
+                                    }`}
+                                >
+                                    Hatchery
+                                </button>
+                                <button
+                                    onClick={() => setActiveModule('FARMS')}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                                        isInFarm
+                                            ? 'bg-blue-600 text-white shadow-md scale-[1.02]'
+                                            : 'text-blue-400 hover:text-blue-600'
+                                    }`}
+                                >
+                                    Farm
+                                </button>
+                            </div>
+
+                            {/* Sub-level: LRT | MATURATION — only when in hatchery and both exist */}
+                            {isInHatchery && hatcheryMods.length === 2 && (
+                                <div className="flex bg-blue-50/30 p-0.5 rounded-lg border border-blue-100/30 overflow-hidden">
+                                    {hatcheryMods.map((mod: string) => (
+                                        <button key={mod}
+                                            onClick={() => setActiveModule(mod as any)}
+                                            className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                                                activeModule === mod
+                                                    ? 'bg-blue-500 text-white shadow-sm'
+                                                    : 'text-blue-400 hover:text-blue-600'
+                                            }`}
+                                        >
+                                            {mod}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 <div className="glass-card rounded-2xl border shadow-sm p-4 sm:p-6">
                     <div className="flex justify-between items-center mb-6">

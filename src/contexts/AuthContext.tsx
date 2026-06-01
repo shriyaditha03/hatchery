@@ -161,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           fullAccess = farms.map(f => ({
             farm_id: f.id,
             farm_name: f.name,
-            farm_category: ( (Array.isArray(f.category) ? f.category[0] : f.category) || 'LRT').toUpperCase(),
+            farm_category: (() => { const c = ((Array.isArray(f.category) ? f.category[0] : f.category) || 'LRT').toUpperCase(); return c === 'FARM' ? 'FARMS' : c; })(),
             section_id: null,
             section_name: null,
             tank_id: null
@@ -196,7 +196,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           access.forEach((a: any) => {
             const farmObj = a.farms as any;
             const farmName = (Array.isArray(farmObj) ? farmObj[0]?.name : farmObj?.name) || 'Unknown Farm';
-            const farmCategory = (Array.isArray(farmObj) ? (farmObj[0]?.category || 'LRT') : (farmObj?.category || 'LRT')).toUpperCase();
+            const rawCategory = (Array.isArray(farmObj) ? (farmObj[0]?.category || 'LRT') : (farmObj?.category || 'LRT')).toUpperCase();
+            const farmCategory = rawCategory === 'FARM' ? 'FARMS' : rawCategory;
             const farmSections = (Array.isArray(farmObj) ? farmObj[0]?.sections : farmObj?.sections) || [];
 
             if (!a.farm_id && farmObj?.id) a.farm_id = farmObj.id;

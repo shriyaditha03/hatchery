@@ -313,6 +313,7 @@ const RecordActivity = () => {
 
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
   const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
+  const isFarmModule = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
   const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && closedBatchIds.has(activeBroodstockBatchId) && activity !== 'Stocking';
   const currentSelectedTanks = useMemo(() => {
     if (activeFarmCategory === 'MATURATION' && !editId) {
@@ -361,7 +362,7 @@ const RecordActivity = () => {
       case 'Nauplii Sale':
         return ['NAUPLII'];
       default:
-        return null; // Feed, Treatment, Water Quality, Observation ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ all sections
+        return null; // Feed, Treatment, Water Quality, Observation -> all sections
     }
   };
 
@@ -896,11 +897,24 @@ const RecordActivity = () => {
 
   const applyInstruction = (instruction: any) => {
     if (!instruction) return;
-    const { planned_data, tank_id: instrTankId, activity_type: instrActivity } = instruction;
+    const { planned_data, tank_id: instrTankId, activity_type: instrActivity, section_id: instrSectionId, farm_id: instrFarmId } = instruction;
     
-    // If the instruction is for a specific tank and we're in single mode, ensure it matches or set it
-    if (selectionScope === 'single' && instrTankId && tankId !== instrTankId) {
+    // Switch to correct context if available in the instruction
+    if (instrFarmId) {
+      setSelectedFarmId(instrFarmId);
+      setActiveFarmId(instrFarmId);
+    }
+    if (instrSectionId) {
+      setSelectedSectionId(instrSectionId);
+      setActiveSectionId(instrSectionId);
+    }
+
+    if (instrTankId) {
+      setSelectionScope('single');
       setTankId(instrTankId);
+      setSelectedTankIds([instrTankId]);
+    } else if (instrSectionId) {
+      setSelectionScope('all');
     }
 
     const currentAct = instrActivity || activity;
@@ -1288,7 +1302,7 @@ const RecordActivity = () => {
   // Feed fields
   const [feedType, setFeedType] = useState('');
   const [feedQty, setFeedQty] = useState('');
-  const [feedUnit, setFeedUnit] = useState('gms');
+  const [feedUnit, setFeedUnit] = useState(isFarmModule ? 'kg' : 'gms');
 
   // Treatment fields
   const [treatmentType, setTreatmentType] = useState('');
@@ -3138,7 +3152,7 @@ const RecordActivity = () => {
                   {activeFarmCategory}
                 </span>
                 <div className="text-xs text-white/70 font-medium flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-0.5">
-                  <span>{activeFarmName} {activeSection?.name ? `ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${activeSection.name}` : ''}</span>
+                  <span>{activeFarmName} {activeSection?.name ? `• ${activeSection.name}` : ''}</span>
                   {activeFarmCategory === 'MATURATION' && (
                     (() => {
                       const displayId = (activeBroodstockBatchId === 'new' && activity === 'Stocking' && stockingData?.stockingId)
@@ -3397,7 +3411,10 @@ const RecordActivity = () => {
                   {(!isSpecialActivity || (activeFarmCategory === 'MATURATION' && (activity === 'Feed' || activity === 'Treatment' || activity === 'Water Quality' || activity === 'Observation' || activity === 'Animal Quality'))) && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">
-                        {selectionScope === 'single' ? 'Select Tank *' : 'Selected Tanks *'}
+                        {selectionScope === 'single' 
+                          ? (isFarmModule ? 'Select Pond / Tank *' : 'Select Tank *') 
+                          : (isFarmModule ? 'Selected Ponds / Tanks *' : 'Selected Tanks *')
+                        }
                       </Label>
 
                       {selectionScope === 'single' ? (
@@ -3410,7 +3427,7 @@ const RecordActivity = () => {
                           disabled={!selectedSectionId && !activeSectionId && activeFarmCategory !== 'MATURATION'}
                         >
                           <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50" data-testid="tank-select">
-                            <SelectValue placeholder="Select tank" />
+                            <SelectValue placeholder={isFarmModule ? 'Select pond / tank' : 'Select tank'} />
                           </SelectTrigger>
                           <SelectContent>
                             {(() => {
@@ -3434,8 +3451,9 @@ const RecordActivity = () => {
                                     return batchRelatedTankIds.includes(t.id);
                                   }
 
-                                  // 3. Standard fallback logic
-                                  return activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                                  // 3. FARMS module — always show all tanks in the section
+                                  // 4. Standard fallback: Stocking/editing always opens all tanks; otherwise only stocked
+                                  return isFarmModule || activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                                 })
                                 .map((t: any) => {
                                   const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
@@ -3509,7 +3527,9 @@ const RecordActivity = () => {
                               return batchRelatedTankIds.includes(t.id);
                             }
 
-                            return activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                            // 3. FARMS module — always show all tanks in the section
+                            // 4. Standard fallback
+                            return isFarmModule || activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                           })
                           .map((t: any) => (
                         <div 
@@ -3608,6 +3628,20 @@ const RecordActivity = () => {
                     {instr.planned_data.instructions && instr.planned_data.item !== 'Instruction' && (
                         <p className="text-xs text-muted-foreground italic">"{instr.planned_data.instructions}"</p>
                     )}
+                     {instr.tank_id && (
+                       <p className="text-xs font-semibold text-primary/80 flex items-center gap-1 mt-1">
+                         <span>📍 {isFarmModule ? 'Pond: ' : 'Tank: '}</span>
+                         <span className="underline decoration-dotted">
+                           {(() => {
+                             for (const section of availableTanks) {
+                               const tank = section.tanks?.find((t: any) => t.id === instr.tank_id);
+                               if (tank) return tank.name;
+                             }
+                             return 'Loading/Unknown...';
+                           })()}
+                         </span>
+                       </p>
+                     )}
                  </div>
               </div>
             ))}

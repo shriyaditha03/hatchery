@@ -467,35 +467,97 @@ const UserDashboard = () => {
                     <h2 className="text-lg font-bold">Welcome, {user?.name || user?.username}</h2>
                 </div>
 
-                {/* Module Toggle */}
-                <div className="mt-4 flex justify-center">
-                    {(user?.modules || ['LRT', 'MATURATION']).length === 1 ? (
-                        <span className="bg-black/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            {activeModule === 'FARMS' 
-                                ? 'FARM MANAGEMENT' 
-                                : activeModule === 'MATURATION' 
-                                    ? 'MATURATION MODULE' 
-                                    : 'LRT MODULE'}
-                        </span>
-                    ) : (
-                        <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-full max-w-[280px]">
-                            <TabsList className={`grid w-full bg-black/20 text-white rounded-xl h-8 p-0.5 ${
-                                (user?.modules || ['LRT', 'MATURATION']).length === 3 ? 'grid-cols-3' : 'grid-cols-2'
-                            }`}>
-                                {(user?.modules || ['LRT', 'MATURATION']).includes('LRT') && (
-                                    <TabsTrigger value="LRT" className="text-[10px] font-bold">LRT</TabsTrigger>
-                                )}
-                                {(user?.modules || ['LRT', 'MATURATION']).includes('MATURATION') && (
-                                    <TabsTrigger value="MATURATION" className="text-[10px] font-bold">MATURATION</TabsTrigger>
-                                )}
-                                {(user?.modules || ['LRT', 'MATURATION']).includes('FARMS') && (
-                                    <TabsTrigger value="FARMS" className="text-[10px] font-bold">FARM</TabsTrigger>
-                                )}
-                            </TabsList>
-                        </Tabs>
-                    )}
-                </div>
+                {/* Module Toggle - Two-level: Hatchery | Farm */}
+                {(() => {
+                    const userMods = user?.modules || ['LRT', 'MATURATION'];
+                    const hatcheryMods = userMods.filter((m: string) => m === 'LRT' || m === 'MATURATION');
+                    const hasFarms = userMods.includes('FARMS');
+                    const hasHatchery = hatcheryMods.length > 0;
+                    const isInHatchery = activeModule === 'LRT' || activeModule === 'MATURATION';
+                    const isInFarm = activeModule === 'FARMS';
+
+                    // Only FARMS — single badge
+                    if (!hasHatchery && hasFarms) {
+                        return (
+                            <div className="mt-4 flex justify-center">
+                                <span className="bg-black/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    FARM MANAGEMENT
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    // Only one hatchery module, no FARMS — single badge
+                    if (hasHatchery && hatcheryMods.length === 1 && !hasFarms) {
+                        return (
+                            <div className="mt-4 flex justify-center">
+                                <span className="bg-black/20 text-white text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest backdrop-blur-sm shadow-sm flex items-center gap-1.5 border border-white/10">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    {hatcheryMods[0]} MODULE
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    // LRT + MATURATION only (no FARMS) — plain two-tab toggle
+                    if (hasHatchery && hatcheryMods.length === 2 && !hasFarms) {
+                        return (
+                            <div className="mt-4 flex justify-center">
+                                <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-full max-w-[280px]">
+                                    <TabsList className="grid w-full grid-cols-2 bg-black/20 text-white rounded-xl h-8 p-0.5">
+                                        <TabsTrigger value="LRT" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[10px]">LRT</TabsTrigger>
+                                        <TabsTrigger value="MATURATION" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[10px]">MATURATION</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                            </div>
+                        );
+                    }
+
+                    // Has FARMS + at least one hatchery module — two-level toggle
+                    return (
+                        <div className="mt-4 flex flex-col items-center gap-2">
+                            {/* Top-level: Hatchery | Farm */}
+                            <Tabs
+                                value={isInFarm ? 'FARM' : 'HATCHERY'}
+                                onValueChange={(val) => {
+                                    if (val === 'FARM') {
+                                        setActiveModule('FARMS');
+                                    } else {
+                                        setActiveModule((hatcheryMods[0] || 'LRT') as 'LRT' | 'MATURATION');
+                                    }
+                                }}
+                                className="w-full max-w-[240px]"
+                            >
+                                <TabsList className="grid w-full grid-cols-2 bg-black/20 text-white rounded-xl h-8 p-0.5">
+                                    <TabsTrigger value="HATCHERY" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]">
+                                        HATCHERY
+                                    </TabsTrigger>
+                                    <TabsTrigger value="FARM" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary font-bold transition-all text-[11px]">
+                                        FARM
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            {/* Sub-level: LRT | MATURATION (only when in hatchery mode and both exist) */}
+                            {isInHatchery && (
+                                hatcheryMods.length === 2 ? (
+                                    <Tabs value={activeModule} onValueChange={(v: any) => setActiveModule(v)} className="w-full max-w-[220px]">
+                                        <TabsList className="grid w-full grid-cols-2 bg-white/5 text-white rounded-lg h-7 p-0.5 border border-white/10">
+                                            <TabsTrigger value="LRT" className="rounded-md data-[state=active]:bg-white/20 data-[state=active]:text-white font-bold transition-all text-[10px]">LRT</TabsTrigger>
+                                            <TabsTrigger value="MATURATION" className="rounded-md data-[state=active]:bg-white/20 data-[state=active]:text-white font-bold transition-all text-[10px]">MATURATION</TabsTrigger>
+                                        </TabsList>
+                                    </Tabs>
+                                ) : (
+                                    <span className="text-white/70 text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-lg border border-white/10">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        {hatcheryMods[0]}
+                                    </span>
+                                )
+                            )}
+                        </div>
+                    );
+                })()}
 
                 <div className="mt-4 flex flex-col sm:flex-row gap-2">
                     {/* Select Farm */}
