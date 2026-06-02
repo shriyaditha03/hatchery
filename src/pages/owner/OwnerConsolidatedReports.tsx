@@ -192,6 +192,7 @@ const OwnerConsolidatedReports = () => {
         } else if (typeLower === 'treatment') {
             return `${data.treatmentType || 'N/A'} - ${data.treatmentDosage || '0'} ${data.treatmentUnit || 'ml'}`;
         } else if (typeLower === 'stocking') {
+            const isFarm = !!data.seedSpecies;
             return (
                 <div className="space-y-0.5">
                     <div>
@@ -200,7 +201,11 @@ const OwnerConsolidatedReports = () => {
                         ) : (
                             `Nauplii: ${data.naupliiStocked || '0'}M`
                         )}
-                        {data.broodstockSource && `, Source: ${data.broodstockSource}`}
+                        {isFarm ? (
+                            data.seedSpecies && `, Species: ${data.seedSpecies}`
+                        ) : (
+                            data.broodstockSource && `, Source: ${data.broodstockSource}`
+                        )}
                     </div>
                     <div className="text-[9px] text-muted-foreground">
                         {data.totalMalesReceived || data.totalMales ? (
@@ -210,7 +215,15 @@ const OwnerConsolidatedReports = () => {
                         ) : (
                              `Pop: ${data.tankStockingNumber || '0'}`
                         )}
-                        {data.hatcheryName && `, Hatchery: ${data.hatcheryName}`}
+                        {isFarm ? (
+                            <>
+                                {data.seedGeneticLine && `, Line: ${data.seedGeneticLine}`}
+                                {data.hatcheryName && `, Hatchery: ${data.hatcheryName}`}
+                                {data.seedStage && `, Stage: ${data.seedStage}`}
+                            </>
+                        ) : (
+                            data.hatcheryName && `, Hatchery: ${data.hatcheryName}`
+                        )}
                     </div>
                     {(data.animalConditionScore || data.waterQualityScore) && (
                         <div className="text-[9px] text-primary/70 font-semibold">

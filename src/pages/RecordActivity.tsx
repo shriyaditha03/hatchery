@@ -1845,13 +1845,21 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Stocking') {
-      const required = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
-      // If Maturation, naupliiStocked is not required (as it's hidden)
-      const adjustedRequired = activeFarmCategory === 'MATURATION' 
-        ? required.filter(f => f !== 'naupliiStocked')
-        : required;
+      const isFarmModule = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
+      
+      let requiredFields: string[];
+      if (isFarmModule) {
+        // Farm module uses seed-specific fields instead of broodstock/nauplii fields
+        requiredFields = ['stockingId', 'seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
+      } else if (activeFarmCategory === 'MATURATION') {
+        // Maturation: naupliiStocked is not required (hidden)
+        requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
+      } else {
+        // LRT and others: no stockingId needed
+        requiredFields = ['broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
+      }
         
-      const missing = adjustedRequired.filter(f => {
+      const missing = requiredFields.filter(f => {
         let val = stockingData[f];
         // Special case: check both name variations for water quality
         if (f === 'waterQualityScore' && (val === undefined || val === null || val === '')) {

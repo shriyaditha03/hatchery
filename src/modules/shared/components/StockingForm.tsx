@@ -190,28 +190,30 @@ const StockingForm = ({
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Stocking Details</h2>
 
-      <div className="space-y-1.5 glass-card bg-primary/5 border-primary/20 p-3 rounded-xl mb-4">
-        <div className="flex justify-between items-center mb-1">
-          <Label className="text-xs font-bold text-primary">Stocking ID *</Label>
-          {isIdManuallyEdited && (
-            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full">
-              Manual Edit
-            </span>
-          )}
-          {!isIdManuallyEdited && data.stockingId && (
-            <span className="text-[9px] font-bold text-primary uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-full">
-              Auto-Generated
-            </span>
-          )}
+      {activeFarmCategory !== 'LRT' && (
+        <div className="space-y-1.5 glass-card bg-primary/5 border-primary/20 p-3 rounded-xl mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <Label className="text-xs font-bold text-primary">Stocking ID *</Label>
+            {isIdManuallyEdited && (
+              <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full">
+                Manual Edit
+              </span>
+            )}
+            {!isIdManuallyEdited && data.stockingId && (
+              <span className="text-[9px] font-bold text-primary uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-full">
+                Auto-Generated
+              </span>
+            )}
+          </div>
+          <Input
+            value={data.stockingId || ''}
+            onChange={e => handleChange('stockingId', e.target.value)}
+            placeholder="e.g. BS_HN_260317"
+            className="h-11 font-mono font-bold text-base"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1">Format: BS#_HN#_YYMMDD (Broodstock_Hatchery_Date)</p>
         </div>
-        <Input
-          value={data.stockingId || ''}
-          onChange={e => handleChange('stockingId', e.target.value)}
-          placeholder="e.g. BS_HN_260317"
-          className="h-11 font-mono font-bold text-base"
-        />
-        <p className="text-[10px] text-muted-foreground mt-1">Format: BS#_HN#_YYMMDD (Broodstock_Hatchery_Date)</p>
-      </div>
+      )}
 
       {activeFarmCategory === 'MATURATION' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -603,7 +605,7 @@ const StockingForm = ({
         </div>
       )}
 
-      {activeFarmCategory !== 'MATURATION' && (
+      {activeFarmCategory !== 'MATURATION' && activeFarmCategory !== 'FARMS' && activeFarmCategory !== 'FARM' && (
         <>
           <div className="space-y-1.5">
             <Label className="text-xs">Source of Broodstock *</Label>
@@ -645,6 +647,105 @@ const StockingForm = ({
             />
           </div>
         </>
+      )}
+
+      {/* ── FARMS Module – Stocking Fields ── */}
+      {(activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM') && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
+
+          {/* 1. Seed Species */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Seed Species *</Label>
+            <Select
+              value={data.seedSpecies || ''}
+              onValueChange={val => {
+                handleChange('seedSpecies', val);
+                handleChange('seedGeneticLine', ''); // reset genetic line when species changes
+              }}
+            >
+              <SelectTrigger className="h-11 border-muted-foreground/30 focus:border-primary/50">
+                <SelectValue placeholder="Select seed species" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Litopenaeus Vannamei (Vannamei)">Litopenaeus Vannamei (Vannamei)</SelectItem>
+                <SelectItem value="Penaeus Monodon (Tiger)">Penaeus Monodon (Tiger)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 2. Seed Genetic Line – conditional on species */}
+          {data.seedSpecies && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Seed Genetic Line *</Label>
+              <Select
+                value={data.seedGeneticLine || ''}
+                onValueChange={val => handleChange('seedGeneticLine', val)}
+              >
+                <SelectTrigger className="h-11 border-muted-foreground/30 focus:border-primary/50">
+                  <SelectValue placeholder="Select genetic line" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.seedSpecies === 'Litopenaeus Vannamei (Vannamei)' ? (
+                    <>
+                      <SelectItem value="SIS Pandyline">SIS Pandyline</SelectItem>
+                      <SelectItem value="SIS Growth Line">SIS Growth Line</SelectItem>
+                      <SelectItem value="Syaqua">Syaqua</SelectItem>
+                      <SelectItem value="Konabay">Konabay</SelectItem>
+                      <SelectItem value="Others">Others</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="Moana (Moana Technologies)">Moana (Moana Technologies)</SelectItem>
+                      <SelectItem value="Madagascar (Unibio)">Madagascar (Unibio)</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* 3. Hatchery Name (Seed Source) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Hatchery Name (Seed Source) *</Label>
+            <Input
+              value={data.hatcheryName || ''}
+              onChange={e => handleChange('hatcheryName', e.target.value)}
+              placeholder="Enter hatchery / seed source name"
+              className="h-11"
+            />
+          </div>
+
+          {/* 4. Seed Stage */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Seed Stage *</Label>
+            <Select
+              value={data.seedStage || ''}
+              onValueChange={val => handleChange('seedStage', val)}
+            >
+              <SelectTrigger className="h-11 border-muted-foreground/30 focus:border-primary/50">
+                <SelectValue placeholder="Select seed stage (PL)" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 10 }, (_, i) => `PL-${i + 7}`).map(stage => (
+                  <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 5. Stocking Number (Population) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Stocking Number (Population) *</Label>
+            <Input
+              type="number" min="0"
+              value={data.tankStockingNumber || ''}
+              onChange={e => handleChange('tankStockingNumber', e.target.value)}
+              placeholder="0"
+              className="h-11"
+            />
+          </div>
+
+        </div>
       )}
 
       {(activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
