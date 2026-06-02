@@ -1633,7 +1633,7 @@ const RecordActivity = () => {
           }
         }
 
-        if (activity === 'Stocking') {
+        if (activity === 'Stocking' && activeFarmCategory === 'MATURATION') {
           if (!stockingData.stockingId) {
             toast.error('Stocking ID is required');
             return;
@@ -1850,7 +1850,7 @@ const RecordActivity = () => {
       let requiredFields: string[];
       if (isFarmModule) {
         // Farm module uses seed-specific fields instead of broodstock/nauplii fields
-        requiredFields = ['stockingId', 'seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
+        requiredFields = ['seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
       } else if (activeFarmCategory === 'MATURATION') {
         // Maturation: naupliiStocked is not required (hidden)
         requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
@@ -3382,39 +3382,6 @@ const RecordActivity = () => {
                     </div>
                   )}
 
-                  {/* Maintenance Activity Section Choice (Visible when activeSectionId is set) */}
-                  {activity && MAINTENANCE_ACTIVITIES.includes(activity) && activeSectionId && (
-                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
-                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Change Section (Optional)</Label>
-                       <Select 
-                        value={selectedSectionId || activeSectionId || ''} 
-                        onValueChange={(val) => {
-                          setSelectedSectionId(val);
-                          setTankId(''); 
-                          setSelectedTankIds([]);
-                        }}
-                      >
-                        <SelectTrigger className="h-11 border-primary/20 bg-primary/5 focus:ring-primary shadow-sm rounded-xl">
-                          <SelectValue placeholder="Select section" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableTanks
-                            .filter(s => {
-                              const currentFarmId = selectedFarmId || activeFarmId;
-                              return currentFarmId ? s.farm_id === currentFarmId : true;
-                            })
-                            .map(section => (
-                              <SelectItem key={section.id} value={section.id}>
-                                <span className="font-medium">{section.name}</span>
-                                {section.section_type && <span className="ml-2 text-[10px] opacity-70 uppercase">({section.section_type})</span>}
-                              </SelectItem>
-                            ))
-                          }
-                        </SelectContent>
-                      </Select>
-                      <p className="text-[10px] text-muted-foreground ml-1 italic">Switch section to record {activity.toLowerCase()} for different tank types.</p>
-                    </div>
-                  )}
 
                   {(!isSpecialActivity || (activeFarmCategory === 'MATURATION' && (activity === 'Feed' || activity === 'Treatment' || activity === 'Water Quality' || activity === 'Observation' || activity === 'Animal Quality'))) && (
                     <div className="space-y-1.5">

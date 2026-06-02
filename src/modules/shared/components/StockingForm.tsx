@@ -133,13 +133,16 @@ const StockingForm = ({
 
   // Auto-update ID when dependencies change
   useEffect(() => {
+    if (activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM') {
+      return;
+    }
     if (!isIdManuallyEdited) {
       const newId = generateStockingId(data.broodstockSource || '', data.broodstockType || '');
       if (data.stockingId !== newId) {
         onDataChange((prev: any) => ({ ...prev, stockingId: newId }));
       }
     }
-  }, [data.broodstockSource, data.broodstockType, isIdManuallyEdited, onDataChange, todayBatchCount, currentDate]);
+  }, [data.broodstockSource, data.broodstockType, isIdManuallyEdited, onDataChange, todayBatchCount, currentDate, activeFarmCategory]);
 
   const setRating = (key: string, value: number) => {
     setAnimalRatings(prev => ({ ...prev, [key]: value }));
@@ -190,7 +193,7 @@ const StockingForm = ({
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Stocking Details</h2>
 
-      {activeFarmCategory !== 'LRT' && (
+      {activeFarmCategory === 'MATURATION' && (
         <div className="space-y-1.5 glass-card bg-primary/5 border-primary/20 p-3 rounded-xl mb-4">
           <div className="flex justify-between items-center mb-1">
             <Label className="text-xs font-bold text-primary">Stocking ID *</Label>
@@ -613,7 +616,7 @@ const StockingForm = ({
               value={data.broodstockSource || ''}
               onChange={e => handleChange('broodstockSource', e.target.value)}
               placeholder="Enter broodstock source"
-              className="h-11 border-2 border-slate-500"
+              className="h-11"
             />
           </div>
 
@@ -623,7 +626,7 @@ const StockingForm = ({
               value={data.hatcheryName || ''}
               onChange={e => handleChange('hatcheryName', e.target.value)}
               placeholder="Enter hatchery / section name"
-              className="h-11 border-2 border-slate-500"
+              className="h-11"
             />
           </div>
 
@@ -633,7 +636,7 @@ const StockingForm = ({
               type="number" min="0" value={data.tankStockingNumber || ''}
               onChange={e => handleChange('tankStockingNumber', e.target.value)}
               placeholder="0"
-              className="h-11 border-2 border-slate-500"
+              className="h-11"
             />
           </div>
 
@@ -643,7 +646,7 @@ const StockingForm = ({
               type="number" min="0" step="any" value={data.naupliiStocked || ''}
               onChange={e => handleChange('naupliiStocked', e.target.value)}
               placeholder="0"
-              className="h-11 border-2 border-slate-500"
+              className="h-11"
             />
           </div>
         </>
