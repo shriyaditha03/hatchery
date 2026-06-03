@@ -14,16 +14,29 @@ interface TypeItem {
     name: string;
     description: string | null;
     is_active: boolean;
-    section_category: string;
+    section_category?: string;
 }
 
 const DEFAULT_FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
 const DEFAULT_TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
+const DEFAULT_VANNAMEI_GENETIC_TYPES = ['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'Konabay', 'Others'];
+const DEFAULT_TIGER_GENETIC_TYPES = ['Moana (Moana Technologies)', 'Madagascar (Unibio)'];
+
+// Sort items so defaults appear in their preset order, custom items appended alphabetically
+const sortByDefaultOrder = (items: any[], defaultOrder: string[]) =>
+    [...items].sort((a, b) => {
+        const aIdx = defaultOrder.indexOf(a.name);
+        const bIdx = defaultOrder.indexOf(b.name);
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        if (aIdx !== -1) return -1;
+        if (bIdx !== -1) return 1;
+        return a.name.localeCompare(b.name);
+    });
 
 const ManageTypes = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'feed' | 'treatment'>('feed');
+    const [activeTab, setActiveTab] = useState<'feed' | 'treatment' | 'vannamei_genetic' | 'tiger_genetic'>('feed');
     const userModules = user?.modules || ['LRT', 'MATURATION'];
     const hatcheryMods = userModules.filter((m: string) => m === 'LRT' || m === 'MATURATION');
     const hasFarms = userModules.includes('FARMS');
@@ -39,6 +52,7 @@ const ManageTypes = () => {
     
     const [items, setItems] = useState<TypeItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isTableMissing, setIsTableMissing] = useState(false);
     
     // Add/Edit state
     const [isEditing, setIsEditing] = useState<string | null>(null);
@@ -50,6 +64,13 @@ const ManageTypes = () => {
     const [newDesc, setNewDesc] = useState('');
     const [saving, setSaving] = useState(false);
 
+    // If activeModule is not FARMS, reset tab to feed if it was one of the genetic ones
+    useEffect(() => {
+        if (activeModule !== 'FARMS' && (activeTab === 'vannamei_genetic' || activeTab === 'tiger_genetic')) {
+            setActiveTab('feed');
+        }
+    }, [activeModule]);
+
     useEffect(() => {
         if (user?.hatchery_id) {
             fetchItems();
@@ -60,17 +81,70 @@ const ManageTypes = () => {
         if (!user?.hatchery_id) return;
         setLoading(true);
         try {
-            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
-            const { data, error } = await supabase
+            let table = 'feed_types';
+            let isGenetic = false;
+            let speciesFilter = '';
+
+            if (activeTab === 'feed') {
+                table = 'feed_types';
+            } else if (activeTab === 'treatment') {
+                table = 'treatment_types';
+            } else if (activeTab === 'vannamei_genetic') {
+                table = 'genetic_line_types';
+                isGenetic = true;
+                speciesFilter = 'Litopenaeus Vannamei (Vannamei)';
+            } else if (activeTab === 'tiger_genetic') {
+                table = 'genetic_line_types';
+                isGenetic = true;
+                speciesFilter = 'Penaeus Monodon (Tiger)';
+            }
+
+            const selectCols = isGenetic
+                ? 'id, name, description, is_active'
+                : 'id, name, description, is_active, section_category';
+
+            let query = supabase
                 .from(table)
-                .select('id, name, description, is_active, section_category')
-                .eq('hatchery_id', user.hatchery_id)
-                .eq('section_category', activeModule)
-                .order('name');
+                .select(selectCols);
+
+            if (isGenetic) {
+                query = query
+                    .eq('hatchery_id', user.hatchery_id)
+                    .eq('species', speciesFilter);
+            } else {
+                query = query
+                    .eq('hatchery_id', user.hatchery_id)
+                    .eq('section_category', activeModule);
+            }
+
+            // Genetic types: order by created_at to preserve insertion order; feed/treatment: alphabetical
+            const { data, error } = isGenetic ? await query.order('created_at') : await query.order('name');
             
-            if (error) throw error;
+            if (error) {
+                if (isGenetic && (error.code === 'PGRST205' || error.message?.includes('relation') || error.message?.includes('does not exist'))) {
+                    setIsTableMissing(true);
+                    const defaults = activeTab === 'vannamei_genetic' ? DEFAULT_VANNAMEI_GENETIC_TYPES : DEFAULT_TIGER_GENETIC_TYPES;
+                    setItems(defaults.map((name, index) => ({
+                        id: `default-${index}`,
+                        name,
+                        description: 'Default genetic line',
+                        is_active: true,
+                    })));
+                    return;
+                }
+                throw error;
+            }
+
+            setIsTableMissing(false);
             const fetchedItems = data || [];
-            setItems(fetchedItems);
+
+            // Apply default-order sort for genetic tabs
+            if (isGenetic) {
+                const defaultOrder = activeTab === 'vannamei_genetic' ? DEFAULT_VANNAMEI_GENETIC_TYPES : DEFAULT_TIGER_GENETIC_TYPES;
+                setItems(sortByDefaultOrder(fetchedItems, defaultOrder));
+            } else {
+                setItems(fetchedItems);
+            }
 
             // Automatically seed defaults if list is empty
             if (fetchedItems.length === 0) {
@@ -78,7 +152,7 @@ const ManageTypes = () => {
             }
         } catch (error: any) {
             console.error('Error fetching types:', error);
-            toast.error(`Failed to load ${activeTab} types`);
+            toast.error(`Failed to load ${activeTab.replace('_', ' ')} types`);
         } finally {
             setLoading(false);
         }
@@ -86,14 +160,37 @@ const ManageTypes = () => {
 
     const handleLoadDefaults = async () => {
         if (!user?.hatchery_id) return;
+        if (isTableMissing) {
+            toast.warning("Cannot load defaults because the table is missing from your database.");
+            return;
+        }
         
-        const defaults = activeTab === 'feed' ? DEFAULT_FEED_TYPES : DEFAULT_TREATMENT_TYPES;
+        let defaults = DEFAULT_FEED_TYPES;
+        let table = 'feed_types';
+        let isGenetic = false;
+        let speciesFilter = '';
+
+        if (activeTab === 'feed') {
+            defaults = DEFAULT_FEED_TYPES;
+            table = 'feed_types';
+        } else if (activeTab === 'treatment') {
+            defaults = DEFAULT_TREATMENT_TYPES;
+            table = 'treatment_types';
+        } else if (activeTab === 'vannamei_genetic') {
+            defaults = DEFAULT_VANNAMEI_GENETIC_TYPES;
+            table = 'genetic_line_types';
+            isGenetic = true;
+            speciesFilter = 'Litopenaeus Vannamei (Vannamei)';
+        } else if (activeTab === 'tiger_genetic') {
+            defaults = DEFAULT_TIGER_GENETIC_TYPES;
+            table = 'genetic_line_types';
+            isGenetic = true;
+            speciesFilter = 'Penaeus Monodon (Tiger)';
+        }
+
         setSaving(true);
         
         try {
-            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
-            
-            // Check for existing names to avoid duplicates
             const existingNames = items.map(i => i.name.toLowerCase());
             const newDefaults = defaults.filter(name => !existingNames.includes(name.toLowerCase()));
             
@@ -103,19 +200,28 @@ const ManageTypes = () => {
                 return;
             }
 
-            const { data, error } = await supabase
-                .from(table)
-                .insert(newDefaults.map(name => ({
+            const insertRows = newDefaults.map(name => {
+                const row: any = {
                     name,
                     hatchery_id: user.hatchery_id,
-                    description: 'Default type',
-                    section_category: activeModule
-                })))
+                    description: 'Default type'
+                };
+                if (isGenetic) {
+                    row.species = speciesFilter;
+                } else {
+                    row.section_category = activeModule;
+                }
+                return row;
+            });
+
+            const { data, error } = await supabase
+                .from(table)
+                .insert(insertRows)
                 .select();
 
             if (error) throw error;
             
-            toast.success(`Loaded ${newDefaults.length} default ${activeTab} types`);
+            toast.success(`Loaded ${newDefaults.length} default types`);
             fetchItems();
         } catch (error: any) {
             console.error('Error loading defaults:', error);
@@ -131,26 +237,55 @@ const ManageTypes = () => {
             return;
         }
 
+        if (isTableMissing) {
+            toast.error("Cannot add new items: Database table is missing.");
+            return;
+        }
+
         const isDuplicate = items.some(item => 
             item.name.toLowerCase() === newName.trim().toLowerCase()
         );
 
         if (isDuplicate) {
-            toast.error(`A ${activeTab} type with this name already exists`);
+            toast.error(`A type with this name already exists`);
             return;
         }
         
         setSaving(true);
         try {
-            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
+            let table = 'feed_types';
+            let isGenetic = false;
+            let speciesFilter = '';
+
+            if (activeTab === 'feed') {
+                table = 'feed_types';
+            } else if (activeTab === 'treatment') {
+                table = 'treatment_types';
+            } else if (activeTab === 'vannamei_genetic') {
+                table = 'genetic_line_types';
+                isGenetic = true;
+                speciesFilter = 'Litopenaeus Vannamei (Vannamei)';
+            } else if (activeTab === 'tiger_genetic') {
+                table = 'genetic_line_types';
+                isGenetic = true;
+                speciesFilter = 'Penaeus Monodon (Tiger)';
+            }
+
+            const insertRow: any = {
+                name: newName.trim(),
+                description: newDesc.trim() || null,
+                hatchery_id: user?.hatchery_id
+            };
+
+            if (isGenetic) {
+                insertRow.species = speciesFilter;
+            } else {
+                insertRow.section_category = activeModule;
+            }
+
             const { data, error } = await supabase
                 .from(table)
-                .insert({
-                    name: newName.trim(),
-                    description: newDesc.trim() || null,
-                    hatchery_id: user?.hatchery_id,
-                    section_category: activeModule
-                })
+                .insert(insertRow)
                 .select()
                 .single();
                 
@@ -165,18 +300,31 @@ const ManageTypes = () => {
             setIsAdding(false);
             setNewName('');
             setNewDesc('');
-            toast.success(`Added new ${activeTab} type`);
+            toast.success(`Added new type`);
         } catch (error: any) {
             console.error('Error adding type:', error);
-            toast.error(error.message || `Failed to add ${activeTab} type`);
+            toast.error(error.message || `Failed to add type`);
         } finally {
             setSaving(false);
         }
     };
 
     const handleUpdate = async (id: string, updates: Partial<TypeItem>) => {
+        if (isTableMissing) {
+            toast.error("Cannot update: Database table is missing.");
+            return;
+        }
+
         try {
-            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
+            let table = 'feed_types';
+            if (activeTab === 'feed') {
+                table = 'feed_types';
+            } else if (activeTab === 'treatment') {
+                table = 'treatment_types';
+            } else if (activeTab === 'vannamei_genetic' || activeTab === 'tiger_genetic') {
+                table = 'genetic_line_types';
+            }
+
             const { error } = await supabase
                 .from(table)
                 .update(updates)
@@ -204,12 +352,25 @@ const ManageTypes = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (isTableMissing) {
+            toast.error("Cannot delete: Database table is missing.");
+            return;
+        }
+
         if (!confirm('Are you sure you want to delete this type? This may affect historical data if it was used.')) {
             return;
         }
         
         try {
-            const table = activeTab === 'feed' ? 'feed_types' : 'treatment_types';
+            let table = 'feed_types';
+            if (activeTab === 'feed') {
+                table = 'feed_types';
+            } else if (activeTab === 'treatment') {
+                table = 'treatment_types';
+            } else if (activeTab === 'vannamei_genetic' || activeTab === 'tiger_genetic') {
+                table = 'genetic_line_types';
+            }
+
             const { error } = await supabase
                 .from(table)
                 .delete()
@@ -268,10 +429,10 @@ const ManageTypes = () => {
                 </div>
 
                 {/* Custom Tabs */}
-                <div className="flex bg-muted/50 p-1 rounded-xl">
+                <div className="flex bg-muted/50 p-1 rounded-xl gap-1 overflow-x-auto scrollbar-none">
                     <button
                         onClick={() => setActiveTab('feed')}
-                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                        className={`flex-1 min-w-[100px] py-2 text-sm font-semibold rounded-lg transition-colors ${
                             activeTab === 'feed' 
                                 ? 'bg-white text-primary shadow-sm' 
                                 : 'text-muted-foreground hover:text-foreground'
@@ -281,7 +442,7 @@ const ManageTypes = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('treatment')}
-                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                        className={`flex-1 min-w-[120px] py-2 text-sm font-semibold rounded-lg transition-colors ${
                             activeTab === 'treatment' 
                                 ? 'bg-white text-primary shadow-sm' 
                                 : 'text-muted-foreground hover:text-foreground'
@@ -289,6 +450,30 @@ const ManageTypes = () => {
                     >
                         Treatment Types
                     </button>
+                    {isInFarm && (
+                        <>
+                            <button
+                                onClick={() => setActiveTab('vannamei_genetic')}
+                                className={`flex-1 min-w-[170px] py-2 text-sm font-semibold rounded-lg transition-colors ${
+                                    activeTab === 'vannamei_genetic' 
+                                        ? 'bg-white text-primary shadow-sm' 
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                Vannamei Genetic Lines
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('tiger_genetic')}
+                                className={`flex-1 min-w-[150px] py-2 text-sm font-semibold rounded-lg transition-colors ${
+                                    activeTab === 'tiger_genetic' 
+                                        ? 'bg-white text-primary shadow-sm' 
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                Tiger Genetic Lines
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 {/* Module Selector — two-level Hatchery | Farm */}
@@ -383,16 +568,29 @@ const ManageTypes = () => {
                     );
                 })()}
 
+                {isTableMissing && (activeTab === 'vannamei_genetic' || activeTab === 'tiger_genetic') && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
+                        <strong>Notice:</strong> Database table <code>genetic_line_types</code> is not yet created. 
+                        Showing default genetic lines in read-only mode. To enable adding, editing, or deleting custom genetic lines, please apply the database migration.
+                    </div>
+                )}
+
                 <div className="glass-card rounded-2xl border shadow-sm p-4 sm:p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-bold capitalize">{activeTab} Types</h2>
+                        <h2 className="text-lg font-bold capitalize">
+                            {activeTab === 'vannamei_genetic' 
+                                ? 'Vannamei Genetic Lines' 
+                                : activeTab === 'tiger_genetic' 
+                                    ? 'Tiger Genetic Lines' 
+                                    : `${activeTab} Types`}
+                        </h2>
                         <div className="flex gap-2">
-                            {!isAdding && (
+                            {!isAdding && !isTableMissing && (
                                 <Button variant="outline" onClick={handleLoadDefaults} size="sm" disabled={saving}>
                                     Load Defaults
                                 </Button>
                             )}
-                            {!isAdding && (
+                            {!isAdding && !isTableMissing && (
                                 <Button onClick={() => setIsAdding(true)} size="sm" className="gap-2">
                                     <Plus className="w-4 h-4" /> Add New
                                 </Button>
@@ -402,14 +600,30 @@ const ManageTypes = () => {
 
                     {isAdding && (
                         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-6 space-y-4">
-                            <h3 className="text-sm font-bold text-primary">Add New {activeTab === 'feed' ? 'Feed' : 'Treatment'} Type</h3>
+                            <h3 className="text-sm font-bold text-primary">
+                                Add New {
+                                    activeTab === 'feed'
+                                        ? 'Feed'
+                                        : activeTab === 'treatment'
+                                            ? 'Treatment'
+                                            : 'Genetic Line'
+                                } Type
+                            </h3>
                             <div className="grid gap-3">
                                 <div className="space-y-1">
                                     <Label className="text-xs">Name *</Label>
                                     <Input 
                                         value={newName} 
                                         onChange={(e) => setNewName(e.target.value)} 
-                                        placeholder={`e.g. ${activeTab === 'feed' ? 'Starter Feed' : 'Probiotics'}`}
+                                        placeholder={`e.g. ${
+                                            activeTab === 'feed' 
+                                                ? 'Starter Feed' 
+                                                : activeTab === 'treatment'
+                                                    ? 'Probiotics'
+                                                    : activeTab === 'vannamei_genetic'
+                                                        ? 'SIS Hardy Line'
+                                                        : 'Moana (Moana Technologies)'
+                                        }`}
                                     />
                                 </div>
                                 <div className="space-y-1">
@@ -441,7 +655,9 @@ const ManageTypes = () => {
                     ) : items.length === 0 && !isAdding ? (
                         <div className="text-center py-10 bg-muted/20 rounded-xl border border-dashed">
                             <p className="text-muted-foreground text-sm">No types configured yet.</p>
-                            <Button variant="link" onClick={() => setIsAdding(true)}>Add your first type</Button>
+                            {!isTableMissing && (
+                                <Button variant="link" onClick={() => setIsAdding(true)}>Add your first type</Button>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -468,7 +684,15 @@ const ManageTypes = () => {
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-semibold text-foreground">{item.name}</h3>
-                                                {(activeTab === 'feed' ? DEFAULT_FEED_TYPES : DEFAULT_TREATMENT_TYPES).includes(item.name) && (
+                                                {(() => {
+                                                    let defaults = DEFAULT_FEED_TYPES;
+                                                    if (activeTab === 'feed') defaults = DEFAULT_FEED_TYPES;
+                                                    else if (activeTab === 'treatment') defaults = DEFAULT_TREATMENT_TYPES;
+                                                    else if (activeTab === 'vannamei_genetic') defaults = DEFAULT_VANNAMEI_GENETIC_TYPES;
+                                                    else if (activeTab === 'tiger_genetic') defaults = DEFAULT_TIGER_GENETIC_TYPES;
+                                                    
+                                                    return defaults.includes(item.name);
+                                                })() && (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Default</span>
                                                 )}
                                                 {!item.is_active && (
@@ -482,7 +706,9 @@ const ManageTypes = () => {
                                     )}
 
                                     <div className="flex items-center gap-1 sm:ml-auto self-end sm:self-auto">
-                                        {isEditing === item.id ? (
+                                        {isTableMissing && (activeTab === 'vannamei_genetic' || activeTab === 'tiger_genetic') ? (
+                                            <span className="text-xs text-muted-foreground italic bg-muted/40 px-2 py-1 rounded">Read-only (Default)</span>
+                                        ) : isEditing === item.id ? (
                                             <>
                                                 <Button size="icon" variant="ghost" onClick={() => saveEdit(item.id)} className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
                                                     <Check className="w-4 h-4" />

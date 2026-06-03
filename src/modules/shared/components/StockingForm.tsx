@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,10 +43,37 @@ const StockingForm = ({
   currentDate,
   availableBatches = []
 }: StockingFormProps) => {
+  const { user } = useAuth();
   const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [todayBatchCount, setTodayBatchCount] = useState(0);
+
+  const [vannameiLines, setVannameiLines] = useState<string[]>(['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'Konabay', 'Others']);
+  const [tigerLines, setTigerLines] = useState<string[]>(['Moana (Moana Technologies)', 'Madagascar (Unibio)']);
+
+  useEffect(() => {
+    if (user?.hatchery_id) {
+      supabase
+        .from('genetic_line_types')
+        .select('name, species, is_active')
+        .eq('hatchery_id', user.hatchery_id)
+        .eq('is_active', true)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            const vLines = data
+              .filter((d: any) => d.species === 'Litopenaeus Vannamei (Vannamei)')
+              .map((d: any) => d.name);
+            const tLines = data
+              .filter((d: any) => d.species === 'Penaeus Monodon (Tiger)')
+              .map((d: any) => d.name);
+
+            if (vLines.length > 0) setVannameiLines(vLines);
+            if (tLines.length > 0) setTigerLines(tLines);
+          }
+        });
+    }
+  }, [user]);
 
   // Recalculate today's batch count whenever available batches or date changes
   useEffect(() => {
@@ -690,16 +718,15 @@ const StockingForm = ({
                 <SelectContent>
                   {data.seedSpecies === 'Litopenaeus Vannamei (Vannamei)' ? (
                     <>
-                      <SelectItem value="SIS Pandyline">SIS Pandyline</SelectItem>
-                      <SelectItem value="SIS Growth Line">SIS Growth Line</SelectItem>
-                      <SelectItem value="Syaqua">Syaqua</SelectItem>
-                      <SelectItem value="Konabay">Konabay</SelectItem>
-                      <SelectItem value="Others">Others</SelectItem>
+                      {vannameiLines.map(line => (
+                        <SelectItem key={line} value={line}>{line}</SelectItem>
+                      ))}
                     </>
                   ) : (
                     <>
-                      <SelectItem value="Moana (Moana Technologies)">Moana (Moana Technologies)</SelectItem>
-                      <SelectItem value="Madagascar (Unibio)">Madagascar (Unibio)</SelectItem>
+                      {tigerLines.map(line => (
+                        <SelectItem key={line} value={line}>{line}</SelectItem>
+                      ))}
                     </>
                   )}
                 </SelectContent>

@@ -1,0 +1,457 @@
+import React, { useState, useEffect } from 'react';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import ImageUpload from './ImageUpload';
+import { AnimalQualityScore, DISEASE_OPTIONS } from './AnimalQualityScore';
+import { Activity, Plus, TrendingDown, Scale, Trash2 } from 'lucide-react';
+
+interface AnimalSamplingFormProps {
+  data: any;
+  onDataChange: (val: any) => void;
+  comments: string;
+  onCommentsChange: (val: string) => void;
+  photoUrl: string;
+  onPhotoUrlChange: (val: string) => void;
+  activeFarmCategory?: string;
+  isPlanningMode?: boolean;
+  onGoToStocking?: () => void;
+}
+
+const WEATHER_OPTIONS = [
+  'Sunny (Normal)',
+  'Scorching',
+  'Sunny Cloudy',
+  'Cloudy',
+  'Drizzle',
+  'Rain',
+  'Thunderstorm'
+];
+
+const LARVAL_STAGES = [
+  'Nauplii', 'Z1', 'Z2', 'Z3', 'M1', 'M2', 'M3', 
+  'PL1', 'PL2', 'PL3', 'PL4', 'PL5', 'PL6', 'PL7', 'PL8', 'PL9', 'PL10', 
+  'PL11', 'PL12', 'PL13', 'PL14', 'PL15+'
+];
+
+export const AnimalSamplingForm = ({
+  data,
+  onDataChange,
+  comments,
+  onCommentsChange,
+  photoUrl,
+  onPhotoUrlChange,
+  activeFarmCategory = 'LRT',
+  isPlanningMode = false,
+  onGoToStocking
+}: AnimalSamplingFormProps) => {
+
+  const isLRT = activeFarmCategory === 'LRT';
+  const isMaturation = activeFarmCategory === 'MATURATION';
+  const isFarms = activeFarmCategory === 'FARMS';
+
+  const [samplingMode, setSamplingMode] = useState<'LARVAL_STAGE' | 'CONVERSION' | 'ABW' | 'NET_SAMPLING'>(
+    data.samplingMode || (isLRT ? 'LARVAL_STAGE' : 'ABW')
+  );
+
+  // Computed Values
+  const stockingPop = parseInt(data.stockingPopulation || data.presentPopulationM || data.totalMales || data.naupliiStocked || '0') + 
+                      parseInt(data.presentPopulationF || data.totalFemales || '0');
+  
+  // Actually, we use data.presentPopulation straight from RecordActivity if available. 
+  // Let's ensure we use it as base.
+  const basePopulation = parseFloat(data.stockingPopulation || data.originalPop || data.naupliiStocked || '0');
+
+  // Handle Mortality & Present Pop
+  const handleMortalityChange = (val: string) => {
+    const mort = parseFloat(val) || 0;
+    // For LRT it's in millions
+    const actualMort = isLRT ? mort * 1000000 : mort;
+    const currentPop = parseFloat(data.presentPopulation || basePopulation.toString());
+    const newPop = Math.max(0, currentPop - actualMort); // This logic might need to be refined if we want it based off original stocking. Let's base off presentPop from the start of the form load, or keep it simple.
+
+    // If data.presentPopulation isn't set, default it
+    const calcPop = Math.max(0, basePopulation - actualMort);
+    onDataChange({ ...data, mortality: val, presentPopulation: calcPop.toString() });
+  };
+
+  const presentPop = parseFloat(data.presentPopulation || basePopulation.toString()) || 0;
+
+  // Sync disease selection
+  const handleDiseaseToggle = (disease: string) => {
+    let current = data.diseases || [];
+    if (disease === 'None') {
+      current = ['None'];
+    } else {
+      current = current.filter((d: string) => d !== 'None');
+      if (current.includes(disease)) {
+        current = current.filter((d: string) => d !== disease);
+      } else {
+        current = [...current, disease];
+      }
+    }
+    onDataChange({ ...data, diseases: current });
+  };
+
+  // Conversion Grid calculations
+  const [conversionData, setConversionData] = useState<Record<string, string>>(data.conversionData || {});
+  
+  const handleConversionChange = (stage: string, val: string) => {
+    const newData = { ...conversionData, [stage]: val };
+    setConversionData(newData);
+    onDataChange({ ...data, conversionData: newData, samplingMode: 'CONVERSION' });
+  };
+
+  // Net Sampling Grid
+  const [nets, setNets] = useState<any[]>(data.nets || []);
+  const [numNets, setNumNets] = useState(data.nets?.length?.toString() || '');
+
+  const updateNumNets = (val: string) => {
+    setNumNets(val);
+    const num = parseInt(val) || 0;
+    const newNets = [...nets];
+    if (num > nets.length) {
+      for (let i = nets.length; i < num; i++) {
+        newNets.push({ weight: '', count: '', weightUnit: 'gms' });
+      }
+    } else if (num < nets.length) {
+      newNets.splice(num);
+    }
+    setNets(newNets);
+    calculateOverallAbw(newNets);
+  };
+
+  const updateNet = (idx: number, field: string, val: string) => {
+    const newNets = [...nets];
+    newNets[idx] = { ...newNets[idx], [field]: val };
+    setNets(newNets);
+    calculateOverallAbw(newNets);
+  };
+
+  const calculateOverallAbw = (currentNets: any[]) => {
+    let sumAbw = 0;
+    let count = 0;
+    currentNets.forEach(net => {
+      const w = parseFloat(net.weight);
+      const c = parseFloat(net.count);
+      if (w > 0 && c > 0) {
+        const weightGms = net.weightUnit === 'kg' ? w * 1000 : w;
+        sumAbw += (weightGms / c);
+        count++;
+      }
+    });
+    const avgAbw = count > 0 ? (sumAbw / count) : 0;
+    onDataChange({ ...data, nets: currentNets, abw: avgAbw > 0 ? avgAbw.toFixed(3) : '', samplingMode: 'NET_SAMPLING' });
+  };
+
+  // Biomass & Count Calcs
+  const abw = parseFloat(data.abw || '0');
+  const biomass = abw > 0 ? (presentPop * abw / 1000).toFixed(3) : '0';
+  const animalsPerKg = abw > 0 ? Math.round(1000 / abw) : 0;
+
+  useEffect(() => {
+    if ((isMaturation || isFarms) && abw > 0) {
+      onDataChange({ ...data, biomass, animalsPerKg: animalsPerKg.toString() });
+    }
+  }, [presentPop, abw]);
+
+  return (
+    <div className="space-y-6">
+      
+      {/* 1. Header & Stocking Info */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        {!isPlanningMode && onGoToStocking && !data.stockingId && (
+          <Button
+            variant="outline"
+            className="w-full py-6 rounded-xl border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary text-primary transition-all flex flex-col gap-0.5 h-auto text-center"
+            onClick={onGoToStocking}
+          >
+            <span className="text-xs font-bold uppercase flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" /> No Stocking Record</span>
+            <span className="text-[10px] text-muted-foreground font-medium">Tap here to Record Stocking for this {isFarms ? 'Pond' : 'Tank'}</span>
+          </Button>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Stocking Date</Label>
+            <div className="h-10 px-3 flex items-center bg-muted/30 rounded-lg text-sm font-bold">{data.stockingDate || '—'}</div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">DOC</Label>
+            <div className="h-10 px-3 flex items-center bg-muted/30 rounded-lg text-sm font-bold">{data.doc !== undefined ? data.doc : '—'}</div>
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs text-muted-foreground">Stocking Population</Label>
+            <div className="h-10 px-3 flex items-center bg-muted/30 rounded-lg text-sm font-bold">{basePopulation.toLocaleString() || '—'}</div>
+          </div>
+          
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs font-bold uppercase">Weather Report</Label>
+            <Select value={data.weather || ''} onValueChange={(val) => onDataChange({ ...data, weather: val })}>
+              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200"><SelectValue placeholder="Select Weather" /></SelectTrigger>
+              <SelectContent>
+                {WEATHER_OPTIONS.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Sampling Section */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-primary flex items-center gap-2">
+          <Scale className="w-4 h-4" /> Sampling Data
+        </h2>
+
+        {isLRT ? (
+          <>
+            <div className="flex bg-muted/50 p-1 rounded-xl">
+              <Button type="button" variant={samplingMode === 'LARVAL_STAGE' ? 'default' : 'ghost'} className="flex-1 rounded-lg h-9 text-xs" onClick={() => { setSamplingMode('LARVAL_STAGE'); onDataChange({ ...data, samplingMode: 'LARVAL_STAGE' }); }}>Larval Stage</Button>
+              <Button type="button" variant={samplingMode === 'CONVERSION' ? 'default' : 'ghost'} className="flex-1 rounded-lg h-9 text-xs" onClick={() => { setSamplingMode('CONVERSION'); onDataChange({ ...data, samplingMode: 'CONVERSION' }); }}>Sampling</Button>
+            </div>
+
+            {samplingMode === 'LARVAL_STAGE' ? (
+              <div className="space-y-1.5 pt-2">
+                <Label className="text-xs font-bold uppercase">Larval Stage (Nauplii to PL 15+)</Label>
+                <Select value={data.larvalStage || ''} onValueChange={(val) => onDataChange({ ...data, larvalStage: val })}>
+                  <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200"><SelectValue placeholder="Select Stage" /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {LARVAL_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2">
+                <Label className="text-xs font-bold uppercase">Larval Stage Conversion %</Label>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {[
+                    { from: 'Nauplii', to: 'Z1' },
+                    { from: 'Z1', to: 'Z2' },
+                    { from: 'Z2', to: 'Z3' },
+                    { from: 'Z3', to: 'M1' },
+                    { from: 'M1', to: 'M2' },
+                    { from: 'M2', to: 'M3' },
+                    { from: 'M3', to: 'PL1' }
+                  ].map(conv => (
+                    <div key={conv.from} className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold w-12 text-right">{conv.from} %</span>
+                      <Input type="number" placeholder="0" className="h-9 w-16 px-2 text-center" value={conversionData[conv.from] || ''} onChange={(e) => handleConversionChange(conv.from, e.target.value)} />
+                      <span className="text-[10px] text-muted-foreground w-6 text-center">→</span>
+                      <span className="text-[10px] font-bold w-6">{conv.to}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1.5 pt-4 border-t border-dashed">
+                  <Label className="text-xs font-bold uppercase">PL Stage Selection</Label>
+                  <div className="flex gap-2">
+                    <Select value={data.plStageDropdown || ''} onValueChange={(val) => onDataChange({ ...data, plStageDropdown: val })}>
+                      <SelectTrigger className="h-11 w-24 rounded-xl"><SelectValue placeholder="PL Stage" /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 15 }, (_, i) => `PL${i + 1}`).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        <SelectItem value="PL15+">PL15+</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Or enter stage (e.g. 16)" className="h-11 flex-1" value={data.plStageManual || ''} onChange={(e) => onDataChange({ ...data, plStageManual: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="bg-primary/5 p-3 rounded-xl border border-primary/20 space-y-2">
+                  <Label className="text-xs font-bold uppercase text-primary">Stage & Population Calculation</Label>
+                  <p className="text-[10px] text-muted-foreground">Will auto-calculate based on % of present population ({presentPop.toLocaleString()})</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-[10px]">Stage 1</Label><Input value={data.calcStage1 || ''} onChange={e => onDataChange({ ...data, calcStage1: e.target.value })} className="h-8" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Pop 1</Label><Input type="number" value={data.calcPop1 || ''} onChange={e => onDataChange({ ...data, calcPop1: e.target.value })} className="h-8" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Stage 2</Label><Input value={data.calcStage2 || ''} onChange={e => onDataChange({ ...data, calcStage2: e.target.value })} className="h-8" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Pop 2</Label><Input type="number" value={data.calcPop2 || ''} onChange={e => onDataChange({ ...data, calcPop2: e.target.value })} className="h-8" /></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex bg-muted/50 p-1 rounded-xl">
+              <Button type="button" variant={samplingMode === 'ABW' ? 'default' : 'ghost'} className="flex-1 rounded-lg h-9 text-xs" onClick={() => { setSamplingMode('ABW'); onDataChange({ ...data, samplingMode: 'ABW' }); }}>Average Body Weight</Button>
+              <Button type="button" variant={samplingMode === 'NET_SAMPLING' ? 'default' : 'ghost'} className="flex-1 rounded-lg h-9 text-xs" onClick={() => { setSamplingMode('NET_SAMPLING'); onDataChange({ ...data, samplingMode: 'NET_SAMPLING' }); }}>Sampling</Button>
+            </div>
+
+            {samplingMode === 'ABW' ? (
+              <div className="space-y-1.5 pt-2">
+                <Label className="text-xs font-bold uppercase">Average Body Weight (ABW) in gms</Label>
+                <Input type="number" step="0.01" placeholder="0.00" className="h-11 text-lg font-bold" value={data.abw || ''} onChange={(e) => onDataChange({ ...data, abw: e.target.value })} />
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase">Choose Number of Nets</Label>
+                  <Input type="number" min="1" max="10" placeholder="e.g. 3" className="h-11" value={numNets} onChange={(e) => updateNumNets(e.target.value)} />
+                </div>
+                
+                {nets.map((net, idx) => (
+                  <div key={idx} className="p-3 bg-muted/30 rounded-xl space-y-3 border border-slate-100">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Net {idx + 1}</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px]">Weight</Label>
+                        <div className="flex">
+                          <Input type="number" step="0.01" className="h-8 rounded-r-none" value={net.weight} onChange={(e) => updateNet(idx, 'weight', e.target.value)} />
+                          <Select value={net.weightUnit} onValueChange={(val) => updateNet(idx, 'weightUnit', val)}>
+                            <SelectTrigger className="h-8 w-16 rounded-l-none border-l-0 text-[10px]"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="gms">gms</SelectItem><SelectItem value="kg">kg</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px]">Animals Count</Label>
+                        <Input type="number" className="h-8" value={net.count} onChange={(e) => updateNet(idx, 'count', e.target.value)} />
+                      </div>
+                      <div className="col-span-2 text-right">
+                        <span className="text-[10px] font-medium text-muted-foreground mr-2">Calculated ABW:</span>
+                        <span className="text-sm font-black text-primary">
+                          {(parseFloat(net.weight) > 0 && parseFloat(net.count) > 0) ? 
+                            ((net.weightUnit === 'kg' ? parseFloat(net.weight) * 1000 : parseFloat(net.weight)) / parseFloat(net.count)).toFixed(2) + ' g' 
+                          : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {nets.length > 0 && (
+                  <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 flex justify-between items-center">
+                    <Label className="text-xs font-black uppercase text-primary">Overall ABW</Label>
+                    <span className="text-xl font-black text-primary">{data.abw ? parseFloat(data.abw).toFixed(2) + ' g' : '—'}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 3. Mortality & Biology */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-rose-600 flex items-center gap-2">
+          <TrendingDown className="w-4 h-4" /> Mortality & Demographics
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs font-bold uppercase text-rose-700">
+              {isLRT ? 'Population drop (in millions)' : 'Number of Animals Lost'}
+            </Label>
+            <Input type="number" step={isLRT ? "0.01" : "1"} placeholder="0" className="h-11 border-rose-200 bg-rose-50/30 font-bold" value={data.mortality || ''} onChange={(e) => handleMortalityChange(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs font-bold uppercase text-emerald-700">Present Population</Label>
+            <div className="h-11 px-3 flex items-center bg-emerald-50/50 border border-emerald-100 rounded-lg text-lg font-black text-emerald-800">
+              {presentPop.toLocaleString()}
+            </div>
+          </div>
+
+          {isMaturation && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase">Number of Moults</Label>
+              <Input type="number" placeholder="0" className="h-11" value={data.numMoults || ''} onChange={(e) => onDataChange({ ...data, numMoults: e.target.value })} />
+            </div>
+          )}
+
+          {(isLRT || isFarms) && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase">Moulting observed?</Label>
+              <Select value={data.moulting || ''} onValueChange={(val) => onDataChange({ ...data, moulting: val })}>
+                <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent><SelectItem value="Yes">Yes</SelectItem><SelectItem value="No">No</SelectItem></SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold uppercase">Animal Length (Avg cm)</Label>
+            <Input type="number" step="0.1" placeholder="0.0" className="h-11" value={data.animalLength || ''} onChange={(e) => onDataChange({ ...data, animalLength: e.target.value })} />
+          </div>
+
+          {(isMaturation || isFarms) && (
+            <>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs font-bold uppercase text-blue-700">Estimated Biomass</Label>
+                <div className="h-11 px-3 flex items-center bg-blue-50/50 border border-blue-100 rounded-lg text-lg font-black text-blue-800">
+                  {biomass} kg
+                </div>
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs font-bold uppercase text-indigo-700">Count (per kg)</Label>
+                <div className="h-11 px-3 flex items-center bg-indigo-50/50 border border-indigo-100 rounded-lg text-lg font-black text-indigo-800">
+                  {animalsPerKg > 0 ? animalsPerKg : '—'}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Animal Quality */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        <AnimalQualityScore data={data} onDataChange={onDataChange} />
+      </div>
+
+      {/* 5. Disease */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-600 flex items-center gap-2">
+          <Activity className="w-4 h-4" /> Disease Tracking
+        </h2>
+        
+        <Label className="text-xs">Disease if any</Label>
+        <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+          {DISEASE_OPTIONS.map(disease => (
+            <label key={disease} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+              (data.diseases || []).includes(disease) ? 'bg-amber-100/50 text-amber-900' : 'hover:bg-slate-100 text-slate-600'
+            }`}>
+              <Checkbox 
+                checked={(data.diseases || []).includes(disease)}
+                onCheckedChange={() => handleDiseaseToggle(disease)}
+              />
+              <span className="text-xs font-medium">{disease}</span>
+            </label>
+          ))}
+        </div>
+        
+        {(data.diseases || []).includes('Others') && (
+          <Input 
+            placeholder="Specify other disease..." 
+            value={data.otherDisease || ''}
+            onChange={(e) => onDataChange({ ...data, otherDisease: e.target.value })}
+            className="mt-2"
+          />
+        )}
+      </div>
+
+      {/* 6. Footer */}
+      <div className="glass-card p-4 rounded-2xl space-y-4">
+        <div className="space-y-1.5 pt-2">
+          <Label className="text-xs">Upload Files (Lab Reports / Photos)</Label>
+          <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Notes</Label>
+          <Textarea
+            value={comments}
+            onChange={e => onCommentsChange(e.target.value)}
+            placeholder="Add general notes..."
+            rows={3}
+            className="rounded-xl"
+          />
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
+export default AnimalSamplingForm;

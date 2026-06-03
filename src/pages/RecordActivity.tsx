@@ -30,6 +30,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import RatingScale from '@/modules/shared/components/RatingScale';
 import StockingForm from '@/modules/shared/components/StockingForm';
 import ObservationForm from '@/modules/shared/components/ObservationForm';
+import AnimalSamplingForm from '@/modules/shared/components/AnimalSamplingForm';
 import ArtemiaForm from '@/modules/lrt/components/ArtemiaForm';
 import AlgaeForm from '@/modules/lrt/components/AlgaeForm';
 import HarvestForm from '@/modules/lrt/components/HarvestForm';
@@ -57,14 +58,14 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Stocking', 'Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
 const FEED_UNITS = ['kg', 'gms', 'L', 'ml'];
 const TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
 const TREATMENT_UNITS = ['ml', 'L', 'gms', 'kg', 'ppm'];
-const MAINTENANCE_ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animal Quality', 'Observation'];
+const MAINTENANCE_ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Animals Sampling & Observation'];
 
 
 
@@ -230,6 +231,7 @@ const RecordActivity = () => {
         'animal': 'Animal Quality',
         'stocking': 'Stocking',
         'observation': 'Observation',
+        'animals-sampling': 'Animals Sampling & Observation',
         'artemia': 'Artemia',
         'algae': 'Algae',
         'harvest': 'Harvest',
@@ -243,8 +245,8 @@ const RecordActivity = () => {
         'nauplii-sale': 'Nauplii Sale',
         'broodstock-discard': 'Broodstock Discard',
         'discard': 'Broodstock Discard',
-        'water-management': 'Water Management',
-        'water-mgmt': 'Water Management'
+        'water-mgmt': 'Water Management',
+        'animal-sampling': 'Animals Sampling & Observation'
       };
       
       const mappedActivity = typeMap[type.toLowerCase()];
@@ -943,6 +945,8 @@ const RecordActivity = () => {
       setTankShiftingData(planned_data.tankShiftingData);
     } else if (currentAct === 'Nauplii Sale' && planned_data.naupliiSaleData) {
       setNaupliiSaleData(planned_data.naupliiSaleData);
+    } else if (currentAct === 'Animals Sampling & Observation' && planned_data.animalSamplingData) {
+      setAnimalSamplingData(planned_data.animalSamplingData);
     }
     
     setSelectedInstructionId(instruction.id);
@@ -1020,6 +1024,8 @@ const RecordActivity = () => {
           setNaupliiSaleData(data.data);
         } else if (actType === 'Water Management') {
           setWaterMgmtData(data.data);
+        } else if (actType === 'Animals Sampling & Observation') {
+          setAnimalSamplingData(data.data);
         }
       }
     } catch (err) {
@@ -1051,12 +1057,13 @@ const RecordActivity = () => {
     }
   }, [editId, tankId, selectedSectionId, availableTanks]);
 
-  // Auto-fetch Stocking data for Observation (LRT single-tank mode only)
+  // Auto-fetch Stocking data for Observation and Animals Sampling & Observation (single-tank mode only)
   useEffect(() => {
-    if (activity === 'Observation' && tankId && !editId && activeFarmCategory !== 'MATURATION') {
+    const isSamplingOrObs = activity === 'Observation' || activity === 'Animals Sampling & Observation';
+    if (isSamplingOrObs && tankId && !editId) {
       fetchLatestStockingData(tankId);
     }
-  }, [activity, tankId, activeFarmCategory]);
+  }, [activity, tankId, date]);
 
   // Maturation Observation: build tankEntries whenever scope/selection changes
   useEffect(() => {
@@ -1158,6 +1165,14 @@ const RecordActivity = () => {
         tankStockingNumber: undefined,
         naupliiStockedMillion: undefined
       }));
+      setAnimalSamplingData(prev => ({
+        ...prev,
+        stockingDate: undefined,
+        doc: undefined,
+        stockingPopulation: undefined,
+        presentPopulation: undefined,
+        stockingId: undefined
+      }));
 
       const tankSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
       const currentFarmId = tankSection?.farm_id || selectedFarmId || activeFarmId;
@@ -1166,38 +1181,59 @@ const RecordActivity = () => {
         console.warn('No farm ID found for tank:', tid);
       }
       
-      const { data, error } = await supabase
+      // Fetch latest stocking record
+      const { data: stockingLog, error: stockingError } = await supabase
         .from('activity_logs')
-        .select('data, activity_type')
+        .select('data, created_at')
         .eq('tank_id', tid)
-        .in('activity_type', ['Stocking', 'Observation'])
+        .eq('activity_type', 'Stocking')
         .eq('farm_id', currentFarmId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (!error && data && data.data) {
-        const isStocking = data.activity_type === 'Stocking';
-        const isMaturation = activeFarmCategory === 'MATURATION';
+      const latestPop = await fetchLatestPopulation(tid);
+
+      if (!stockingError && stockingLog && stockingLog.data) {
+        const stockingId = stockingLog.data.stockingId;
+        const stockingDate = stockingLog.data.date;
+        const stockingPop = stockingLog.data.tankStockingNumber || stockingLog.data.naupliiStocked || stockingLog.data.totalMales || '0';
         
+        let doc: number | undefined = undefined;
+        if (stockingDate && date) {
+          const sDate = new Date(stockingDate);
+          const cDate = new Date(date);
+          sDate.setHours(0,0,0,0);
+          cDate.setHours(0,0,0,0);
+          const diffTime = cDate.getTime() - sDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          doc = diffDays >= 0 ? diffDays : 0;
+        }
+
         setObservationData(prev => ({
           ...prev,
-          stockingId: data.data.stockingId,
-          broodstockSource: data.data.broodstockSource,
-          broodstockType: data.data.broodstockType,
-          sex: data.data.sex,
-          hatcheryName: data.data.hatcheryName,
-          tankStockingNumber: data.data.tankStockingNumber,
-          presentPopulationM: isMaturation 
-            ? (isStocking ? data.data.totalMales : data.data.presentPopulationM) 
-            : undefined,
-          presentPopulationF: isMaturation 
-            ? (isStocking ? data.data.totalFemales : data.data.presentPopulationF) 
-            : undefined,
-          presentPopulation: !isMaturation 
-            ? (isStocking ? data.data.tankStockingNumber : data.data.presentPopulation) 
-            : undefined,
-          naupliiStockedMillion: data.data.naupliiStocked || data.data.naupliiStockedMillion
+          stockingId: stockingId,
+          broodstockSource: stockingLog.data.broodstockSource,
+          broodstockType: stockingLog.data.broodstockType,
+          sex: stockingLog.data.sex,
+          hatcheryName: stockingLog.data.hatcheryName,
+          tankStockingNumber: stockingLog.data.tankStockingNumber,
+          presentPopulation: latestPop.toString(),
+          naupliiStockedMillion: stockingLog.data.naupliiStocked || stockingLog.data.naupliiStockedMillion
+        }));
+
+        setAnimalSamplingData(prev => ({
+          ...prev,
+          stockingId: stockingId,
+          stockingDate: stockingDate,
+          doc: doc,
+          stockingPopulation: stockingPop,
+          presentPopulation: latestPop.toString(),
+          naupliiStocked: stockingLog.data.naupliiStocked,
+          originalPop: stockingPop,
+          broodstockSource: stockingLog.data.broodstockSource,
+          broodstockType: stockingLog.data.broodstockType,
+          hatcheryName: stockingLog.data.hatcheryName
         }));
       }
     } catch (err) {
@@ -1211,7 +1247,7 @@ const RecordActivity = () => {
         .from('activity_logs')
         .select('data, activity_type')
         .eq('tank_id', tid)
-        .in('activity_type', ['Stocking', 'Observation', 'Harvest', 'Tank Shifting'])
+        .in('activity_type', ['Stocking', 'Observation', 'Animals Sampling & Observation', 'Harvest', 'Tank Shifting'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -1222,7 +1258,7 @@ const RecordActivity = () => {
           population = activeFarmCategory === 'MATURATION' 
             ? parseFloat(data.data.totalMales || '0') + parseFloat(data.data.totalFemales || '0')
             : parseFloat(data.data.tankStockingNumber || '0');
-        } else if (data.activity_type === 'Observation') {
+        } else if (data.activity_type === 'Observation' || data.activity_type === 'Animals Sampling & Observation') {
           population = activeFarmCategory === 'MATURATION' 
             ? parseFloat(data.data.presentPopulationM || '0') + parseFloat(data.data.presentPopulationF || '0')
             : parseFloat(data.data.presentPopulation || '0');
@@ -1324,6 +1360,7 @@ const RecordActivity = () => {
   // Stocking & Observation extra data
   const [stockingData, setStockingData] = useState<any>({});
   const [observationData, setObservationData] = useState<any>({});
+  const [animalSamplingData, setAnimalSamplingData] = useState<any>({});
 
   // Artemia & Algae data
   const [artemiaData, setArtemiaData] = useState<any>({ phase: 'pre' });
@@ -1581,6 +1618,7 @@ const RecordActivity = () => {
       case 'Nauplii Sale': return { ...baseData, ...naupliiSaleData };
       case 'Broodstock Discard': return { ...baseData, ...broodstockDiscardData };
       case 'Water Management': return { ...baseData, ...waterMgmtData };
+      case 'Animals Sampling & Observation': return { ...baseData, ...animalSamplingData, photo_url: photoUrl };
       default: return baseData;
     }
   };
@@ -1750,7 +1788,8 @@ const RecordActivity = () => {
             eggCountData: activity === 'Egg Count' ? eggCountData : undefined,
             naupliiHarvestData: activity === 'Nauplii Harvest' ? naupliiHarvestData : undefined,
             naupliiSaleData: activity === 'Nauplii Sale' ? naupliiSaleData : undefined,
-            broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined
+            broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined,
+            animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
@@ -1774,7 +1813,8 @@ const RecordActivity = () => {
           artemiaData: activity === 'Artemia' ? artemiaData : undefined,
           algaeData: activity === 'Algae' ? algaeData : undefined,
           sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined,
-          broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined
+          broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined,
+          animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined
         };
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
@@ -1795,8 +1835,8 @@ const RecordActivity = () => {
       }
 
       if (activity === 'Stocking' && isRedirectedFromObservation) {
-        toast.success('Instruction scheduled & returning to Observation');
-        setActivity('Observation');
+        toast.success('Instruction scheduled & returning to Animals Sampling & Observation');
+        setActivity('Animals Sampling & Observation');
         setPhotoUrl(''); // Clear stocking photo
         setComments(''); // Clear stocking instructions
         setIsRedirectedFromObservation(false);
@@ -2964,7 +3004,11 @@ const RecordActivity = () => {
             farm_id: fId || null,
             stocking_id: (activity === 'Stocking' && stockingData?.stockingId) 
                ? stockingData.stockingId 
-               : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId),
+               : (activity === 'Animals Sampling & Observation' && animalSamplingData?.stockingId)
+                 ? animalSamplingData.stockingId
+                 : (activity === 'Observation' && observationData?.stockingId)
+                   ? observationData.stockingId
+                   : (activeBroodstockBatchId === 'new' ? null : activeBroodstockBatchId),
             activity_type: activity as any,
             data: currentBuildData
           });
@@ -3083,13 +3127,13 @@ const RecordActivity = () => {
       }
 
       if (activity === 'Stocking' && isRedirectedFromObservation) {
-        setActivity('Observation');
+        setActivity('Animals Sampling & Observation');
         setPhotoUrl(''); // Clear stocking photo
         setComments(''); // Clear stocking comments
         setIsRedirectedFromObservation(false);
         setLoading(false);
         // fetchLatestStockingData(tankId) will be triggered by useEffect([activity, tankId])
-        toast.success('Activity recorded! Returning to Observation...');
+        toast.success('Activity recorded! Returning to Animals Sampling & Observation...');
         return;
       }
 
@@ -3383,7 +3427,7 @@ const RecordActivity = () => {
                   )}
 
 
-                  {(!isSpecialActivity || (activeFarmCategory === 'MATURATION' && (activity === 'Feed' || activity === 'Treatment' || activity === 'Water Quality' || activity === 'Observation' || activity === 'Animal Quality'))) && (
+                  {(!isSpecialActivity || (activeFarmCategory === 'MATURATION' && (activity === 'Feed' || activity === 'Treatment' || activity === 'Water Quality' || activity === 'Animals Sampling & Observation'))) && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">
                         {selectionScope === 'single' 
@@ -3820,129 +3864,6 @@ const RecordActivity = () => {
           </div>
         )}
 
-        {activity === 'Animal Quality' && (
-          <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Animal Quality</h2>
-            
-            {!isPlanningMode ? (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Stage *</Label>
-                    <Input
-                      value={animalStage}
-                      onChange={e => setAnimalStage(e.target.value)}
-                      placeholder="Enter Stage"
-                      className="h-11 border-muted-foreground/20 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">DOC (Days of Culture) *</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={animalDoc}
-                      onChange={e => setAnimalDoc(e.target.value)}
-                      placeholder="Enter DOC"
-                      className="h-11 border-muted-foreground/20 focus:border-primary/50"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Animal Size and Avg. Wt. *</Label>
-                  <Input
-                    value={animalSize}
-                    onChange={e => {
-                      const val = e.target.value;
-                      // Allow numbers and '/' only
-                      if (val === '' || /^[0-9/.]*$/.test(val)) {
-                        setAnimalSize(val);
-                      }
-                    }}
-                    placeholder="Enter size / avg weight (e.g. 10/12)"
-                    className="h-11 border-muted-foreground/20 focus:border-primary/50"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Only numbers, '.', and '/' allowed</p>
-                </div>
-                <div className="space-y-4">
-                  {ANIMAL_RATING_FIELDS.map(f => (
-                    <RatingScale
-                      key={f.key}
-                      label={f.label}
-                      required={f.required}
-                      value={animalRatings[f.key] || 0}
-                      onChange={val => setAnimalRatings(prev => ({ ...prev, [f.key]: val }))}
-                    />
-                  ))}
-                </div>
-
-                {/* Average Score - always visible during recording */}
-                {(() => {
-                  const values = ANIMAL_RATING_FIELDS.map(f => animalRatings[f.key] || 0);
-                  const filled = values.filter(v => v > 0);
-                  const avg = filled.length > 0 ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
-                  return (
-                    <div className="mt-2 rounded-xl border bg-muted/30 p-3 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
-                        <span className="text-lg font-black text-foreground">{avg.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{filled.length} of {ANIMAL_RATING_FIELDS.length} parameters rated</p>
-                    </div>
-                  );
-                })()}
-
-                <div className="space-y-1.5 pt-2 border-t border-dashed">
-                  <Label className="text-xs">Any identification of disease? *</Label>
-                  <Select value={hasDiseaseIdentified} onValueChange={v => setHasDiseaseIdentified(v as any)}>
-                    <SelectTrigger className="h-11 border-muted-foreground/20 focus:border-primary/50">
-                      <SelectValue placeholder="Select Yes/No" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {hasDiseaseIdentified === 'Yes' && (
-                  <div className="space-y-1.5 animate-fade-in">
-                    <Label className="text-xs">Symptoms *</Label>
-                    <Textarea
-                      value={diseaseSymptoms}
-                      onChange={e => setDiseaseSymptoms(e.target.value)}
-                      placeholder="Describe the symptoms..."
-                      rows={3}
-                      required
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Additional Observations</Label>
-                  <Input value={additionalObservations} onChange={e => setAdditionalObservations(e.target.value)} placeholder="Any other observations" className="h-11 border-muted-foreground/20 focus:border-primary/50" />
-                </div>
-              </>
-            ) : null}
-            {!isPlanningMode && (
-              <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <Label className="text-xs">Activity Photo (Optional)</Label>
-                <ImageUpload value={photoUrl} onUpload={setPhotoUrl} />
-              </div>
-            )}
-            <div className="space-y-1.5 pt-2 border-t border-dashed">
-              <Label className="text-xs">{isPlanningMode ? 'Instructions' : 'Comments'}</Label>
-              <Textarea 
-                value={comments} 
-                onChange={e => setComments(e.target.value)} 
-                placeholder={isPlanningMode ? "Add instructions for the worker..." : "Add notes..."} 
-                rows={3} 
-                className="rounded-xl border-muted-foreground/20 focus:border-primary/50"
-              />
-            </div>
-          </div>
-        )}
 
         {activity === 'Stocking' && (
           <StockingForm
@@ -4040,6 +3961,23 @@ const RecordActivity = () => {
               setIsRedirectedFromObservation(true);
             }}
             selectedTanks={currentSelectedTanks}
+          />
+        )}
+
+        {activity === 'Animals Sampling & Observation' && (
+          <AnimalSamplingForm
+            data={animalSamplingData}
+            onDataChange={setAnimalSamplingData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            isPlanningMode={isPlanningMode}
+            activeFarmCategory={activeFarmCategory}
+            onGoToStocking={() => {
+              setActivity('Stocking');
+              setIsRedirectedFromObservation(true);
+            }}
           />
         )}
 
