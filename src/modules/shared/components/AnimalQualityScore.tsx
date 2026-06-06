@@ -88,9 +88,23 @@ export const AnimalQualityScore = ({ data, onDataChange }: AnimalQualityScorePro
     setAnimalRatings(newRatings);
   };
 
+  const getPointsForRating = (rating: number): number => {
+    const pointsMap: Record<number, number> = {
+      1: 5,
+      2: 4,
+      3: 3,
+      4: 2,
+      5: 0
+    };
+    return pointsMap[rating] ?? 0;
+  };
+
   const calculateScore = (ratings: Record<string, number>) => {
-    const values = ANIMAL_QUALITY_FIELDS.map(f => ratings[f.key] || 0);
-    const filledCount = values.filter(v => v > 0).length;
+    const values = ANIMAL_QUALITY_FIELDS
+      .map(f => ratings[f.key] || 0)
+      .filter(v => v > 0)
+      .map(getPointsForRating);
+    const filledCount = values.length;
     return filledCount > 0 ? values.reduce((a, b) => a + b, 0) / filledCount : 0;
   };
 
@@ -110,7 +124,7 @@ export const AnimalQualityScore = ({ data, onDataChange }: AnimalQualityScorePro
     <div className="space-y-4">
       <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
         Animal Condition Quality *
-        {animalAvg > 0 && <span className="text-primary">{animalAvg.toFixed(1)} / 5</span>}
+        {animalFilledCount > 0 && <span className="text-primary">{animalAvg.toFixed(1)} / 5</span>}
       </Label>
       <Dialog>
         <DialogTrigger asChild>
@@ -125,7 +139,7 @@ export const AnimalQualityScore = ({ data, onDataChange }: AnimalQualityScorePro
               </div>
             </div>
             <div className="text-right flex flex-col items-end">
-              <p className={`text-xl font-black leading-none ${animalAvg > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>{animalAvg.toFixed(1)}</p>
+              <p className={`text-xl font-black leading-none ${animalFilledCount > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>{animalAvg.toFixed(1)}</p>
               <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Avg. Score</p>
             </div>
           </Button>
@@ -186,7 +200,7 @@ export const AnimalQualityScore = ({ data, onDataChange }: AnimalQualityScorePro
               <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(animalAvg / 5) * 100}%` }} />
               </div>
-              <p className="text-[10px] text-muted-foreground text-center italic">Calculated average of {animalFilledCount} parameters (1 = Best, 5 = Worst)</p>
+              <p className="text-[10px] text-muted-foreground text-center italic">Calculated average of {animalFilledCount} parameters (5 = Best, 0 = Worst)</p>
             </div>
           </div>
           <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">

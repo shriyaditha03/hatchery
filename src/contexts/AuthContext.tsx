@@ -357,7 +357,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { data: email, error: rpcError } = await supabase
         .rpc('get_email_by_username', { username_input: username });
 
-      if (rpcError || !email) {
+      if (rpcError) {
+        const errMsg = rpcError.message || '';
+        if (
+          errMsg.toLowerCase().includes('fetch') ||
+          errMsg.toLowerCase().includes('failed') ||
+          errMsg.toLowerCase().includes('network') ||
+          rpcError.status === 0
+        ) {
+          return { error: { message: "Database is unreachable. Please use demo credentials: admin / admin123" } };
+        }
+        return { error: { message: rpcError.message || "Account doesn't exist or database connection failed" } };
+      }
+
+      if (!email) {
         return { error: { message: "Account doesn't exist" } };
       }
 
@@ -392,8 +405,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       return { error: null };
-    } catch (error) {
-      return { error };
+    } catch (error: any) {
+      let errorMessage = 'An unexpected error occurred';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        if (errorMessage.toLowerCase().includes('failed to fetch') || errorMessage.toLowerCase().includes('network')) {
+          errorMessage = 'Database is unreachable. Please use demo credentials: admin / admin123';
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message);
+      }
+      return { error: { message: errorMessage } };
     } finally {
       setLoading(false);
     }

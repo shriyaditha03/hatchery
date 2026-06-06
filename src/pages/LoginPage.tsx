@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff, Waves, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Waves, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/aqua-nexus-logo.png';
 
@@ -13,8 +14,34 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isSupabaseOnline, setIsSupabaseOnline] = useState<boolean | null>(null);
   const { loginWithUsername, user } = useAuth();
   const navigate = useNavigate();
+
+  // Check Supabase availability on mount
+  useEffect(() => {
+    const checkSupabase = async () => {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .select('id')
+          .limit(1);
+
+        if (error && (
+          error.message?.toLowerCase().includes('fetch') ||
+          error.message?.toLowerCase().includes('network') ||
+          error.status === 0
+        )) {
+          setIsSupabaseOnline(false);
+        } else {
+          setIsSupabaseOnline(true);
+        }
+      } catch (e) {
+        setIsSupabaseOnline(false);
+      }
+    };
+    checkSupabase();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +51,6 @@ const LoginPage = () => {
 
     if (result.error) {
       toast.error(result.error.message || 'Login failed');
-    } else {
-      // Redirect based on role logic happens here if not handled by useEffect
-      // However, fetchProfile updates 'user' state, so we can check it in a useEffect 
-      // or here if we have the result from fetchProfile.
-      // Let's rely on the useEffect for cleaner navigation after state update.
     }
     setLoading(false);
   };
@@ -54,6 +76,44 @@ const LoginPage = () => {
             <Waves className="w-4 h-4" /> <span>Intelligent Aquaculture</span>
           </p>
         </div>
+
+        {isSupabaseOnline === false && (
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/35 rounded-xl text-sm text-amber-600 dark:text-amber-400 animate-in fade-in duration-300">
+            <p className="font-semibold flex items-center gap-1.5 mb-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              Database Offline (Demo Mode)
+            </p>
+            <p className="text-xs mb-3 text-muted-foreground leading-relaxed">
+              The server database is currently unreachable. You can use these demo accounts to log in locally:
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-600 text-foreground font-medium"
+                onClick={() => {
+                  setUsername('admin');
+                  setPassword('admin123');
+                }}
+              >
+                Owner: admin
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-600 text-foreground font-medium"
+                onClick={() => {
+                  setUsername('worker');
+                  setPassword('worker123');
+                }}
+              >
+                Worker: worker
+              </Button>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">

@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import ImageUpload from './ImageUpload';
 import { AnimalQualityScore, DISEASE_OPTIONS } from './AnimalQualityScore';
-import { Activity, Plus, TrendingDown, Scale, Trash2 } from 'lucide-react';
+import { Activity, Plus, TrendingDown, Scale, Trash2, ChevronDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface AnimalSamplingFormProps {
   data: any;
@@ -406,19 +407,41 @@ export const AnimalSamplingForm = ({
           <Activity className="w-4 h-4" /> Disease Tracking
         </h2>
         
-        <Label className="text-xs">Disease if any</Label>
-        <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-          {DISEASE_OPTIONS.map(disease => (
-            <label key={disease} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-              (data.diseases || []).includes(disease) ? 'bg-amber-100/50 text-amber-900' : 'hover:bg-slate-100 text-slate-600'
-            }`}>
-              <Checkbox 
-                checked={(data.diseases || []).includes(disease)}
-                onCheckedChange={() => handleDiseaseToggle(disease)}
-              />
-              <span className="text-xs font-medium">{disease}</span>
-            </label>
-          ))}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Disease if any</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full h-11 justify-between px-3 rounded-xl bg-slate-50 border-slate-200 hover:bg-slate-100 text-left font-normal"
+              >
+                <span className="truncate text-slate-700">
+                  {(data.diseases || []).length === 0
+                    ? 'Select Disease...'
+                    : (data.diseases || []).join(', ')}
+                </span>
+                <ChevronDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2 rounded-2xl shadow-xl max-h-64 overflow-y-auto" align="start">
+              <div className="space-y-1">
+                {[...DISEASE_OPTIONS, 'Others'].map(disease => (
+                  <label
+                    key={disease}
+                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-50 ${
+                      (data.diseases || []).includes(disease) ? 'bg-amber-100/50 text-amber-900 font-medium' : 'text-slate-600'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={(data.diseases || []).includes(disease)}
+                      onCheckedChange={() => handleDiseaseToggle(disease)}
+                    />
+                    <span className="text-xs">{disease}</span>
+                  </label>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         
         {(data.diseases || []).includes('Others') && (
@@ -426,7 +449,7 @@ export const AnimalSamplingForm = ({
             placeholder="Specify other disease..." 
             value={data.otherDisease || ''}
             onChange={(e) => onDataChange({ ...data, otherDisease: e.target.value })}
-            className="mt-2"
+            className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
           />
         )}
       </div>
