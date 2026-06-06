@@ -38,6 +38,16 @@ const LARVAL_STAGES = [
   'PL11', 'PL12', 'PL13', 'PL14', 'PL15+'
 ];
 
+export const TRANSITIONS = [
+  { id: '1', label: '1) N% _____ Z1 % ____', stage1: 'Nauplii', stage2: 'Z1' },
+  { id: '2', label: '2) Z1% _____ Z2 % ____', stage1: 'Z1', stage2: 'Z2' },
+  { id: '3', label: '3) Z2% _____ Z3 % ____', stage1: 'Z2', stage2: 'Z3' },
+  { id: '4', label: '4) Z3% _____ M1 % ____', stage1: 'Z3', stage2: 'M1' },
+  { id: '5', label: '5) M1% _____ M2 % ____', stage1: 'M1', stage2: 'M2' },
+  { id: '6', label: '6) M2% _____ M3 % ____', stage1: 'M2', stage2: 'M3' },
+  { id: '7', label: '7) M3% _____ PL1 % ____', stage1: 'M3', stage2: 'PL1' }
+];
+
 export const AnimalSamplingForm = ({
   data,
   onDataChange,
@@ -71,12 +81,29 @@ export const AnimalSamplingForm = ({
     const mort = parseFloat(val) || 0;
     // For LRT it's in millions
     const actualMort = isLRT ? mort * 1000000 : mort;
-    const currentPop = parseFloat(data.presentPopulation || basePopulation.toString());
-    const newPop = Math.max(0, currentPop - actualMort); // This logic might need to be refined if we want it based off original stocking. Let's base off presentPop from the start of the form load, or keep it simple.
-
-    // If data.presentPopulation isn't set, default it
     const calcPop = Math.max(0, basePopulation - actualMort);
-    onDataChange({ ...data, mortality: val, presentPopulation: calcPop.toString() });
+
+    let calcUpdates = {};
+    if (samplingMode === 'CONVERSION' && data.selectedTransitionId) {
+      const activeTransition = TRANSITIONS.find(t => t.id === data.selectedTransitionId);
+      if (activeTransition) {
+        const pct1 = parseFloat(data.pct1) || 0;
+        const pct2 = parseFloat(data.pct2) || 0;
+        const p1 = calcPop * (pct1 / 100);
+        const p2 = calcPop * (pct2 / 100);
+        calcUpdates = {
+          calcPop1: p1 > 0 ? parseFloat(p1.toFixed(3)) : 0,
+          calcPop2: p2 > 0 ? parseFloat(p2.toFixed(3)) : 0
+        };
+      }
+    }
+
+    onDataChange({
+      ...data,
+      mortality: val,
+      presentPopulation: calcPop.toString(),
+      ...calcUpdates
+    });
   };
 
   const presentPop = parseFloat(data.presentPopulation || basePopulation.toString()) || 0;
@@ -97,13 +124,76 @@ export const AnimalSamplingForm = ({
     onDataChange({ ...data, diseases: current });
   };
 
-  // Conversion Grid calculations
-  const [conversionData, setConversionData] = useState<Record<string, string>>(data.conversionData || {});
-  
-  const handleConversionChange = (stage: string, val: string) => {
-    const newData = { ...conversionData, [stage]: val };
-    setConversionData(newData);
-    onDataChange({ ...data, conversionData: newData, samplingMode: 'CONVERSION' });
+  const handleTransitionSelect = (id: string) => {
+    const activeTransition = TRANSITIONS.find(t => t.id === id);
+    if (!activeTransition) return;
+
+    const s1 = activeTransition.stage1;
+    const s2 = activeTransition.stage2;
+    
+    const pct1 = parseFloat(data.pct1) || 0;
+    const pct2 = parseFloat(data.pct2) || 0;
+
+    const p1 = (presentPop * (pct1 / 100));
+    const p2 = (presentPop * (pct2 / 100));
+
+    onDataChange({
+      ...data,
+      selectedTransitionId: id,
+      calcStage1: s1,
+      calcPop1: p1 > 0 ? parseFloat(p1.toFixed(3)) : 0,
+      calcStage2: s2,
+      calcPop2: p2 > 0 ? parseFloat(p2.toFixed(3)) : 0,
+      conversionData: { [s1]: pct1.toString(), [s2]: pct2.toString() }
+    });
+  };
+
+  const handlePct1Change = (valStr: string) => {
+    const val = parseFloat(valStr) || 0;
+    const pct1 = Math.max(0, Math.min(100, val));
+    const pct2 = 100 - pct1;
+    
+    const activeTransition = TRANSITIONS.find(t => t.id === data.selectedTransitionId) || TRANSITIONS[0];
+    const s1 = activeTransition.stage1;
+    const s2 = activeTransition.stage2;
+
+    const p1 = (presentPop * (pct1 / 100));
+    const p2 = (presentPop * (pct2 / 100));
+
+    onDataChange({
+      ...data,
+      pct1: valStr,
+      pct2: pct2.toString(),
+      calcStage1: s1,
+      calcPop1: p1 > 0 ? parseFloat(p1.toFixed(3)) : 0,
+      calcStage2: s2,
+      calcPop2: p2 > 0 ? parseFloat(p2.toFixed(3)) : 0,
+      conversionData: { [s1]: valStr, [s2]: pct2.toString() }
+    });
+  };
+
+  const handlePct2Change = (valStr: string) => {
+    const val = parseFloat(valStr) || 0;
+    const pct2 = Math.max(0, Math.min(100, val));
+    const pct1 = 100 - pct2;
+    
+    const activeTransition = TRANSITIONS.find(t => t.id === data.selectedTransitionId) || TRANSITIONS[0];
+    const s1 = activeTransition.stage1;
+    const s2 = activeTransition.stage2;
+
+    const p1 = (presentPop * (pct1 / 100));
+    const p2 = (presentPop * (pct2 / 100));
+
+    onDataChange({
+      ...data,
+      pct1: pct1.toString(),
+      pct2: valStr,
+      calcStage1: s1,
+      calcPop1: p1 > 0 ? parseFloat(p1.toFixed(3)) : 0,
+      calcStage2: s2,
+      calcPop2: p2 > 0 ? parseFloat(p2.toFixed(3)) : 0,
+      conversionData: { [s1]: pct1.toString(), [s2]: valStr }
+    });
   };
 
   // Net Sampling Grid
@@ -225,28 +315,60 @@ export const AnimalSamplingForm = ({
                 </Select>
               </div>
             ) : (
-              <div className="space-y-4 pt-2">
-                <Label className="text-xs font-bold uppercase">Larval Stage Conversion %</Label>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  {[
-                    { from: 'Nauplii', to: 'Z1' },
-                    { from: 'Z1', to: 'Z2' },
-                    { from: 'Z2', to: 'Z3' },
-                    { from: 'Z3', to: 'M1' },
-                    { from: 'M1', to: 'M2' },
-                    { from: 'M2', to: 'M3' },
-                    { from: 'M3', to: 'PL1' }
-                  ].map(conv => (
-                    <div key={conv.from} className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold w-12 text-right">{conv.from} %</span>
-                      <Input type="number" placeholder="0" className="h-9 w-16 px-2 text-center" value={conversionData[conv.from] || ''} onChange={(e) => handleConversionChange(conv.from, e.target.value)} />
-                      <span className="text-[10px] text-muted-foreground w-6 text-center">→</span>
-                      <span className="text-[10px] font-bold w-6">{conv.to}</span>
-                    </div>
-                  ))}
+              <div className="space-y-4 pt-2 animate-in fade-in duration-300">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase text-slate-700">Larval Stage Conversion %</Label>
+                  <Select
+                    value={data.selectedTransitionId || ''}
+                    onValueChange={handleTransitionSelect}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 focus:ring-2 focus:ring-primary/20">
+                      <SelectValue placeholder="Select Transition Stages..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-slate-100 shadow-xl">
+                      {TRANSITIONS.map(t => (
+                        <SelectItem key={t.id} value={t.id} className="rounded-lg">
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="space-y-1.5 pt-4 border-t border-dashed">
+                {data.selectedTransitionId && (() => {
+                  const activeTransition = TRANSITIONS.find(t => t.id === data.selectedTransitionId);
+                  if (!activeTransition) return null;
+                  return (
+                    <div className="grid grid-cols-2 gap-4 bg-primary/5 p-4 rounded-2xl border border-primary/15 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary/70">{activeTransition.stage1} %</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          value={data.pct1 !== undefined ? data.pct1 : ''}
+                          onChange={(e) => handlePct1Change(e.target.value)}
+                          className="h-10 rounded-xl bg-background text-center font-bold border-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary/70">{activeTransition.stage2} %</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          value={data.pct2 !== undefined ? data.pct2 : ''}
+                          onChange={(e) => handlePct2Change(e.target.value)}
+                          className="h-10 rounded-xl bg-background text-center font-bold border-primary/20 focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="space-y-1.5 pt-2 border-t border-dashed">
                   <Label className="text-xs font-bold uppercase">PL Stage Selection</Label>
                   <div className="flex gap-2">
                     <Select value={data.plStageDropdown || ''} onValueChange={(val) => onDataChange({ ...data, plStageDropdown: val })}>
@@ -264,10 +386,10 @@ export const AnimalSamplingForm = ({
                   <Label className="text-xs font-bold uppercase text-primary">Stage & Population Calculation</Label>
                   <p className="text-[10px] text-muted-foreground">Will auto-calculate based on % of present population ({presentPop.toLocaleString()})</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1"><Label className="text-[10px]">Stage 1</Label><Input value={data.calcStage1 || ''} onChange={e => onDataChange({ ...data, calcStage1: e.target.value })} className="h-8" /></div>
-                    <div className="space-y-1"><Label className="text-[10px]">Pop 1</Label><Input type="number" value={data.calcPop1 || ''} onChange={e => onDataChange({ ...data, calcPop1: e.target.value })} className="h-8" /></div>
-                    <div className="space-y-1"><Label className="text-[10px]">Stage 2</Label><Input value={data.calcStage2 || ''} onChange={e => onDataChange({ ...data, calcStage2: e.target.value })} className="h-8" /></div>
-                    <div className="space-y-1"><Label className="text-[10px]">Pop 2</Label><Input type="number" value={data.calcPop2 || ''} onChange={e => onDataChange({ ...data, calcPop2: e.target.value })} className="h-8" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Stage 1</Label><Input value={data.calcStage1 || ''} readOnly className="h-8 bg-muted/40 font-bold cursor-default" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Pop 1</Label><Input value={data.calcPop1 !== undefined ? data.calcPop1 : ''} readOnly className="h-8 bg-muted/40 font-bold cursor-default" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Stage 2</Label><Input value={data.calcStage2 || ''} readOnly className="h-8 bg-muted/40 font-bold cursor-default" /></div>
+                    <div className="space-y-1"><Label className="text-[10px]">Pop 2</Label><Input value={data.calcPop2 !== undefined ? data.calcPop2 : ''} readOnly className="h-8 bg-muted/40 font-bold cursor-default" /></div>
                   </div>
                 </div>
               </div>
