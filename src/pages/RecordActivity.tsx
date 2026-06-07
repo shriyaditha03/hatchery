@@ -1280,18 +1280,91 @@ const RecordActivity = () => {
     return 0;
   };
 
-  // Auto-fetch Population for Harvest & Tank Shifting
-  useEffect(() => {
-    if ((activity === 'Harvest' || activity === 'Tank Shifting') && tankId && !editId) {
-      fetchLatestPopulation(tankId).then(pop => {
-        if (activity === 'Harvest') {
-          setHarvestData(prev => ({ ...prev, populationBeforeHarvest: pop.toString() }));
-        } else {
-          setTankShiftingData(prev => ({ ...prev, sourcePopulation: pop.toString() }));
+  const fetchHarvestPreloadData = async (tid: string) => {
+    try {
+      const tankSection = availableTanks.find(s => s.tanks.some((t: any) => t.id === tid));
+      const currentFarmId = tankSection?.farm_id || selectedFarmId || activeFarmId;
+      
+      // 1. Fetch latest stocking log
+      let stockingDate = '';
+      let stockingPopulation = 0;
+      if (currentFarmId) {
+        const { data: stockingLog } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('tank_id', tid)
+          .eq('activity_type', 'Stocking')
+          .eq('farm_id', currentFarmId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (stockingLog && stockingLog.data) {
+          stockingDate = stockingLog.data.date || '';
+          stockingPopulation = parseFloat(stockingLog.data.tankStockingNumber || stockingLog.data.naupliiStocked || '0');
         }
+      }
+
+      // 2. Fetch latest population before harvest
+      const latestPop = await fetchLatestPopulation(tid);
+
+      // 3. Fetch latest average body weight (ABW) from Observation/Sampling
+      let averageBodyWeight = 0;
+      if (currentFarmId) {
+        const { data: latestObs } = await supabase
+          .from('activity_logs')
+          .select('data')
+          .eq('tank_id', tid)
+          .in('activity_type', ['Animals Sampling & Observation', 'Observation'])
+          .eq('farm_id', currentFarmId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestObs && latestObs.data) {
+          averageBodyWeight = parseFloat(latestObs.data.sample1AvgWt || latestObs.data.avgBodyWt || latestObs.data.abw || '0');
+        }
+      }
+
+      let doc: number | undefined = undefined;
+      if (stockingDate && date) {
+        const sDate = new Date(stockingDate);
+        const cDate = new Date(date);
+        sDate.setHours(0,0,0,0);
+        cDate.setHours(0,0,0,0);
+        const diffTime = cDate.getTime() - sDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        doc = diffDays >= 0 ? diffDays : 0;
+      }
+
+      // Preharvest estimated biomass (Present Population * ABW) / 1000
+      const estimatedBiomass = averageBodyWeight > 0 ? (latestPop * averageBodyWeight) / 1000 : 0;
+
+      setHarvestData((prev: any) => ({
+        ...prev,
+        stockingDate,
+        doc,
+        stockingPopulation,
+        populationBeforeHarvest: latestPop.toString(),
+        preharvestPopulationEstimate: latestPop,
+        averageBodyWeight,
+        preharvestEstimatedBiomass: parseFloat(estimatedBiomass.toFixed(2))
+      }));
+    } catch (err) {
+      console.error('Error preloading harvest data:', err);
+    }
+  };
+
+  // Auto-fetch Population / Preload details for Harvest & Tank Shifting
+  useEffect(() => {
+    if (activity === 'Harvest' && tankId && !editId) {
+      fetchHarvestPreloadData(tankId);
+    } else if (activity === 'Tank Shifting' && tankId && !editId) {
+      fetchLatestPopulation(tankId).then(pop => {
+        setTankShiftingData(prev => ({ ...prev, sourcePopulation: pop.toString() }));
       });
     }
-  }, [activity, tankId, editId]);
+  }, [activity, tankId, editId, date]);
 
   // Pre-fill activity from URL (if not editing)
   useEffect(() => {
@@ -2041,8 +2114,65 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Harvest') {
+      if (!harvestData.weatherReport) {
+        toast.error('Weather report is required');
+        return;
+      }
+      if (!harvestData.harvestType) {
+        toast.error('Harvest Type is required');
+        return;
+      }
+      if (!harvestData.harvestedBiomass) {
+        toast.error('Harvested biomass in Kgs is required');
+        return;
+      }
+
+      // Samples validation
+      const samplesList = harvestData.samples || [];
+      if (samplesList.length === 0) {
+        toast.error('At least one ABW sample is required');
+        return;
+      }
+      const hasInvalidSample = samplesList.some((s: any) => !s.weight || parseFloat(s.weight) <= 0 || !s.count || parseFloat(s.count) <= 0);
+      if (hasInvalidSample) {
+        toast.error('Please enter a valid Weight and Number of Animals for all samples');
+        return;
+      }
+
       if (!harvestData.harvestedPopulation) {
-        toast.error('Harvested population is required');
+        toast.error('Harvested population calculation is required');
+        return;
+      }
+      if (harvestData.harvestType === 'Partial') {
+        if (harvestData.populationAfterHarvest === undefined || harvestData.populationAfterHarvest === null || harvestData.populationAfterHarvest === '') {
+          toast.error('Postharvest population estimate is required for Partial Harvest');
+          return;
+        }
+        if (harvestData.biomassAfterHarvest === undefined || harvestData.biomassAfterHarvest === null || harvestData.biomassAfterHarvest === '') {
+          toast.error('Postharvest biomass estimate is required for Partial Harvest');
+          return;
+        }
+      }
+
+      // Buyer & Payment validations
+      if (!harvestData.buyerName) {
+        toast.error('Buyer Name is required');
+        return;
+      }
+      if (!harvestData.buyerContact) {
+        toast.error('Buyer Contact Details (mobile) is required');
+        return;
+      }
+      if (harvestData.buyerContact.length !== 10) {
+        toast.error('Buyer mobile number must be exactly 10 digits');
+        return;
+      }
+      if (harvestData.agreedPrice === undefined || harvestData.agreedPrice === null || harvestData.agreedPrice === '') {
+        toast.error('Agreed Price/Kg is required');
+        return;
+      }
+      if (harvestData.receivedAmount === undefined || harvestData.receivedAmount === null || harvestData.receivedAmount === '') {
+        toast.error('Received Amount is required');
         return;
       }
     }
@@ -4050,6 +4180,8 @@ const RecordActivity = () => {
             onDataChange={setHarvestData}
             comments={comments}
             onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
             isPlanningMode={isPlanningMode}
           />
         )}
