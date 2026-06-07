@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, PlusCircle, Trash2, Calculator, Database, DatabaseIcon, Loader2, AlertCircle, ArrowRight, FlaskConical, Beaker, ClipboardList, Camera, Info, Sparkles, TrendingUp, CheckCircle2, ListChecks, Layers, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import RatingScale from '@/modules/shared/components/RatingScale';
-import { ANIMAL_RATING_FIELDS } from '@/modules/shared/constants/activity';
+import { AnimalQualityScore } from '@/modules/shared/components/AnimalQualityScore';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -70,7 +69,7 @@ const NaupliiHarvestForm = ({
   const [totalEggsInBatch, setTotalEggsInBatch] = useState<number>(data.summary?.totalBatchEggs || 0);
   const [totalSpawnedInBatch, setTotalSpawnedInBatch] = useState<number>(data.summary?.totalBatchSpawned || 0);
   const [selectionScope, setSelectionScope] = useState<'single' | 'all' | 'custom'>(data.selectionScope || 'custom');
-  const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
+
   const [perTankEggCounts, setPerTankEggCounts] = useState<Record<string, string>>({}); // tankId -> eggCountMil
   const [existingSales, setExistingSales] = useState<any[]>([]);
 
@@ -92,16 +91,7 @@ const NaupliiHarvestForm = ({
     onDataChange({ ...data, ...updates });
   };
 
-  // Animal Quality Score
-  const animalValues = ANIMAL_RATING_FIELDS.map(f => animalRatings[f.key] || 0);
-  const animalFilledCount = animalValues.filter(v => v > 0).length;
-  const animalAvg = animalFilledCount > 0 ? animalValues.reduce((a, b) => a + b, 0) / animalFilledCount : 0;
 
-  const setRating = (key: string, value: number) => {
-    const newRatings = { ...animalRatings, [key]: value };
-    setAnimalRatings(newRatings);
-    updateData({ animalRatings: newRatings });
-  };
 
   const availableNaupliiTanks = useMemo(() => {
     const naupliiSections = availableTanks.filter(s => s.section_type === 'NAUPLII' && s.farm_id === farmId);
@@ -691,80 +681,7 @@ const NaupliiHarvestForm = ({
               <h3 className="text-sm font-bold uppercase tracking-wider">Step # 4: Animal Quality Assessment</h3>
            </div>
 
-           <div className="bg-amber-50/30 rounded-3xl p-4 border border-amber-100">
-              <Label className="text-[10px] font-black uppercase tracking-wide text-amber-700 flex justify-between items-center mb-3 ml-1">
-                Nauplii Condition Quality
-                {animalAvg > 0 && <span className="text-amber-600">{animalAvg.toFixed(1)} / 10</span>}
-              </Label>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full h-16 justify-between px-4 rounded-2xl border-dashed border-amber-200 hover:border-amber-400 hover:bg-amber-50 group transition-all bg-white shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center group-hover:bg-amber-200 transition-colors">
-                        <ClipboardList className="w-5 h-5 text-amber-600" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-black text-amber-900">Record Quality Score</p>
-                        <p className="text-[10px] text-amber-600/70 uppercase tracking-wider font-bold">{animalFilledCount} of {ANIMAL_RATING_FIELDS.length} rated</p>
-                      </div>
-                    </div>
-                    <div className="text-right flex flex-col items-end">
-                      <p className={`text-2xl font-black leading-none ${animalAvg > 0 ? 'text-amber-900' : 'text-amber-200'}`}>{animalAvg.toFixed(1)}</p>
-                      <p className="text-[9px] text-amber-600/50 uppercase font-black tracking-tighter">Avg. Score</p>
-                    </div>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
-                  <DialogHeader className="p-6 pb-4 bg-amber-50 sticky top-0 z-10 backdrop-blur-md border-b border-amber-100">
-                    <DialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-900">
-                      <ClipboardList className="w-5 h-5 text-amber-600" />
-                      Nauplii Quality Assessment
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="overflow-y-auto p-6 space-y-6 bg-white custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                    <div className="space-y-5">
-                      {ANIMAL_RATING_FIELDS.map(f => (
-                        <RatingScale
-                          key={f.key}
-                          label={f.label}
-                          required={f.required}
-                          value={animalRatings[f.key] || 0}
-                          onChange={val => setRating(f.key, val)}
-                        />
-                      ))}
-                    </div>
-                    <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Current Quality Score</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-black text-amber-600">{animalAvg.toFixed(1)}</span>
-                          <span className="text-xs font-bold text-amber-400">/ 10</span>
-                        </div>
-                      </div>
-                      <div className="w-full h-1.5 bg-amber-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${(animalAvg / 10) * 100}%` }} />
-                      </div>
-                      <p className="text-[10px] text-amber-600/70 text-center italic font-medium">Calculated average of {animalFilledCount} parameters</p>
-                    </div>
-                  </div>
-                  <DialogFooter className="p-4 bg-amber-50 border-t border-amber-100 sticky bottom-0 z-10">
-                    <DialogClose asChild>
-                      <Button
-                        className="w-full h-12 rounded-xl font-black text-base shadow-lg shadow-amber-200 bg-amber-600 hover:bg-amber-700 text-white border-none"
-                        onClick={() => {
-                          updateData({
-                            animalQualityScore: parseFloat(animalAvg.toFixed(1)),
-                            animalRatings: animalRatings
-                          });
-                        }}
-                      >
-                        Save Quality Score
-                      </Button>
-                    </DialogClose>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-           </div>
+           <AnimalQualityScore data={data} onDataChange={onDataChange} />
         </div>
 
         <div className="h-px bg-muted-foreground/10 mx-4" />

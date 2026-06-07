@@ -4,12 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import RatingScale from './RatingScale';
+import { AnimalQualityScore } from './AnimalQualityScore';
 import ImageUpload from './ImageUpload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ClipboardList, Database, Layers, CheckCircle2, AlertCircle, Info } from 'lucide-react';
-import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
+import { waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface StockingFormProps {
@@ -44,7 +44,7 @@ const StockingForm = ({
   availableBatches = []
 }: StockingFormProps) => {
   const { user } = useAuth();
-  const [animalRatings, setAnimalRatings] = useState<Record<string, number>>(data.animalRatings || {});
+
   const [stockingWaterData, setStockingWaterData] = useState<Record<string, string>>(data.stockingWaterData || {});
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [todayBatchCount, setTodayBatchCount] = useState(0);
@@ -144,42 +144,76 @@ const StockingForm = ({
     }
   };
 
-   // Generate Stocking ID: BS_BS-{SUPPLIER}_{VARIANT}_{YYMMDD}
-  const generateStockingId = (supplier: string, variant: string) => {
+  const cleanIdPart = (str: string) => {
+    if (!str) return '';
+    return str
+      .replace(/\bline\b/gi, '') // Remove word "line"
+      .replace(/\([^)]*\)/g, '') // Remove parenthesis and their contents
+      .replace(/[^a-zA-Z0-9]/g, '') // Keep only alphanumeric
+      .trim();
+  };
+
+  const generateStockingId = () => {
     const yymmdd = getYYMMDD(currentDate || '');
 
-    const supplierPrefix = supplier ? supplier.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'SUPPLIER';
-    const variantPrefix = variant ? variant.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'VARIANT';
-
+    let baseId = '';
     if (activeFarmCategory === 'MATURATION') {
-        const batchSuffix = `_B${todayBatchCount + 1}`;
-        // BS_BS-SUPPLIER_Variant_YYMMDD_B#
-        return `BS_BS-${supplierPrefix}_${variantPrefix}_${yymmdd}${batchSuffix}`;
+      const supplier = data.broodstockSource || '';
+      const variant = data.broodstockType || '';
+      const supplierPrefix = supplier ? supplier.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'SUPPLIER';
+      const variantPrefix = variant ? variant.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : 'VARIANT';
+      const batchSuffix = `_B${todayBatchCount + 1}`;
+      return `BS_BS-${supplierPrefix}_${variantPrefix}_${yymmdd}${batchSuffix}`;
     }
-    return `BS_${supplierPrefix}_HN_${yymmdd}`; // Fallback for LRT or others
+
+    if (activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM') {
+      const broodstockLine = cleanIdPart(data.seedGeneticLine || '');
+      const hatchery = cleanIdPart(data.hatcheryName || '');
+      baseId = `${broodstockLine || 'GENETICLINE'}_${hatchery || 'HATCHERY'}_${yymmdd}`;
+    } else {
+      // LRT / Others
+      const broodstockLine = cleanIdPart(data.broodstockSource || '');
+      const hatchery = cleanIdPart(data.hatcheryName || '');
+      baseId = `${broodstockLine || 'BROODSTOCK'}_${hatchery || 'HATCHERY'}_${yymmdd}`;
+    }
+
+    // Append tank suffix dynamically in the UI
+    let suffix = '';
+    if (selectedTanks && selectedTanks.length === 1) {
+      const tnkName = selectedTanks[0].name;
+      const cleanTank = tnkName ? tnkName.replace(/[^a-zA-Z0-9]/g, '') : '';
+      if (cleanTank) suffix = `_${cleanTank}`;
+    } else if (selectedTanks && selectedTanks.length > 1) {
+      suffix = `_[TANKS]`;
+    }
+    
+    return `${baseId}${suffix}`;
   };
+
+  const selectedTankIdsKey = selectedTanks ? selectedTanks.map(t => t.id).join(',') : '';
 
   // Auto-update ID when dependencies change
   useEffect(() => {
-    if (activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM') {
-      return;
-    }
     if (!isIdManuallyEdited) {
-      const newId = generateStockingId(data.broodstockSource || '', data.broodstockType || '');
+      const newId = generateStockingId();
       if (data.stockingId !== newId) {
         onDataChange((prev: any) => ({ ...prev, stockingId: newId }));
       }
     }
-  }, [data.broodstockSource, data.broodstockType, isIdManuallyEdited, onDataChange, todayBatchCount, currentDate, activeFarmCategory]);
+  }, [
+    data.broodstockSource,
+    data.broodstockType,
+    data.seedGeneticLine,
+    data.hatcheryName,
+    isIdManuallyEdited,
+    onDataChange,
+    todayBatchCount,
+    currentDate,
+    activeFarmCategory,
+    selectedTankIdsKey
+  ]);
 
-  const setRating = (key: string, value: number) => {
-    setAnimalRatings(prev => ({ ...prev, [key]: value }));
-  };
 
-  // Calculate Average Animal Score
-  const values = ANIMAL_RATING_FIELDS.map(f => animalRatings[f.key] || 0);
-  const filled = values.filter(v => v > 0);
-  const avg = filled.length > 0 ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
 
   // Calculate Water Quality Compliance Score
   const waterValues = waterFields.map(field => {
@@ -221,7 +255,7 @@ const StockingForm = ({
     <div className="glass-card rounded-2xl p-4 space-y-5 animate-fade-in-up">
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Stocking Details</h2>
 
-      {activeFarmCategory === 'MATURATION' && (
+      {(activeFarmCategory === 'MATURATION' || activeFarmCategory === 'LRT' || activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM') && (
         <div className="space-y-1.5 glass-card bg-primary/5 border-primary/20 p-3 rounded-xl mb-4">
           <div className="flex justify-between items-center mb-1">
             <Label className="text-xs font-bold text-primary">Stocking ID *</Label>
@@ -239,10 +273,14 @@ const StockingForm = ({
           <Input
             value={data.stockingId || ''}
             onChange={e => handleChange('stockingId', e.target.value)}
-            placeholder="e.g. BS_HN_260317"
+            placeholder={activeFarmCategory === 'MATURATION' ? "e.g. BS_BS-SUPPLIER_VARIANT_260317_B1" : "e.g. SIShardy_Kgat_260607"}
             className="h-11 font-mono font-bold text-base"
           />
-          <p className="text-[10px] text-muted-foreground mt-1">Format: BS#_HN#_YYMMDD (Broodstock_Hatchery_Date)</p>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {activeFarmCategory === 'MATURATION' 
+              ? "Format: BS_BS-SUPPLIER_VARIANT_YYMMDD_B#" 
+              : "Format: BroodstockLine_HatcheryName_YYMMDD"}
+          </p>
         </div>
       )}
 
@@ -780,78 +818,7 @@ const StockingForm = ({
 
       {(activeFarmCategory !== 'MATURATION' || stockingStep === 2) && (
         <div className="space-y-4 pt-2 border-t border-dashed">
-          <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-            Animal Condition Quality *
-            {avg > 0 && <span className="text-primary">{avg.toFixed(1)} / 10</span>}
-          </Label>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full h-14 justify-between px-4 rounded-2xl border-dashed hover:border-primary hover:bg-primary/5 group transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <ClipboardList className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-bold">Record Animal Quality</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{filled.length} of {ANIMAL_RATING_FIELDS.length} parameters rated</p>
-                  </div>
-                </div>
-                <div className="text-right flex flex-col items-end">
-                  <p className={`text-xl font-black leading-none ${avg > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>{avg.toFixed(1)}</p>
-                  <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Avg. Score</p>
-                </div>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[85vh] overflow-hidden p-0 rounded-[2rem] gap-0 border-none shadow-2xl">
-              <DialogHeader className="p-6 pb-4 bg-muted/30 sticky top-0 z-10 backdrop-blur-md border-b">
-                <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  <ClipboardList className="w-5 h-5 text-primary" />
-                  Animal Quality Assessment
-                </DialogTitle>
-              </DialogHeader>
-              <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                 <div className="space-y-5">
-                  {ANIMAL_RATING_FIELDS.map(f => (
-                    <RatingScale
-                      key={f.key}
-                      label={f.label}
-                      required={f.required}
-                      value={animalRatings[f.key] || 0}
-                      onChange={val => setRating(f.key, val)}
-                    />
-                  ))}
-                </div>
-                <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Quality Score</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-primary">{avg.toFixed(1)}</span>
-                      <span className="text-xs font-bold text-muted-foreground">/ 10</span>
-                    </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(avg / 10) * 100}%` }} />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
-                 <DialogClose asChild>
-                  <Button 
-                    className="w-full h-12 rounded-xl font-bold text-base shadow-lg shadow-primary/20 ocean-gradient border-none"
-                    onClick={() => {
-                      onDataChange((prev: any) => ({
-                        ...prev,
-                        animalConditionScore: parseFloat(avg.toFixed(1)),
-                        animalRatings: animalRatings
-                      }));
-                    }}
-                  >
-                    Save Quality Score
-                  </Button>
-                 </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <AnimalQualityScore data={data} onDataChange={onDataChange} />
         </div>
       )}
 

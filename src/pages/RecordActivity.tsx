@@ -1671,7 +1671,7 @@ const RecordActivity = () => {
           }
         }
 
-        if (activity === 'Stocking' && activeFarmCategory === 'MATURATION') {
+        if (activity === 'Stocking') {
           if (!stockingData.stockingId) {
             toast.error('Stocking ID is required');
             return;
@@ -1890,13 +1890,13 @@ const RecordActivity = () => {
       let requiredFields: string[];
       if (isFarmModule) {
         // Farm module uses seed-specific fields instead of broodstock/nauplii fields
-        requiredFields = ['seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
+        requiredFields = ['stockingId', 'seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
       } else if (activeFarmCategory === 'MATURATION') {
         // Maturation: naupliiStocked is not required (hidden)
         requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
       } else {
-        // LRT and others: no stockingId needed
-        requiredFields = ['broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
+        // LRT and others: stockingId is required
+        requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
       }
         
       const missing = requiredFields.filter(f => {
@@ -1904,6 +1904,10 @@ const RecordActivity = () => {
         // Special case: check both name variations for water quality
         if (f === 'waterQualityScore' && (val === undefined || val === null || val === '')) {
           val = stockingData['waterComplianceScore'];
+        }
+        // Special case: check both name variations for animal quality
+        if (f === 'animalConditionScore' && (val === undefined || val === null || val === '')) {
+          val = stockingData['animalQualityScore'];
         }
         return val === undefined || val === null || val === '' || (typeof val === 'string' && val.trim() === '');
       });
@@ -2291,15 +2295,24 @@ const RecordActivity = () => {
       const activeSection = availableTanks.find(s => s.id === sectionId);
       if (activeSection) {
         targets = activeSection.tanks
-          .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+          .filter((t: any) => {
+            if (activity === 'Stocking' && !editId) return !stockedTankIds.includes(t.id);
+            return editId || stockedTankIds.includes(t.id);
+          })
           .map((t: any) => t.id);
       } else if (activeFarmCategory === 'MATURATION') {
         targets = filteredSections.flatMap(s => s.tanks)
-          .filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id))
+          .filter((t: any) => {
+            if (activity === 'Stocking' && !editId) return !stockedTankIds.includes(t.id);
+            return editId || stockedTankIds.includes(t.id);
+          })
           .map((t: any) => t.id);
       }
     } else if (selectionScope === 'custom') {
-      targets = selectedTankIds.filter(id => activity === 'Stocking' || editId || stockedTankIds.includes(id));
+      targets = selectedTankIds.filter(id => {
+        if (activity === 'Stocking' && !editId) return !stockedTankIds.includes(id);
+        return editId || stockedTankIds.includes(id);
+      });
     } else {
       targets = [tankId];
     }
@@ -2478,27 +2491,55 @@ const RecordActivity = () => {
             currentBuildData.planned_data = matchingInstruction.planned_data;
           }
 
-          // If Stocking, dynamically append Section and Tank names to the generated stockingId
+          // If Stocking, dynamically append Tank name/number to the generated stockingId
           // EXCEPT for Maturation, where we want ONE consolidated Batch ID
           if (activity === 'Stocking' && currentBuildData.stockingId) {
             if (activeFarmCategory !== 'MATURATION') {
-              let suffix = '';
-              if (sId) {
-                const sec = availableTanks.find(s => s.id === sId);
-                if (sec) suffix += `_${sec.name.replace(/s+/g, '')}`;
-              }
+              let baseId = currentBuildData.stockingId.replace(/_\[TANKS\]$/i, '');
+              // Strip any existing tank suffix from the end if it's there
               if (tId && sId) {
                 const sec = availableTanks.find(s => s.id === sId);
                 const tnk = sec?.tanks.find((t: any) => t.id === tId);
-                if (tnk) suffix += `_${tnk.name.replace(/s+/g, '')}`;
+                if (tnk) {
+                  const cleanTank = tnk.name.replace(/[^a-zA-Z0-9]/g, '');
+                  if (cleanTank) {
+                    const regex = new RegExp(`_${cleanTank}$`);
+                    baseId = baseId.replace(regex, '');
+                  }
+                }
+              } else if (sId) {
+                const sec = availableTanks.find(s => s.id === sId);
+                if (sec) {
+                  const cleanSec = sec.name.replace(/[^a-zA-Z0-9]/g, '');
+                  if (cleanSec) {
+                    const regex = new RegExp(`_${cleanSec}$`);
+                    baseId = baseId.replace(regex, '');
+                  }
+                }
               }
-              currentBuildData.stockingId = `${currentBuildData.stockingId}${suffix}`;
+
+              let suffix = '';
+              if (tId && sId) {
+                const sec = availableTanks.find(s => s.id === sId);
+                const tnk = sec?.tanks.find((t: any) => t.id === tId);
+                if (tnk) {
+                  const cleanTank = tnk.name.replace(/[^a-zA-Z0-9]/g, '');
+                  if (cleanTank) suffix = `_${cleanTank}`;
+                }
+              } else if (sId) {
+                const sec = availableTanks.find(s => s.id === sId);
+                if (sec) {
+                  const cleanSec = sec.name.replace(/[^a-zA-Z0-9]/g, '');
+                  if (cleanSec) suffix = `_${cleanSec}`;
+                }
+              }
+              currentBuildData.stockingId = `${baseId}${suffix}`;
             }
+          }
             
-            // Also save a copy inside stockingData for consistency if needed by other logic
-            if (currentBuildData.stockingData) {
-               currentBuildData.stockingData.stockingId = currentBuildData.stockingId;
-            }
+          // Also save a copy inside stockingData for consistency if needed by other logic
+          if (currentBuildData.stockingData) {
+             currentBuildData.stockingData.stockingId = currentBuildData.stockingId;
           }
 
           // Special bulk save for Artemia After Harvest multiple samples
@@ -3002,8 +3043,8 @@ const RecordActivity = () => {
             tank_id: tId,
             section_id: sId || null,
             farm_id: fId || null,
-            stocking_id: (activity === 'Stocking' && stockingData?.stockingId) 
-               ? stockingData.stockingId 
+            stocking_id: (activity === 'Stocking' && currentBuildData?.stockingId) 
+               ? currentBuildData.stockingId 
                : (activity === 'Animals Sampling & Observation' && animalSamplingData?.stockingId)
                  ? animalSamplingData.stockingId
                  : (activity === 'Observation' && observationData?.stockingId)
@@ -3026,7 +3067,7 @@ const RecordActivity = () => {
                   tank_id: tId,
                   user_id: user?.id,
                   ratings: currentBuildData.animalRatings,
-                  average_score: currentBuildData.animalConditionScore
+                  average_score: currentBuildData.animalConditionScore || currentBuildData.animalQualityScore
                 }]);
               if (qualityError) {
                 console.error('Error saving separate stocking quality record:', qualityError);
@@ -3459,8 +3500,8 @@ const RecordActivity = () => {
                                     
                               return tanksToDisplay
                                 .filter((t: any) => {
-                                  // 1. If Maturation and Stocking, only show tanks NOT used by any batch
-                                  if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+                                  // 1. If Stocking and not editing, only show tanks NOT already stocked (across MATURATION, LRT, FARMS)
+                                  if (activity === 'Stocking' && !editId) {
                                     return !stockedTankIds.includes(t.id);
                                   }
                                   
@@ -3470,9 +3511,8 @@ const RecordActivity = () => {
                                     return batchRelatedTankIds.includes(t.id);
                                   }
 
-                                  // 3. FARMS module — always show all tanks in the section
-                                  // 4. Standard fallback: Stocking/editing always opens all tanks; otherwise only stocked
-                                  return isFarmModule || activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                                  // 3. Fallback for other activities
+                                  return isFarmModule || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                                 })
                                 .map((t: any) => {
                                   const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
@@ -3536,8 +3576,8 @@ const RecordActivity = () => {
                         
                         return tanksToDisplay
                           .filter((t: any) => {
-                            // 1. If Maturation and Stocking, only show tanks NOT used by any batch
-                            if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+                            // 1. If Stocking and not editing, only show tanks NOT already stocked (across MATURATION, LRT, FARMS)
+                            if (activity === 'Stocking' && !editId) {
                               return !stockedTankIds.includes(t.id);
                             }
                             
@@ -3546,9 +3586,8 @@ const RecordActivity = () => {
                               return batchRelatedTankIds.includes(t.id);
                             }
 
-                            // 3. FARMS module — always show all tanks in the section
-                            // 4. Standard fallback
-                            return isFarmModule || activity === 'Stocking' || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                            // 3. Fallback for other activities
+                            return isFarmModule || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                           })
                           .map((t: any) => (
                         <div 
@@ -3893,10 +3932,10 @@ const RecordActivity = () => {
               }
               if (selectionScope === 'all') {
                 const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-                return activeSectionData?.tanks.filter((t: any) => activity === 'Stocking' || editId || stockedTankIds.includes(t.id)) || [];
+                return activeSectionData?.tanks.filter((t: any) => (activity === 'Stocking' && !editId) ? !stockedTankIds.includes(t.id) : (editId || stockedTankIds.includes(t.id))) || [];
               } else if (selectionScope === 'custom') {
                 const activeSectionData = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-                return activeSectionData?.tanks.filter((t: any) => selectedTankIds.includes(t.id) && (activity === 'Stocking' || editId || stockedTankIds.includes(t.id))) || [];
+                return activeSectionData?.tanks.filter((t: any) => selectedTankIds.includes(t.id) && ((activity === 'Stocking' && !editId) ? !stockedTankIds.includes(t.id) : (editId || stockedTankIds.includes(t.id)))) || [];
               } else {
                 const activeSectionData = availableTanks.find(s => s.tanks.some((t: any) => t.id === tankId));
                 const t = activeSectionData?.tanks.find((t: any) => t.id === tankId);

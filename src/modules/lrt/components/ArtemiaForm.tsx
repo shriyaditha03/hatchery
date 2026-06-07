@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import RatingScale from '@/modules/shared/components/RatingScale';
+import { AnimalQualityScore } from '@/modules/shared/components/AnimalQualityScore';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { formatDate, getNowLocal } from '@/lib/date-utils';
 
@@ -13,15 +13,6 @@ const ARTEMIA_STAGES = [
   'Juvenile', 'Sub-Adult', 'Adult',
 ];
 
-const ARTEMIA_RATING_FIELDS = [
-  { key: 'swimmingActivity', label: 'Swimming Activity', required: true },
-  { key: 'homogenousStage', label: 'Homogenous Stage', required: true },
-  { key: 'hepatopancreas', label: 'Hepatopancreas' },
-  { key: 'intestinalContent', label: 'Intestinal Content' },
-  { key: 'musculature', label: 'Musculature' },
-  { key: 'deformities', label: 'Deformities' },
-  { key: 'survival', label: 'Survival Rate', required: true },
-];
 
 function generateArtemiaSampleId(): string {
   const datePart = formatDate(getNowLocal(), 'yyMMdd');
@@ -78,10 +69,7 @@ const ArtemiaForm = ({
     }
   }, [phase, data.sampleId]);
 
-  const ratings = data.ratings || {};
-  const setRating = (key: string, val: number) => {
-    onDataChange({ ...data, phase, ratings: { ...ratings, [key]: val } });
-  };
+
 
   const handleSampleCountChange = (valStr: string) => {
     const num = parseInt(valStr) || 1;
@@ -384,36 +372,9 @@ const ArtemiaForm = ({
           {/* Animal Quality Section */}
           {!isPlanningMode && (
             <div className="space-y-4 pt-4 border-t border-dashed">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">Animal Quality</p>
-              <div className="space-y-4">
-                {ARTEMIA_RATING_FIELDS.map(f => (
-                  <RatingScale
-                    key={f.key}
-                    label={f.label}
-                    required={f.required}
-                    value={ratings[f.key] || 0}
-                    onChange={val => setRating(f.key, val)}
-                  />
-                ))}
-              </div>
+              <AnimalQualityScore data={data} onDataChange={onDataChange} />
 
-              {/* Overall Score */}
-              {(() => {
-                const values = ARTEMIA_RATING_FIELDS.map(f => ratings[f.key] || 0);
-                const filled = values.filter(v => v > 0);
-                const avg = filled.length > 0 ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
-                return (
-                  <div className="mt-2 rounded-2xl border bg-primary/5 p-4 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
-                      <span className="text-2xl font-black text-primary">{avg.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{filled.length} of {ARTEMIA_RATING_FIELDS.length} parameters rated</p>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pt-2 border-t border-dashed">
                 <Label className="text-xs font-bold">Activity Photo (Optional)</Label>
                 <ImageUpload value={photoUrl} onUpload={onPhotoUrlChange} />
               </div>

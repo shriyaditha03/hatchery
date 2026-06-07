@@ -225,9 +225,9 @@ const OwnerConsolidatedReports = () => {
                             data.hatcheryName && `, Hatchery: ${data.hatcheryName}`
                         )}
                     </div>
-                    {(data.animalConditionScore || data.waterQualityScore) && (
+                    {(data.animalConditionScore || data.animalQualityScore || data.waterQualityScore || data.waterDataAvg) && (
                         <div className="text-[9px] text-primary/70 font-semibold">
-                            Qual: {data.animalConditionScore || data.animalQualityScore}/10, Water: {data.waterQualityScore || data.waterDataAvg}/10
+                            Qual: {data.animalConditionScore ? `${data.animalConditionScore}/10` : (data.animalQualityScore ? `${data.animalQualityScore}/5` : 'N/A')}, Water: {data.waterQualityScore ? `${data.waterQualityScore}/10` : (data.waterDataAvg ? `${data.waterDataAvg}/10` : 'N/A')}
                         </div>
                     )}
                 </div>

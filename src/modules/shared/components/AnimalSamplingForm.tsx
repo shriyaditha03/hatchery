@@ -266,6 +266,12 @@ export const AnimalSamplingForm = ({
         )}
 
         <div className="grid grid-cols-2 gap-4">
+          {data.stockingId && (
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs text-muted-foreground">Stocking ID (Batch ID)</Label>
+              <div className="h-10 px-3 flex items-center bg-muted/30 rounded-lg text-sm font-bold truncate">{data.stockingId}</div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Stocking Date</Label>
             <div className="h-10 px-3 flex items-center bg-muted/30 rounded-lg text-sm font-bold">{data.stockingDate || '—'}</div>
