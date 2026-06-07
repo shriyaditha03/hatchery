@@ -34,6 +34,7 @@ import AnimalSamplingForm from '@/modules/shared/components/AnimalSamplingForm';
 import ArtemiaForm from '@/modules/lrt/components/ArtemiaForm';
 import AlgaeForm from '@/modules/lrt/components/AlgaeForm';
 import HarvestForm from '@/modules/lrt/components/HarvestForm';
+import OrderBookingForm from '@/modules/lrt/components/OrderBookingForm';
 import TankShiftingForm from '@/modules/lrt/components/TankShiftingForm';
 import SourcingMatingForm from '@/modules/maturation/components/SourcingMatingForm';
 import SpawningForm from '@/modules/maturation/components/SpawningForm';
@@ -58,7 +59,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management', 'Order Booking'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -219,8 +220,16 @@ const RecordActivity = () => {
   useEffect(() => {
     if ((categoryParam === 'MATURATION' || categoryParam === 'LRT') && categoryParam !== activeModule) {
       setActiveModule(categoryParam);
+      return;
     }
-  }, [categoryParam]);
+    const lrtActivities = ['Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Order Booking'];
+    const maturationActivities = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
+    if (activity && lrtActivities.includes(activity) && activeModule !== 'LRT') {
+      setActiveModule('LRT');
+    } else if (activity && maturationActivities.includes(activity) && activeModule !== 'MATURATION') {
+      setActiveModule('MATURATION');
+    }
+  }, [categoryParam, activity, activeModule, setActiveModule]);
 
   useEffect(() => {
     if (type && !editId && !instructionIdParam && !editInstructionId) {
@@ -314,14 +323,38 @@ const RecordActivity = () => {
   });
 
   const activeSection = availableTanks.find(s => s.id === (selectedSectionId || activeSectionId));
-  const activeFarmCategory = categoryParam || activeSection?.farm_category || activeModule || 'LRT';
+  const activeFarmCategory = useMemo(() => {
+    if (categoryParam) return categoryParam;
+    const lrtActivities = ['Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Order Booking'];
+    const maturationActivities = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
+    if (activity && lrtActivities.includes(activity)) return 'LRT';
+    if (activity && maturationActivities.includes(activity)) return 'MATURATION';
+    return activeSection?.farm_category || activeModule || 'LRT';
+  }, [categoryParam, activity, activeSection?.farm_category, activeModule]);
+  const currentFarmId = useMemo(() => {
+    const baseId = selectedFarmId || activeFarmId;
+    const isPageLRT = activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI';
+    if (baseId) {
+      const farmAccess = user?.access?.find(a => a.farm_id === baseId);
+      if (farmAccess) {
+        const isFarmLRT = farmAccess.farm_category === 'LRT' || farmAccess.farm_category === 'LRI';
+        if (isFarmLRT === isPageLRT) {
+          return baseId;
+        }
+      }
+    }
+    const matching = user?.access?.find(a => {
+      const isAccessLRT = a.farm_category === 'LRT' || a.farm_category === 'LRI';
+      return isPageLRT ? isAccessLRT : a.farm_category === activeFarmCategory;
+    });
+    return matching?.farm_id || '';
+  }, [selectedFarmId, activeFarmId, activeFarmCategory, user?.access]);
   const isFarmModule = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
   const isBatchClosed = activeFarmCategory === 'MATURATION' && activeBroodstockBatchId && activeBroodstockBatchId !== 'new' && closedBatchIds.has(activeBroodstockBatchId) && activity !== 'Stocking';
   const currentSelectedTanks = useMemo(() => {
     if (activeFarmCategory === 'MATURATION' && !editId) {
       let effectiveTankIds: string[] = [];
       const sectionId = selectedSectionId || activeSectionId;
-      const currentFarmId = selectedFarmId || activeFarmId;
 
       if (selectionScope === 'all') {
         const allSectionTanks = sectionId
@@ -368,12 +401,11 @@ const RecordActivity = () => {
     }
   };
 
-  const currentFarmId = selectedFarmId || activeFarmId;
   const filteredSections = availableTanks.filter(s => currentFarmId ? s.farm_id === currentFarmId : true);
 
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [availableWorkers, setAvailableWorkers] = useState<{id: string, name: string}[]>([]);
-  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || activity === 'Water Management' || (activity === 'Broodstock Discard' && broodstockDiscardData.discardType === 'complete') || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
+  const isSpecialActivity = activity === 'Algae' || activity === 'Artemia' || activity === 'Egg Count' || activity === 'Nauplii Harvest' || activity === 'Nauplii Sale' || activity === 'Sourcing & Mating' || activity === 'Spawning' || activity === 'Water Management' || activity === 'Order Booking' || (activity === 'Broodstock Discard' && broodstockDiscardData.discardType === 'complete') || (activity === 'Stocking' && activeFarmCategory === 'MATURATION');
 
   // Live Time Update Effect
   useEffect(() => {
@@ -391,14 +423,13 @@ const RecordActivity = () => {
 
   useEffect(() => {
     const fetchBatches = async () => {
-      const currentFarmId = selectedFarmId || activeFarmId;
-      if (activeFarmCategory === 'MATURATION' && currentFarmId) {
+      if ((activeFarmCategory === 'MATURATION' || activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI') && currentFarmId) {
         await fetchAvailableBatches(currentFarmId);
       }
     };
     fetchBatches();
     fetchTanks();
-  }, [user, activity]);
+  }, [user, activity, currentFarmId]);
 
   const fetchTanks = async () => {
     if (!user || !user.access) return;
@@ -550,27 +581,50 @@ const RecordActivity = () => {
 
   // Fetch available Stocking IDs for Maturation
   useEffect(() => {
-    const currentFarmId = selectedFarmId || activeFarmId;
-    if (activeFarmCategory === 'MATURATION' && currentFarmId) {
+    if ((activeFarmCategory === 'MATURATION' || activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI') && currentFarmId) {
       fetchAvailableBatches(currentFarmId);
     }
-  }, [selectedFarmId, activeFarmId, activeFarmCategory]);
+  }, [currentFarmId, activeFarmCategory]);
 
   const fetchAvailableBatches = async (farmIdToUse: string) => {
     try {
+      const farmCategoryMap: Record<string, string> = {};
+      user?.access?.forEach((a: any) => {
+        if (a.farm_id && a.farm_category) {
+          farmCategoryMap[a.farm_id] = a.farm_category;
+        }
+      });
+
       const { data, error } = await supabase
         .from('activity_logs')
-        .select('activity_type, stocking_id, data')
+        .select('activity_type, stocking_id, data, farm_id')
         .eq('farm_id', farmIdToUse)
         .in('activity_type', ['Stocking', 'Broodstock Discard']);
       
       if (!error && data) {
         const ids: string[] = [];
         const closed = new Set<string>();
+        const isCurrentLRT = activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI';
 
         data.forEach((d: any) => {
+          const farmCat = farmCategoryMap[d.farm_id] || 'LRT';
+          const isLogLRT = farmCat === 'LRT' || farmCat === 'LRI';
+
+          if (isLogLRT !== isCurrentLRT) {
+            return;
+          }
+
           const sId = d.stocking_id || d.data?.stockingId || d.data?.batchId;
           if (sId) {
+            // Broodstock IDs (starting with BS_) belong only to Maturation, not LRT
+            const isBS = sId.startsWith('BS_');
+            if (isCurrentLRT && isBS) {
+              return;
+            }
+            if (!isCurrentLRT && !isBS) {
+              return;
+            }
+
             if (d.activity_type === 'Stocking') {
                 ids.push(sId);
             }
@@ -594,7 +648,6 @@ const RecordActivity = () => {
   useEffect(() => {
     const isMaintenance = activity && MAINTENANCE_ACTIVITIES.includes(activity);
     if (isMaintenance && activeFarmCategory === 'MATURATION' && availableTanks.length > 0 && !selectedSectionId && !editId) {
-      const currentFarmId = selectedFarmId || activeFarmId;
       const farmSections = availableTanks.filter(s => s.farm_id === currentFarmId);
       
       // Prefer ANIMAL section, fallback to first section of the farm
@@ -835,6 +888,7 @@ const RecordActivity = () => {
         if (actType === 'Harvest' && pd.harvestData) setHarvestData(pd.harvestData);
         if (actType === 'Tank Shifting' && pd.tankShiftingData) setTankShiftingData(pd.tankShiftingData);
         if (actType === 'Nauplii Sale' && pd.naupliiSaleData) setNaupliiSaleData(pd.naupliiSaleData);
+        if (actType === 'Order Booking' && pd.orderBookingData) setOrderBookingData(pd.orderBookingData);
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
@@ -945,6 +999,8 @@ const RecordActivity = () => {
       setTankShiftingData(planned_data.tankShiftingData);
     } else if (currentAct === 'Nauplii Sale' && planned_data.naupliiSaleData) {
       setNaupliiSaleData(planned_data.naupliiSaleData);
+    } else if (currentAct === 'Order Booking' && planned_data.orderBookingData) {
+      setOrderBookingData(planned_data.orderBookingData);
     } else if (currentAct === 'Animals Sampling & Observation' && planned_data.animalSamplingData) {
       setAnimalSamplingData(planned_data.animalSamplingData);
     }
@@ -1012,6 +1068,8 @@ const RecordActivity = () => {
           setHarvestData(data.data);
         } else if (actType === 'Tank Shifting') {
           setTankShiftingData(data.data);
+        } else if (actType === 'Order Booking') {
+          setOrderBookingData(data.data);
         } else if (actType === 'Sourcing & Mating') {
           setSourcingMatingData(data.data);
         } else if (actType === 'Spawning') {
@@ -1391,6 +1449,8 @@ const RecordActivity = () => {
         'broodstock discard': 'Broodstock Discard',
         'water management': 'Water Management',
         'water-management': 'Water Management',
+        'order booking': 'Order Booking',
+        'order-booking': 'Order Booking',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
@@ -1439,6 +1499,7 @@ const RecordActivity = () => {
   const [artemiaData, setArtemiaData] = useState<any>({ phase: 'pre' });
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
   const [harvestData, setHarvestData] = useState<any>({});
+  const [orderBookingData, setOrderBookingData] = useState<any>({});
   const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
 
   // Water Management data
@@ -1683,6 +1744,7 @@ const RecordActivity = () => {
       case 'Artemia': return { ...baseData, ...artemiaData, photo_url: photoUrl };
       case 'Algae': return { ...baseData, ...algaeData };
       case 'Harvest': return { ...baseData, ...harvestData };
+      case 'Order Booking': return { ...baseData, ...orderBookingData };
       case 'Tank Shifting': return { ...baseData, ...tankShiftingData };
       case 'Sourcing & Mating': return { ...baseData, ...sourcingMatingData };
       case 'Spawning': return { ...baseData, ...spawningData };
@@ -2173,6 +2235,127 @@ const RecordActivity = () => {
       }
       if (harvestData.receivedAmount === undefined || harvestData.receivedAmount === null || harvestData.receivedAmount === '') {
         toast.error('Received Amount is required');
+        return;
+      }
+    }
+
+    if (activity === 'Order Booking') {
+      if (!orderBookingData.customerName) {
+        toast.error('Customer Name is required');
+        return;
+      }
+      if (!orderBookingData.bookingId) {
+        toast.error('Booking ID is required');
+        return;
+      }
+      if (!orderBookingData.phoneNumber || orderBookingData.phoneNumber.length !== 10) {
+        toast.error('Phone Number must be exactly 10 digits');
+        return;
+      }
+      if (!orderBookingData.whatsappNumber || orderBookingData.whatsappNumber.length !== 10) {
+        toast.error('Whatsapp Number must be exactly 10 digits');
+        return;
+      }
+      if (!orderBookingData.alternateContact) {
+        toast.error('Alternate Contact Details are required');
+        return;
+      }
+      if (!orderBookingData.farmLocation) {
+        toast.error('Farm Location / Address is required');
+        return;
+      }
+      const numBatches = parseInt(orderBookingData.numBatches || '0');
+      if (numBatches <= 0) {
+        toast.error('Number of Batches required must be at least 1');
+        return;
+      }
+
+      // Validate batches list
+      const batches = orderBookingData.batches || [];
+      if (batches.length === 0) {
+        toast.error('At least one Batch Specification is required');
+        return;
+      }
+      for (let i = 0; i < batches.length; i++) {
+        const b = batches[i];
+        if (!b.geneticLine) {
+          toast.error(`Genetic Line is required for Batch #${i + 1}`);
+          return;
+        }
+        if (!b.seedQuantityGross || parseFloat(b.seedQuantityGross) <= 0) {
+          toast.error(`Valid Seed Quantity is required for Batch #${i + 1}`);
+          return;
+        }
+        if (!b.salinity) {
+          toast.error(`Salinity is required for Batch #${i + 1}`);
+          return;
+        }
+        if (!b.deliveryDate1 || !b.deliveryDate2) {
+          toast.error(`Both Delivery range dates are required for Batch #${i + 1}`);
+          return;
+        }
+      }
+
+      if (!orderBookingData.orderStatus) {
+        toast.error('Status of Order is required');
+        return;
+      }
+      if (!orderBookingData.priorityNumber) {
+        toast.error('Priority Number Allocation is required');
+        return;
+      }
+
+      // Confirmed status allocations validation
+      if (orderBookingData.orderStatus === 'Confirmed') {
+        if (!orderBookingData.orderId) {
+          toast.error('Order ID is required for Confirmed status');
+          return;
+        }
+        if (!orderBookingData.allocatedStockingId) {
+          toast.error('Allocated Batch/Stocking ID is required for Confirmed status');
+          return;
+        }
+        const allocatedTanks = orderBookingData.allocatedTanks || [];
+        if (allocatedTanks.length === 0) {
+          toast.error('At least one Tank Allocation is required for Confirmed status');
+          return;
+        }
+        for (let i = 0; i < allocatedTanks.length; i++) {
+          const t = allocatedTanks[i];
+          if (!t.tankId) {
+            toast.error(`Tank selection is required for Allocation #${i + 1}`);
+            return;
+          }
+          if (!t.presentLarvalStage) {
+            toast.error(`Present Larval Stage is required for Allocation #${i + 1}`);
+            return;
+          }
+          if (!t.grossExpected || parseFloat(t.grossExpected) <= 0) {
+            toast.error(`Valid Gross Expected Qty is required for Allocation #${i + 1}`);
+            return;
+          }
+          if (!t.larvalStagePacking) {
+            toast.error(`Larval Stage at Packing is required for Allocation #${i + 1}`);
+            return;
+          }
+        }
+      }
+
+      // Payment validations
+      if (orderBookingData.bonusAgreed === undefined || orderBookingData.bonusAgreed === null || orderBookingData.bonusAgreed === '') {
+        toast.error('Bonus Agreed is required');
+        return;
+      }
+      if (orderBookingData.netQty === undefined || orderBookingData.netQty === null || orderBookingData.netQty === '') {
+        toast.error('Net Qty (in Million) is required');
+        return;
+      }
+      if (orderBookingData.unitPriceAgreed === undefined || orderBookingData.unitPriceAgreed === null || orderBookingData.unitPriceAgreed === '') {
+        toast.error('Unit Price Agreed is required');
+        return;
+      }
+      if (orderBookingData.advanceReceived === undefined || orderBookingData.advanceReceived === null || orderBookingData.advanceReceived === '') {
+        toast.error('Advance Received is required');
         return;
       }
     }
@@ -3323,9 +3506,40 @@ const RecordActivity = () => {
 
   const activeFarmName = activeSection?.farm_name || '';
   
-  const filteredActivities = activeFarmCategory === 'MATURATION' 
-    ? ACTIVITIES.filter(a => a !== 'Artemia' && a !== 'Algae' && a !== 'Harvest' && a !== 'Tank Shifting')
-    : ACTIVITIES;
+  const filteredActivities = useMemo(() => {
+    if (activeFarmCategory === 'MATURATION') {
+      return ACTIVITIES.filter(a => 
+        a !== 'Artemia' && 
+        a !== 'Algae' && 
+        a !== 'Harvest' && 
+        a !== 'Tank Shifting' && 
+        a !== 'Order Booking'
+      );
+    } else if (activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI') {
+      return ACTIVITIES.filter(a => 
+        a !== 'Sourcing & Mating' && 
+        a !== 'Spawning' && 
+        a !== 'Egg Count' && 
+        a !== 'Nauplii Harvest' && 
+        a !== 'Nauplii Sale' && 
+        a !== 'Broodstock Discard' && 
+        a !== 'Water Management'
+      );
+    } else { // FARMS
+      return ACTIVITIES.filter(a => 
+        a !== 'Sourcing & Mating' && 
+        a !== 'Spawning' && 
+        a !== 'Egg Count' && 
+        a !== 'Nauplii Harvest' && 
+        a !== 'Nauplii Sale' && 
+        a !== 'Broodstock Discard' && 
+        a !== 'Water Management' &&
+        a !== 'Artemia' &&
+        a !== 'Algae' &&
+        a !== 'Order Booking'
+      );
+    }
+  }, [activeFarmCategory]);
 
   return (
     <div className="min-h-screen bg-background pb-10">
@@ -4182,6 +4396,21 @@ const RecordActivity = () => {
             onCommentsChange={setComments}
             photoUrl={photoUrl}
             onPhotoUrlChange={setPhotoUrl}
+            isPlanningMode={isPlanningMode}
+          />
+        )}
+
+        {activity === 'Order Booking' && (
+          <OrderBookingForm
+            data={orderBookingData}
+            onDataChange={setOrderBookingData}
+            comments={comments}
+            onCommentsChange={setComments}
+            availableTanks={availableTanks.filter(s => 
+              s.farm_category === activeFarmCategory || 
+              ((s.farm_category === 'LRT' || s.farm_category === 'LRI') && (activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI'))
+            )}
+            availableBatches={availableBatches}
             isPlanningMode={isPlanningMode}
           />
         )}

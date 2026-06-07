@@ -381,7 +381,8 @@ const UserDashboard = () => {
         'Nauplii Harvest': ArrowUpRight,
         'Nauplii Sale': ShoppingCart,
         'Broodstock Discard': Trash2,
-        'Water Management': Droplets
+        'Water Management': Droplets,
+        'Order Booking': ShoppingCart
     };
 
     const activities = useMemo(() => {
@@ -396,11 +397,12 @@ const UserDashboard = () => {
             { name: 'Artemia', icon: Beaker, route: '/user/activity/artemia', color: 'bg-teal-100 text-teal-600' },
             { name: 'Algae', icon: Waves, route: '/user/activity/algae', color: 'bg-green-100 text-green-700' },
             { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' },
+            { name: 'Order Booking', icon: ShoppingCart, route: '/user/activity/order-booking', color: 'bg-rose-100 text-rose-600' },
         ];
 
         if (activeModule.toUpperCase() === 'MATURATION') {
             const maturationBase = base.filter(a => 
-                a.name !== 'Artemia' && a.name !== 'Algae' && a.name !== 'Harvest' && a.name !== 'Tank Shifting' && a.name !== 'Water Management'
+                a.name !== 'Artemia' && a.name !== 'Algae' && a.name !== 'Harvest' && a.name !== 'Tank Shifting' && a.name !== 'Water Management' && a.name !== 'Order Booking'
             );
             return [
                 ...maturationBase,

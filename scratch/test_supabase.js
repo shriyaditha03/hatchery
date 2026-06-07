@@ -17,10 +17,14 @@ const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function main() {
-  const { data, error } = await supabase.rpc('exec_sql', { 
-    sql: "SELECT 1 as val;"
-  });
-  console.log('exec_sql result:', data, 'Error:', error);
+  const { data: hatcheries, error: hError } = await supabase
+    .from('hatcheries')
+    .select('id, name, modules');
+  console.log('Hatcheries:', hatcheries, 'Error:', hError);
 }
 
+
+
+
 main();
+
