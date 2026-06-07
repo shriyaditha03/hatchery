@@ -3620,7 +3620,7 @@ const RecordActivity = () => {
         )}
       </div>
 
-      <div className="w-full px-3 sm:px-4 pb-8 space-y-4 sm:max-w-lg mx-auto overflow-hidden" data-testid="main-content">
+      <div className="w-full px-3 sm:px-4 pb-8 space-y-4 sm:max-w-lg mx-auto" data-testid="main-content">
         {/* Supervisor Instruction Note - Read Only Display for Workers */}
         {selectedInstructionData?.planned_data?.instructions && !isPlanningMode && (
           <div className="glass-card rounded-2xl p-4 border-l-4 border-l-primary shadow-md animate-fade-in-up space-y-2 bg-primary/5">
@@ -3659,7 +3659,7 @@ const RecordActivity = () => {
         )}
 
         {/* Date / Time */}
-        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm w-full overflow-hidden">
+        <div className="glass-card rounded-2xl p-4 space-y-4 shadow-sm w-full">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 truncate">
             <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
             {isPlanningMode ? 'Schedule Time' : 'Date & Time'}
@@ -3719,7 +3719,7 @@ const RecordActivity = () => {
         </div>
 
         {(activity || !type) && !isSpecialActivity && activity !== 'Water Management' && !(activity === 'Stocking' && activeFarmCategory === 'MATURATION' && !editId) && (
-          <div className="glass-card rounded-2xl p-4 space-y-4 overflow-hidden">
+          <div className="glass-card rounded-2xl p-4 space-y-4">
             {isBatchClosed && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-4 mb-2 animate-pulse">
                    <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
