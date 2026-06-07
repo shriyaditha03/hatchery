@@ -804,21 +804,21 @@ const UserDashboard = () => {
                             <Button 
                                 key={act.name} 
                                 variant="outline" 
-                                className="h-14 justify-start gap-3 bg-card border shadow-sm rounded-xl px-3 hover:shadow-md hover:bg-card/90 transition-all"
+                                className="h-14 justify-start gap-2 bg-card border shadow-sm rounded-xl px-2.5 hover:shadow-md hover:bg-card/90 transition-all whitespace-normal"
                                 onClick={() => navigate(`${act.route}?mode=${user?.role === 'supervisor' ? supervisorMode : 'activity'}&section=${activeSectionId || ''}&batch=${activeBroodstockBatchId || ''}&category=${activeModule}`)}
                             >
-                                <div className={`p-1.5 rounded-lg ${act.color}`}><act.icon className="w-4 h-4" /></div>
-                                <span className="text-xs font-semibold text-foreground text-left">{act.name}</span>
+                                <div className={`p-1.5 rounded-lg shrink-0 ${act.color}`}><act.icon className="w-4 h-4" /></div>
+                                <span className="text-[11px] sm:text-xs font-semibold text-foreground text-left leading-tight break-words">{act.name}</span>
                             </Button>
                         ))}
                         <Button 
                             variant="outline" 
                             data-testid="daily-report-button"
-                            className="h-14 justify-start gap-3 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-3" 
+                            className="h-14 justify-start gap-2 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl px-2.5 whitespace-normal" 
                             onClick={() => navigate(user?.role === 'supervisor' ? '/owner/consolidated-reports' : '/user/daily-report')}
                         >
-                            <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
-                            <span className="text-xs font-semibold text-foreground text-left">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
+                            <div className="p-1.5 rounded-lg shrink-0 bg-indigo-100 text-indigo-700"><FileText className="w-4 h-4" /></div>
+                            <span className="text-[11px] sm:text-xs font-semibold text-foreground text-left leading-tight break-words">{user?.role === 'supervisor' ? 'Reports' : 'Daily Report'}</span>
                         </Button>
                     </div>
             </div>

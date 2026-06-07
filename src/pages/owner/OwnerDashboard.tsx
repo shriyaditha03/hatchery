@@ -424,13 +424,13 @@ const OwnerDashboard = () => {
                                 <Button
                                     key={act.name}
                                     variant="outline"
-                                    className="h-14 flex items-center justify-start gap-3 px-4 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl"
+                                    className="h-14 flex items-center justify-start gap-2 px-2.5 bg-card border shadow-sm hover:shadow-md hover:bg-card/90 transition-all rounded-xl whitespace-normal"
                                     onClick={() => navigate(act.route)}
                                 >
-                                    <div className={`p-1.5 rounded-lg ${act.color}`}>
-                                        <Icon className="w-5 h-5" />
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${act.color}`}>
+                                        <Icon className="w-4 h-4" />
                                     </div>
-                                    <span className="font-semibold text-foreground text-xs text-left">
+                                    <span className="text-[11px] sm:text-xs font-semibold text-foreground text-left leading-tight break-words">
                                         {act.name}
                                     </span>
                                 </Button>
