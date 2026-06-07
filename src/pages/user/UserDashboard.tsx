@@ -169,14 +169,15 @@ const UserDashboard = () => {
                 
                 if (isCompleteDiscard || isBatchClosedSale) {
                     const sId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.stocking_id || log.data?.batchId || log.data?.batch_id;
-                    if (sId) closedIds.add(sId);
+                    // Only track closure for Maturation broodstock IDs (BS_ prefix)
+                    if (sId && sId.startsWith('BS_')) closedIds.add(sId);
                 }
             });
 
             (data || []).forEach(log => {
                 const sId = log.stocking_id || log.stockingId || log.data?.stockingId || log.data?.stocking_id || log.data?.batchId || log.data?.batch_id;
-                // Any of these activity types can "introduce" or "be linked to" a batch ID
-                if (sId && !seenIds.has(sId)) {
+                // Only show Maturation broodstock batches (BS_ prefix) — exclude LRT stocking IDs
+                if (sId && sId.startsWith('BS_') && !seenIds.has(sId)) {
                     seenIds.add(sId);
                     batchesList.push({
                         id: sId,
