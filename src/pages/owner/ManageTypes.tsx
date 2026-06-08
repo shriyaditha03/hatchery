@@ -19,8 +19,8 @@ interface TypeItem {
 
 const DEFAULT_FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
 const DEFAULT_TREATMENT_TYPES = ['Probiotics', 'Antibiotics', 'Mineral Supplement', 'Disinfectant', 'Vitamin'];
-const DEFAULT_VANNAMEI_GENETIC_TYPES = ['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'Konabay', 'Others'];
-const DEFAULT_TIGER_GENETIC_TYPES = ['Moana (Moana Technologies)', 'Madagascar (Unibio)'];
+const DEFAULT_VANNAMEI_GENETIC_TYPES = ['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'KonaBay', 'Others'];
+const DEFAULT_TIGER_GENETIC_TYPES = ['Moana', 'Unibio', 'Others'];
 
 // Sort items so defaults appear in their preset order, custom items appended alphabetically
 const sortByDefaultOrder = (items: any[], defaultOrder: string[]) =>

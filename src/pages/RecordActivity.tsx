@@ -2028,10 +2028,10 @@ const RecordActivity = () => {
         requiredFields = ['stockingId', 'seedSpecies', 'seedGeneticLine', 'hatcheryName', 'seedStage', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
       } else if (activeFarmCategory === 'MATURATION') {
         // Maturation: naupliiStocked is not required (hidden)
-        requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
+        requiredFields = ['stockingId', 'broodstockSource', 'broodstockSpecies', 'broodstockType', 'hatcheryName', 'tankStockingNumber', 'animalConditionScore', 'waterQualityScore'];
       } else {
         // LRT and others: stockingId is required
-        requiredFields = ['stockingId', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
+        requiredFields = ['stockingId', 'broodstockSpecies', 'broodstockSource', 'hatcheryName', 'tankStockingNumber', 'naupliiStocked', 'animalConditionScore', 'waterQualityScore'];
       }
         
       const missing = requiredFields.filter(f => {
@@ -2256,10 +2256,6 @@ const RecordActivity = () => {
         toast.error('Whatsapp Number must be exactly 10 digits');
         return;
       }
-      if (!orderBookingData.alternateContact) {
-        toast.error('Alternate Contact Details are required');
-        return;
-      }
       if (!orderBookingData.farmLocation) {
         toast.error('Farm Location / Address is required');
         return;
@@ -2311,10 +2307,6 @@ const RecordActivity = () => {
           toast.error('Order ID is required for Confirmed status');
           return;
         }
-        if (!orderBookingData.allocatedStockingId) {
-          toast.error('Allocated Batch/Stocking ID is required for Confirmed status');
-          return;
-        }
         const allocatedTanks = orderBookingData.allocatedTanks || [];
         if (allocatedTanks.length === 0) {
           toast.error('At least one Tank Allocation is required for Confirmed status');
@@ -2322,6 +2314,10 @@ const RecordActivity = () => {
         }
         for (let i = 0; i < allocatedTanks.length; i++) {
           const t = allocatedTanks[i];
+          if (!t.allocatedStockingId) {
+            toast.error(`Allocated Batch/Stocking ID is required for Allocation #${i + 1}`);
+            return;
+          }
           if (!t.tankId) {
             toast.error(`Tank selection is required for Allocation #${i + 1}`);
             return;
@@ -4412,6 +4408,8 @@ const RecordActivity = () => {
             )}
             availableBatches={availableBatches}
             isPlanningMode={isPlanningMode}
+            date={date}
+            isEditMode={!!editId || !!editInstructionId}
           />
         )}
 

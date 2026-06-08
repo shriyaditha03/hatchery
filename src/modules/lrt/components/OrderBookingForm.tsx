@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Calendar as CalendarIcon, Info, Users, IndianRupee, Activity, CheckCircle, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Calendar as CalendarIcon, Info, Users, IndianRupee, Activity, CheckCircle, ShoppingCart, LocateFixed, MapPin } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -71,12 +74,72 @@ interface OrderBookingFormProps {
   availableTanks?: any[];
   availableBatches?: string[];
   isPlanningMode?: boolean;
+  date?: string;
+  isEditMode?: boolean;
 }
 
 const PACKING_TYPES = ['Tank Packing', 'Bubble packing'];
 const TRANSPORTATION_OPTIONS = ['Owner', 'Hatchery'];
 const STATUS_OPTIONS = ['Confirmed', 'Pending', 'Reschedule', 'Cancelled'];
 const LARVAL_STAGES = ['Nauplii', 'Zoea', 'Mysis', 'PL', 'PL10', 'PL12', 'PL15', 'Others'];
+
+const SPECIES_OPTIONS = ['Litopenaeus vannamei', 'Penaeus monodon', 'Others'];
+
+const GENETIC_LINES_BY_SPECIES: Record<string, string[]> = {
+  'Litopenaeus vannamei': ['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'KonaBay', 'Others'],
+  'Penaeus monodon': ['Moana', 'Unibio', 'Others'],
+  'Others': ['Others'],
+};
+
+const getGeneticLines = (species: string): string[] =>
+  GENETIC_LINES_BY_SPECIES[species] ?? ['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'KonaBay', 'Others'];
+
+const encodePlusCode = (latitude: number, longitude: number): string => {
+  const ALPHABET = "23456789CFGHJMPQRVWX";
+  let lat = latitude;
+  let lng = longitude;
+  if (lat > 90) lat = 90;
+  if (lat < -90) lat = -90;
+  while (lng < -180) lng += 360;
+  while (lng >= 180) lng -= 360;
+  
+  let latVal = lat + 90;
+  let lngVal = lng + 180;
+  
+  let code = "";
+  
+  let digitLat = Math.floor(latVal / 20);
+  let digitLng = Math.floor(lngVal / 20);
+  code += ALPHABET[digitLat] + ALPHABET[digitLng];
+  latVal = (latVal % 20) * 20;
+  lngVal = (lngVal % 20) * 20;
+  
+  digitLat = Math.floor(latVal / 20);
+  digitLng = Math.floor(lngVal / 20);
+  code += ALPHABET[digitLat] + ALPHABET[digitLng];
+  latVal = (latVal % 20) * 20;
+  lngVal = (lngVal % 20) * 20;
+  
+  digitLat = Math.floor(latVal / 20);
+  digitLng = Math.floor(lngVal / 20);
+  code += ALPHABET[digitLat] + ALPHABET[digitLng];
+  latVal = (latVal % 20) * 20;
+  lngVal = (lngVal % 20) * 20;
+  
+  digitLat = Math.floor(latVal / 20);
+  digitLng = Math.floor(lngVal / 20);
+  code += ALPHABET[digitLat] + ALPHABET[digitLng];
+  latVal = (latVal % 20) * 20;
+  lngVal = (lngVal % 20) * 20;
+  
+  code = code.slice(0, 8) + "+" + code.slice(8);
+  
+  digitLat = Math.floor(latVal / 20);
+  digitLng = Math.floor(lngVal / 20);
+  code += ALPHABET[digitLat] + ALPHABET[digitLng];
+  
+  return code;
+};
 
 export const OrderBookingForm = ({
   data,
@@ -85,29 +148,143 @@ export const OrderBookingForm = ({
   onCommentsChange,
   availableTanks = [],
   availableBatches = [],
-  isPlanningMode = false
+  isPlanningMode = false,
+  date = '',
+  isEditMode = false
 }: OrderBookingFormProps) => {
-  const [geneticLines, setGeneticLines] = useState<string[]>([
-    'SIS Hardy Line',
-    'SIS Growth Line',
-    'Syaqua',
-    'Konabay',
-    'Others'
-  ]);
+  const [isUserEdited, setIsUserEdited] = useState(isEditMode || !!data.bookingId);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
 
-  // Load genetic lines from DB
   useEffect(() => {
-    supabase
-      .from('genetic_line_types')
-      .select('name')
-      .eq('is_active', true)
-      .then(({ data: dbData, error }) => {
-        if (!error && dbData && dbData.length > 0) {
-          const names = Array.from(new Set(dbData.map((d: any) => d.name)));
-          setGeneticLines(names);
+    if (isEditMode) {
+      setIsUserEdited(true);
+    }
+  }, [isEditMode]);
+
+  useEffect(() => {
+    if (data.bookingId && !isUserEdited) {
+      setIsUserEdited(true);
+    }
+  }, [data.bookingId]);
+
+  useEffect(() => {
+    const fetchNextBookingId = async () => {
+      if (isUserEdited) return;
+      if (!date) return;
+      
+      try {
+        const { data: bookings, error } = await supabase
+          .from('activity_charts')
+          .select('planned_data')
+          .eq('activity_type', 'Order Booking')
+          .eq('scheduled_date', date);
+          
+        if (error) {
+          console.error('Error fetching bookings:', error);
+          return;
         }
-      });
-  }, []);
+
+        const count = bookings ? bookings.length : 0;
+        const serial = count + 1;
+        const formattedSerial = String(serial).padStart(2, '0');
+        
+        const dateParts = date.split('-'); // [YYYY, MM, DD]
+        if (dateParts.length === 3) {
+          const yyyy = dateParts[0];
+          const mm = dateParts[1];
+          const dd = dateParts[2];
+          const yy = yyyy.slice(-2);
+          const generatedId = `BK_${dd}${mm}${yy}_${formattedSerial}`;
+          
+          if (data.bookingId !== generatedId) {
+            onDataChange((prev: any) => ({
+              ...prev,
+              bookingId: generatedId
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error generating Booking ID:', err);
+      }
+    };
+
+    fetchNextBookingId();
+  }, [date, isUserEdited]);
+
+  const handleLocationSelect = useCallback(async (lat: number, lng: number, providedAddress?: string) => {
+    const plusCode = encodePlusCode(lat, lng);
+    onDataChange((prev: any) => ({
+      ...prev,
+      plusCode: plusCode,
+      latitude: lat,
+      longitude: lng,
+      farmLocation: providedAddress || prev.farmLocation || `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`
+    }));
+
+    setAddressLoading(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+      if (res.ok) {
+        const data = await res.json();
+        const addr = data.address || {};
+
+        const cleanValue = (val: string | undefined) => {
+          if (!val) return '';
+          const plusCodeRegex = /[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}/i;
+          let cleaned = val.replace(plusCodeRegex, '').trim();
+          cleaned = cleaned.replace(/Ward\s*(No\s*)?\d+/i, '').trim();
+          return cleaned.replace(/^,|,$/g, '').trim();
+        };
+
+        const plotNo = cleanValue(addr.house_number || addr.housenumber || addr.building || addr.office || addr.shop || addr.place);
+        const street = cleanValue(addr.road || addr.street || addr.pedestrian || addr.cycleway);
+        const areaParts = [
+          addr.suburb,
+          addr.neighbourhood,
+          addr.residential,
+          addr.subdistrict,
+          addr.district,
+          addr.quarter,
+          addr.city_district,
+          addr.village,
+          addr.hamlet
+        ].map(cleanValue).filter(Boolean);
+
+        const areaName = areaParts[0] || '';
+        const rawDisplayName = data.display_name || '';
+        const newFullAddress = providedAddress || rawDisplayName;
+
+        const isCoordsOnly = /^Lat:.*Lng:/.test(newFullAddress);
+        let constructedAddress = newFullAddress;
+
+        if (isCoordsOnly || (rawDisplayName.length < 20 && !rawDisplayName.includes(','))) {
+          constructedAddress = [plotNo, street, areaName, addr.city || addr.town || addr.village, addr.state, addr.postcode]
+            .filter(Boolean)
+            .join(', ');
+        }
+
+        onDataChange((prev: any) => ({
+          ...prev,
+          farmLocation: constructedAddress || prev.farmLocation
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch address:", error);
+    } finally {
+      setAddressLoading(false);
+    }
+  }, [onDataChange]);
+
+  const handlePlotAreaSelect = useCallback((area: number, length: number, width: number) => {
+    onDataChange((prev: any) => ({
+      ...prev,
+      plotArea: Math.round(area * 100) / 100,
+      plotLength: Math.round(length * 100) / 100,
+      plotWidth: Math.round(width * 100) / 100
+    }));
+    toast.info(`Plot area detected: ${area.toFixed(2)} sqm`);
+  }, [onDataChange]);
 
   // Pricing calculations and default lists initiation
   const netQtyVal = parseFloat(data.netQty || '0');
@@ -127,6 +304,7 @@ export const OrderBookingForm = ({
     if (updatedBatches.length < numBatches) {
       for (let i = updatedBatches.length; i < numBatches; i++) {
         updatedBatches.push({
+          species: '',
           geneticLine: '',
           seedQuantityUnit: 'Million',
           seedQuantityGross: '',
@@ -181,7 +359,7 @@ export const OrderBookingForm = ({
     const current = data.allocatedTanks || [];
     handleChange('allocatedTanks', [
       ...current,
-      { tankId: '', presentLarvalStage: 'Nauplii', grossExpected: '', larvalStagePacking: 'PL' }
+      { allocatedStockingId: '', tankId: '', presentLarvalStage: 'Nauplii', grossExpected: '', larvalStagePacking: 'PL' }
     ]);
   };
 
@@ -238,14 +416,17 @@ export const OrderBookingForm = ({
             <Input
               type="text"
               value={data.bookingId || ''}
-              onChange={e => handleChange('bookingId', e.target.value)}
+              onChange={e => {
+                setIsUserEdited(true);
+                handleChange('bookingId', e.target.value);
+              }}
               placeholder="e.g. BK-1002"
               className="h-11 border-slate-200 rounded-xl font-bold"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700">Phone Number (10-Digit Mobile) *</Label>
+            <Label className="text-xs font-bold text-slate-700">Phone Number *</Label>
             <Input
               type="text"
               value={data.phoneNumber || ''}
@@ -259,7 +440,28 @@ export const OrderBookingForm = ({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700">Whatsapp Number (10-Digit Mobile) *</Label>
+            <div className="flex justify-between items-center">
+              <Label className="text-xs font-bold text-slate-700">WhatsApp Number *</Label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  id="same-as-phone"
+                  checked={!!data.phoneNumber && data.whatsappNumber === data.phoneNumber}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      handleChange('whatsappNumber', data.phoneNumber || '');
+                    } else {
+                      handleChange('whatsappNumber', '');
+                    }
+                  }}
+                  disabled={!data.phoneNumber}
+                  className="w-3.5 h-3.5 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer disabled:opacity-50"
+                />
+                <label htmlFor="same-as-phone" className="text-[10px] text-slate-500 font-bold cursor-pointer select-none">
+                  Same as Phone
+                </label>
+              </div>
+            </div>
             <Input
               type="text"
               value={data.whatsappNumber || ''}
@@ -267,13 +469,13 @@ export const OrderBookingForm = ({
                 const numeric = e.target.value.replace(/\D/g, '');
                 handleChange('whatsappNumber', numeric.slice(0, 10));
               }}
-              placeholder="Enter 10-digit Whatsapp number"
+              placeholder="Enter 10-digit WhatsApp number"
               className="h-11 border-slate-200 rounded-xl"
             />
           </div>
 
           <div className="space-y-1.5 md:col-span-2">
-            <Label className="text-xs font-bold text-slate-700">Alternate Contact (Name and Number) *</Label>
+            <Label className="text-xs font-bold text-slate-700">Alternate Contact <span className="text-muted-foreground font-normal">(Optional)</span></Label>
             <Input
               type="text"
               value={data.alternateContact || ''}
@@ -283,18 +485,87 @@ export const OrderBookingForm = ({
             />
           </div>
 
-          <div className="space-y-1.5 md:col-span-2">
-            <Label className="text-xs font-bold text-slate-700">Farm Location / Address *</Label>
+          <div className="space-y-1.5 md:col-span-2 pt-2 border-t border-dashed">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-slate-700">Farm Location / Address *</Label>
+              <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 rounded-xl text-[10px] uppercase font-bold">
+                    <LocateFixed className="w-3.5 h-3.5" /> Pick on Map
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
+                  <DialogHeader className="p-6 pb-2">
+                    <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                      <LocateFixed className="w-6 h-6 text-primary" />
+                      Select Farm Location
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
+                    <MapPicker
+                      onLocationSelect={handleLocationSelect}
+                      onPlotAreaSelect={handlePlotAreaSelect}
+                    />
+                  </div>
+                  <div className="p-4 bg-card flex justify-end gap-3">
+                    <Button type="button" variant="outline" className="rounded-xl" onClick={() => setMapOpen(false)}>Cancel</Button>
+                    <Button type="button" className="px-8 shadow-lg shadow-primary/20 rounded-xl" onClick={() => setMapOpen(false)}>Confirm Location</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
             <Textarea
               value={data.farmLocation || ''}
               onChange={e => handleChange('farmLocation', e.target.value)}
-              placeholder="Enter complete farm location or address details"
+              placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
               rows={2}
               className="rounded-xl border-slate-200 resize-none"
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 md:col-span-2">
+            <Label className="text-xs font-bold text-slate-700">Plus Code (e.g. 8FVC9G8F+VX) <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+            <Input
+              type="text"
+              value={data.plusCode || ''}
+              onChange={e => handleChange('plusCode', e.target.value)}
+              placeholder="e.g. 8FVC9G8F+VX"
+              className="h-11 border-slate-200 rounded-xl font-bold"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 bg-muted/20 p-3 rounded-xl border border-dashed md:col-span-2 animate-in fade-in slide-in-from-top-1">
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-slate-700">Plot Area (m²)</Label>
+              <Input
+                type="number"
+                value={data.plotArea || ''}
+                onChange={e => handleChange('plotArea', parseFloat(e.target.value) || 0)}
+                className="h-8 text-sm bg-background border-slate-200 font-bold"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-slate-700">Length (m)</Label>
+              <Input
+                type="number"
+                value={data.plotLength || ''}
+                onChange={e => handleChange('plotLength', parseFloat(e.target.value) || 0)}
+                className="h-8 text-sm bg-background border-slate-200 font-bold"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-slate-700">Width (m)</Label>
+              <Input
+                type="number"
+                value={data.plotWidth || ''}
+                onChange={e => handleChange('plotWidth', parseFloat(e.target.value) || 0)}
+                className="h-8 text-sm bg-background border-slate-200 font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
             <Label className="text-xs font-bold text-slate-700">Number of Batches Required *</Label>
             <Input
               type="number"
@@ -324,16 +595,40 @@ export const OrderBookingForm = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Species *</Label>
+                <Select
+                  value={batch.species || ''}
+                  onValueChange={val => {
+                    // Reset genetic line when species changes
+                    const updated = (data.batches || []).map((b: any, idx: number) =>
+                      idx === index ? { ...b, species: val, geneticLine: '' } : b
+                    );
+                    handleChange('batches', updated);
+                  }}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                    <SelectValue placeholder="Select species" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                    {SPECIES_OPTIONS.map(sp => (
+                      <SelectItem key={sp} value={sp} className="rounded-lg italic">{sp}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700">Genetic Line Required *</Label>
                 <Select
                   value={batch.geneticLine || ''}
                   onValueChange={val => handleBatchChange(index, 'geneticLine', val)}
+                  disabled={!batch.species}
                 >
                   <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
-                    <SelectValue placeholder="Select genetic line" />
+                    <SelectValue placeholder={batch.species ? 'Select genetic line' : 'Select species first'} />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                    {geneticLines.map(line => (
+                    {getGeneticLines(batch.species || '').map(line => (
                       <SelectItem key={line} value={line} className="rounded-lg">{line}</SelectItem>
                     ))}
                   </SelectContent>
@@ -473,7 +768,7 @@ export const OrderBookingForm = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-700">Order ID *</Label>
               <Input
@@ -483,31 +778,6 @@ export const OrderBookingForm = ({
                 placeholder="Enter order identification code"
                 className="h-11 border-slate-200 rounded-xl"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">Batch ID / Stocking ID Allocated *</Label>
-              <Select
-                value={data.allocatedStockingId || ''}
-                onValueChange={val => handleChange('allocatedStockingId', val)}
-              >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold">
-                  <SelectValue placeholder="Select Stocking ID" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                  {availableBatches && availableBatches.length > 0 ? (
-                    availableBatches.map(batchId => (
-                      <SelectItem key={batchId} value={batchId} className="rounded-lg font-bold">
-                        {batchId}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="none" disabled className="rounded-lg text-muted-foreground">
-                      No stocking IDs found
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -550,6 +820,31 @@ export const OrderBookingForm = ({
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 w-full">
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-[10px] font-semibold text-slate-500 block">Batch ID / Stocking ID Allocated *</Label>
+                        <Select
+                          value={item.allocatedStockingId || ''}
+                          onValueChange={val => handleTankChange(idx, 'allocatedStockingId', val)}
+                        >
+                          <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200 font-bold text-xs">
+                            <SelectValue placeholder="Select Stocking ID" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                            {availableBatches && availableBatches.length > 0 ? (
+                              availableBatches.map(batchId => (
+                                <SelectItem key={batchId} value={batchId} className="rounded-lg font-bold">
+                                  {batchId}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="none" disabled className="rounded-lg text-muted-foreground">
+                                No stocking IDs found
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       <div className="space-y-1">
                         <Label className="text-[10px] font-semibold text-slate-500 block">Tank Num *</Label>
                         <Select

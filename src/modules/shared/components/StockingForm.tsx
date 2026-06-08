@@ -49,8 +49,8 @@ const StockingForm = ({
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [todayBatchCount, setTodayBatchCount] = useState(0);
 
-  const [vannameiLines, setVannameiLines] = useState<string[]>(['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'Konabay', 'Others']);
-  const [tigerLines, setTigerLines] = useState<string[]>(['Moana (Moana Technologies)', 'Madagascar (Unibio)']);
+  const [vannameiLines, setVannameiLines] = useState<string[]>(['SIS Hardy Line', 'SIS Growth Line', 'Syaqua', 'KonaBay', 'Others']);
+  const [tigerLines, setTigerLines] = useState<string[]>(['Moana', 'Unibio', 'Others']);
 
   useEffect(() => {
     if (user?.hatchery_id) {
@@ -307,13 +307,56 @@ const StockingForm = ({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">7) Brood Stock Type / Variant / Line *</Label>
-            <Input
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Broodstock Species *</Label>
+            <Select
+              value={data.broodstockSpecies || ''}
+              onValueChange={val => {
+                onDataChange((prev: any) => ({
+                  ...prev,
+                  broodstockSpecies: val,
+                  broodstockType: '' // reset genetic line when species changes
+                }));
+              }}
+            >
+              <SelectTrigger className="h-12 bg-muted/20 border-muted focus:bg-background transition-all">
+                <SelectValue placeholder="Select species" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                <SelectItem value="Litopenaeus vannamei" className="rounded-lg italic">Litopenaeus vannamei</SelectItem>
+                <SelectItem value="Penaeus monodon" className="rounded-lg italic">Penaeus monodon</SelectItem>
+                <SelectItem value="Others" className="rounded-lg">Others</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Genetic Lines *</Label>
+            <Select
               value={data.broodstockType || ''}
-              onChange={e => handleChange('broodstockType', e.target.value)}
-              placeholder="e.g. Growth / Hardy / Line A"
-              className="h-12 bg-muted/20 border-muted focus:bg-background transition-all"
-            />
+              onValueChange={val => handleChange('broodstockType', val)}
+              disabled={!data.broodstockSpecies}
+            >
+              <SelectTrigger className="h-12 bg-muted/20 border-muted focus:bg-background transition-all">
+                <SelectValue placeholder={data.broodstockSpecies ? 'Select genetic line' : 'Select species first'} />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                {data.broodstockSpecies === 'Litopenaeus vannamei' ? (
+                  <>
+                    {vannameiLines.map(line => (
+                      <SelectItem key={line} value={line} className="rounded-lg">{line}</SelectItem>
+                    ))}
+                  </>
+                ) : data.broodstockSpecies === 'Penaeus monodon' ? (
+                  <>
+                    {tigerLines.map(line => (
+                      <SelectItem key={line} value={line} className="rounded-lg">{line}</SelectItem>
+                    ))}
+                  </>
+                ) : (
+                  <SelectItem value="Others" className="rounded-lg">Others</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
           {isPlanningMode ? (
@@ -677,13 +720,56 @@ const StockingForm = ({
       {activeFarmCategory !== 'MATURATION' && activeFarmCategory !== 'FARMS' && activeFarmCategory !== 'FARM' && (
         <>
           <div className="space-y-1.5">
-            <Label className="text-xs">Source of Broodstock *</Label>
-            <Input
+            <Label className="text-xs font-bold text-slate-700">Select Broodstock Species *</Label>
+            <Select
+              value={data.broodstockSpecies || ''}
+              onValueChange={val => {
+                onDataChange((prev: any) => ({
+                  ...prev,
+                  broodstockSpecies: val,
+                  broodstockSource: '' // reset genetic line when species changes
+                }));
+              }}
+            >
+              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Select species" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                <SelectItem value="Litopenaeus vannamei" className="rounded-lg italic">Litopenaeus vannamei</SelectItem>
+                <SelectItem value="Penaeus monodon" className="rounded-lg italic">Penaeus monodon</SelectItem>
+                <SelectItem value="Others" className="rounded-lg">Others</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-700">Select Genetic Lines *</Label>
+            <Select
               value={data.broodstockSource || ''}
-              onChange={e => handleChange('broodstockSource', e.target.value)}
-              placeholder="Enter broodstock source"
-              className="h-11"
-            />
+              onValueChange={val => handleChange('broodstockSource', val)}
+              disabled={!data.broodstockSpecies}
+            >
+              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
+                <SelectValue placeholder={data.broodstockSpecies ? 'Select genetic line' : 'Select species first'} />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                {data.broodstockSpecies === 'Litopenaeus vannamei' ? (
+                  <>
+                    {vannameiLines.map(line => (
+                      <SelectItem key={line} value={line} className="rounded-lg">{line}</SelectItem>
+                    ))}
+                  </>
+                ) : data.broodstockSpecies === 'Penaeus monodon' ? (
+                  <>
+                    {tigerLines.map(line => (
+                      <SelectItem key={line} value={line} className="rounded-lg">{line}</SelectItem>
+                    ))}
+                  </>
+                ) : (
+                  <SelectItem value="Others" className="rounded-lg">Others</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">
@@ -697,23 +783,41 @@ const StockingForm = ({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Tank Stocking Number (Population) *</Label>
+            <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
             <Input
-              type="number" min="0" value={data.tankStockingNumber || ''}
-              onChange={e => handleChange('tankStockingNumber', e.target.value)}
-              placeholder="0"
+              type="number" min="0" step="any" value={data.naupliiStocked || ''}
+              onChange={e => {
+                const val = e.target.value;
+                handleChange('naupliiStocked', val);
+                // Auto-fill total stocking number (millions → individual count)
+                const millions = parseFloat(val);
+                handleChange('tankStockingNumber', isNaN(millions) ? '' : String(Math.round(millions * 1_000_000)));
+              }}
+              placeholder="e.g. 2"
               className="h-11"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Number of Nauplii Stocked in Million *</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Total Stocking Number (Population) *</Label>
+              {data.naupliiStocked && (
+                <span className="text-[10px] font-bold text-primary/70 bg-primary/8 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  Auto-filled
+                </span>
+              )}
+            </div>
             <Input
-              type="number" min="0" step="any" value={data.naupliiStocked || ''}
-              onChange={e => handleChange('naupliiStocked', e.target.value)}
+              type="number" min="0" value={data.tankStockingNumber || ''}
+              onChange={e => handleChange('tankStockingNumber', e.target.value)}
               placeholder="0"
-              className="h-11"
+              className={`h-11 ${data.naupliiStocked ? 'bg-primary/5 border-primary/30 font-bold text-primary' : ''}`}
             />
+            {data.naupliiStocked && (
+              <p className="text-[10px] text-muted-foreground ml-1">
+                = {parseFloat(data.naupliiStocked || '0').toLocaleString()} M × 1,000,000
+              </p>
+            )}
           </div>
         </>
       )}
@@ -736,8 +840,9 @@ const StockingForm = ({
                 <SelectValue placeholder="Select seed species" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Litopenaeus Vannamei (Vannamei)">Litopenaeus Vannamei (Vannamei)</SelectItem>
-                <SelectItem value="Penaeus Monodon (Tiger)">Penaeus Monodon (Tiger)</SelectItem>
+                <SelectItem value="Litopenaeus vannamei">Litopenaeus vannamei</SelectItem>
+                <SelectItem value="Penaeus monodon">Penaeus monodon</SelectItem>
+                <SelectItem value="Others">Others</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -754,18 +859,20 @@ const StockingForm = ({
                   <SelectValue placeholder="Select genetic line" />
                 </SelectTrigger>
                 <SelectContent>
-                  {data.seedSpecies === 'Litopenaeus Vannamei (Vannamei)' ? (
+                  {data.seedSpecies === 'Litopenaeus vannamei' ? (
                     <>
                       {vannameiLines.map(line => (
                         <SelectItem key={line} value={line}>{line}</SelectItem>
                       ))}
                     </>
-                  ) : (
+                  ) : data.seedSpecies === 'Penaeus monodon' ? (
                     <>
                       {tigerLines.map(line => (
                         <SelectItem key={line} value={line}>{line}</SelectItem>
                       ))}
                     </>
+                  ) : (
+                    <SelectItem value="Others">Others</SelectItem>
                   )}
                 </SelectContent>
               </Select>
