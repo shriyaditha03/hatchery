@@ -62,7 +62,7 @@ export const AnimalSamplingForm = ({
 
   const isLRT = activeFarmCategory === 'LRT';
   const isMaturation = activeFarmCategory === 'MATURATION';
-  const isFarms = activeFarmCategory === 'FARMS';
+  const isFarms = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
 
   const [samplingMode, setSamplingMode] = useState<'LARVAL_STAGE' | 'CONVERSION' | 'ABW' | 'NET_SAMPLING'>(
     data.samplingMode || (isLRT ? 'LARVAL_STAGE' : 'ABW')
@@ -98,10 +98,14 @@ export const AnimalSamplingForm = ({
       }
     }
 
+    // Recalculate biomass based on new population
+    const calcBiomass = abw > 0 ? (calcPop * abw / 1000).toFixed(3) : '0';
+
     onDataChange({
       ...data,
       mortality: val,
       presentPopulation: calcPop.toString(),
+      biomass: calcBiomass,
       ...calcUpdates
     });
   };
@@ -235,19 +239,23 @@ export const AnimalSamplingForm = ({
       }
     });
     const avgAbw = count > 0 ? (sumAbw / count) : 0;
-    onDataChange({ ...data, nets: currentNets, abw: avgAbw > 0 ? avgAbw.toFixed(3) : '', samplingMode: 'NET_SAMPLING' });
+    const calcBiomass = avgAbw > 0 ? (presentPop * avgAbw / 1000).toFixed(3) : '0';
+    const calcAnimalsPerKg = avgAbw > 0 ? Math.round(1000 / avgAbw) : 0;
+
+    onDataChange({
+      ...data,
+      nets: currentNets,
+      abw: avgAbw > 0 ? avgAbw.toFixed(3) : '',
+      biomass: calcBiomass,
+      animalsPerKg: calcAnimalsPerKg.toString(),
+      samplingMode: 'NET_SAMPLING'
+    });
   };
 
   // Biomass & Count Calcs
   const abw = parseFloat(data.abw || '0');
   const biomass = abw > 0 ? (presentPop * abw / 1000).toFixed(3) : '0';
   const animalsPerKg = abw > 0 ? Math.round(1000 / abw) : 0;
-
-  useEffect(() => {
-    if ((isMaturation || isFarms) && abw > 0) {
-      onDataChange({ ...data, biomass, animalsPerKg: animalsPerKg.toString() });
-    }
-  }, [presentPop, abw]);
 
   return (
     <div className="space-y-6">
@@ -411,7 +419,25 @@ export const AnimalSamplingForm = ({
             {samplingMode === 'ABW' ? (
               <div className="space-y-1.5 pt-2">
                 <Label className="text-xs font-bold uppercase">Average Body Weight (ABW) in gms</Label>
-                <Input type="number" step="0.01" placeholder="0.00" className="h-11 text-lg font-bold" value={data.abw || ''} onChange={(e) => onDataChange({ ...data, abw: e.target.value })} />
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  className="h-11 text-lg font-bold" 
+                  value={data.abw || ''} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const numericAbw = parseFloat(val) || 0;
+                    const calcBiomass = numericAbw > 0 ? (presentPop * numericAbw / 1000).toFixed(3) : '0';
+                    const calcAnimalsPerKg = numericAbw > 0 ? Math.round(1000 / numericAbw) : 0;
+                    onDataChange({ 
+                      ...data, 
+                      abw: val,
+                      biomass: calcBiomass,
+                      animalsPerKg: calcAnimalsPerKg.toString()
+                    });
+                  }} 
+                />
               </div>
             ) : (
               <div className="space-y-4 pt-2">

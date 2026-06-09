@@ -34,6 +34,7 @@ import AnimalSamplingForm from '@/modules/shared/components/AnimalSamplingForm';
 import ArtemiaForm from '@/modules/lrt/components/ArtemiaForm';
 import AlgaeForm from '@/modules/lrt/components/AlgaeForm';
 import HarvestForm from '@/modules/lrt/components/HarvestForm';
+import FarmHarvestForm from '@/modules/farm/components/HarvestForm';
 import OrderBookingForm from '@/modules/lrt/components/OrderBookingForm';
 import TankShiftingForm from '@/modules/lrt/components/TankShiftingForm';
 import SourcingMatingForm from '@/modules/maturation/components/SourcingMatingForm';
@@ -218,16 +219,21 @@ const RecordActivity = () => {
   }, [sectionParam]);
 
   useEffect(() => {
-    if ((categoryParam === 'MATURATION' || categoryParam === 'LRT') && categoryParam !== activeModule) {
-      setActiveModule(categoryParam);
+    if ((categoryParam === 'MATURATION' || categoryParam === 'LRT' || categoryParam === 'FARMS' || categoryParam === 'FARM') && categoryParam !== activeModule) {
+      setActiveModule(categoryParam === 'FARM' ? 'FARMS' : categoryParam as any);
       return;
     }
     const lrtActivities = ['Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Order Booking'];
     const maturationActivities = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
-    if (activity && lrtActivities.includes(activity) && activeModule !== 'LRT') {
-      setActiveModule('LRT');
-    } else if (activity && maturationActivities.includes(activity) && activeModule !== 'MATURATION') {
-      setActiveModule('MATURATION');
+    
+    // Only auto-switch to LRT or MATURATION if not in the FARMS/FARM module context
+    const isFarmModule = categoryParam === 'FARMS' || categoryParam === 'FARM' || activeModule === 'FARMS' || activeModule === 'FARM';
+    if (!isFarmModule) {
+      if (activity && lrtActivities.includes(activity) && activeModule !== 'LRT') {
+        setActiveModule('LRT');
+      } else if (activity && maturationActivities.includes(activity) && activeModule !== 'MATURATION') {
+        setActiveModule('MATURATION');
+      }
     }
   }, [categoryParam, activity, activeModule, setActiveModule]);
 
@@ -1280,19 +1286,26 @@ const RecordActivity = () => {
           naupliiStockedMillion: stockingLog.data.naupliiStocked || stockingLog.data.naupliiStockedMillion
         }));
 
-        setAnimalSamplingData(prev => ({
-          ...prev,
-          stockingId: stockingId,
-          stockingDate: stockingDate,
-          doc: doc,
-          stockingPopulation: stockingPop,
-          presentPopulation: latestPop.toString(),
-          naupliiStocked: stockingLog.data.naupliiStocked,
-          originalPop: stockingPop,
-          broodstockSource: stockingLog.data.broodstockSource,
-          broodstockType: stockingLog.data.broodstockType,
-          hatcheryName: stockingLog.data.hatcheryName
-        }));
+        setAnimalSamplingData(prev => {
+          const currentAbw = parseFloat(prev.abw || '0');
+          const finalBiomass = currentAbw > 0 ? (latestPop * currentAbw / 1000).toFixed(3) : '0';
+          const finalAnimalsPerKg = currentAbw > 0 ? Math.round(1000 / currentAbw).toString() : '0';
+          return {
+            ...prev,
+            stockingId: stockingId,
+            stockingDate: stockingDate,
+            doc: doc,
+            stockingPopulation: stockingPop,
+            presentPopulation: latestPop.toString(),
+            biomass: finalBiomass,
+            animalsPerKg: finalAnimalsPerKg,
+            naupliiStocked: stockingLog.data.naupliiStocked,
+            originalPop: stockingPop,
+            broodstockSource: stockingLog.data.broodstockSource,
+            broodstockType: stockingLog.data.broodstockType,
+            hatcheryName: stockingLog.data.hatcheryName
+          };
+        });
       }
     } catch (err) {
       console.error('Error fetching stocking data:', err);
@@ -2176,66 +2189,75 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Harvest') {
-      if (!harvestData.weatherReport) {
-        toast.error('Weather report is required');
-        return;
-      }
-      if (!harvestData.harvestType) {
-        toast.error('Harvest Type is required');
-        return;
-      }
-      if (!harvestData.harvestedBiomass) {
-        toast.error('Harvested biomass in Kgs is required');
-        return;
-      }
-
-      // Samples validation
-      const samplesList = harvestData.samples || [];
-      if (samplesList.length === 0) {
-        toast.error('At least one ABW sample is required');
-        return;
-      }
-      const hasInvalidSample = samplesList.some((s: any) => !s.weight || parseFloat(s.weight) <= 0 || !s.count || parseFloat(s.count) <= 0);
-      if (hasInvalidSample) {
-        toast.error('Please enter a valid Weight and Number of Animals for all samples');
-        return;
-      }
-
-      if (!harvestData.harvestedPopulation) {
-        toast.error('Harvested population calculation is required');
-        return;
-      }
-      if (harvestData.harvestType === 'Partial') {
-        if (harvestData.populationAfterHarvest === undefined || harvestData.populationAfterHarvest === null || harvestData.populationAfterHarvest === '') {
-          toast.error('Postharvest population estimate is required for Partial Harvest');
+      const isFarmModule = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
+      if (isFarmModule) {
+        if (!harvestData.weatherReport) {
+          toast.error('Weather report is required');
           return;
         }
-        if (harvestData.biomassAfterHarvest === undefined || harvestData.biomassAfterHarvest === null || harvestData.biomassAfterHarvest === '') {
-          toast.error('Postharvest biomass estimate is required for Partial Harvest');
+        if (!harvestData.harvestType) {
+          toast.error('Harvest Type is required');
           return;
         }
-      }
+        if (!harvestData.harvestedBiomass) {
+          toast.error('Harvested biomass in Kgs is required');
+          return;
+        }
 
-      // Buyer & Payment validations
-      if (!harvestData.buyerName) {
-        toast.error('Buyer Name is required');
-        return;
-      }
-      if (!harvestData.buyerContact) {
-        toast.error('Buyer Contact Details (mobile) is required');
-        return;
-      }
-      if (harvestData.buyerContact.length !== 10) {
-        toast.error('Buyer mobile number must be exactly 10 digits');
-        return;
-      }
-      if (harvestData.agreedPrice === undefined || harvestData.agreedPrice === null || harvestData.agreedPrice === '') {
-        toast.error('Agreed Price/Kg is required');
-        return;
-      }
-      if (harvestData.receivedAmount === undefined || harvestData.receivedAmount === null || harvestData.receivedAmount === '') {
-        toast.error('Received Amount is required');
-        return;
+        // Samples validation
+        const samplesList = harvestData.samples || [];
+        if (samplesList.length === 0) {
+          toast.error('At least one ABW sample is required');
+          return;
+        }
+        const hasInvalidSample = samplesList.some((s: any) => !s.weight || parseFloat(s.weight) <= 0 || !s.count || parseFloat(s.count) <= 0);
+        if (hasInvalidSample) {
+          toast.error('Please enter a valid Weight and Number of Animals for all samples');
+          return;
+        }
+
+        if (!harvestData.harvestedPopulation) {
+          toast.error('Harvested population calculation is required');
+          return;
+        }
+        if (harvestData.harvestType === 'Partial') {
+          if (harvestData.populationAfterHarvest === undefined || harvestData.populationAfterHarvest === null || harvestData.populationAfterHarvest === '') {
+            toast.error('Postharvest population estimate is required for Partial Harvest');
+            return;
+          }
+          if (harvestData.biomassAfterHarvest === undefined || harvestData.biomassAfterHarvest === null || harvestData.biomassAfterHarvest === '') {
+            toast.error('Postharvest biomass estimate is required for Partial Harvest');
+            return;
+          }
+        }
+
+        // Buyer & Payment validations
+        if (!harvestData.buyerName) {
+          toast.error('Buyer Name is required');
+          return;
+        }
+        if (!harvestData.buyerContact) {
+          toast.error('Buyer Contact Details (mobile) is required');
+          return;
+        }
+        if (harvestData.buyerContact.length !== 10) {
+          toast.error('Buyer mobile number must be exactly 10 digits');
+          return;
+        }
+        if (harvestData.agreedPrice === undefined || harvestData.agreedPrice === null || harvestData.agreedPrice === '') {
+          toast.error('Agreed Price/Kg is required');
+          return;
+        }
+        if (harvestData.receivedAmount === undefined || harvestData.receivedAmount === null || harvestData.receivedAmount === '') {
+          toast.error('Received Amount is required');
+          return;
+        }
+      } else {
+        // LRT Harvest validation
+        if (!harvestData.harvestedPopulation) {
+          toast.error('Harvested population is required');
+          return;
+        }
       }
     }
 
@@ -4385,15 +4407,27 @@ const RecordActivity = () => {
         )}
 
         {activity === 'Harvest' && (
-          <HarvestForm
-            data={harvestData}
-            onDataChange={setHarvestData}
-            comments={comments}
-            onCommentsChange={setComments}
-            photoUrl={photoUrl}
-            onPhotoUrlChange={setPhotoUrl}
-            isPlanningMode={isPlanningMode}
-          />
+          isFarmModule ? (
+            <FarmHarvestForm
+              data={harvestData}
+              onDataChange={setHarvestData}
+              comments={comments}
+              onCommentsChange={setComments}
+              photoUrl={photoUrl}
+              onPhotoUrlChange={setPhotoUrl}
+              isPlanningMode={isPlanningMode}
+            />
+          ) : (
+            <HarvestForm
+              data={harvestData}
+              onDataChange={setHarvestData}
+              comments={comments}
+              onCommentsChange={setComments}
+              photoUrl={photoUrl}
+              onPhotoUrlChange={setPhotoUrl}
+              isPlanningMode={isPlanningMode}
+            />
+          )
         )}
 
         {activity === 'Order Booking' && (

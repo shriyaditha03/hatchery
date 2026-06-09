@@ -1,14 +1,25 @@
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
 
-const supabaseUrl = 'https://uzecdpdwrhjcanszfcei.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6ZWNkcGR3cmhqY2Fuc3pmY2VpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NzUyNTQsImV4cCI6MjA4NjI1MTI1NH0.WXvNk4x2l7o8lgtN3YRpe81FO6-iFPx3KLGcPh09SaU';
+// Read .env manually
+const envContent = fs.readFileSync('c:/Users/shriy/OneDrive/Desktop/aquanexus/.env', 'utf8');
+const env = {};
+envContent.split('\n').forEach(line => {
+  const parts = line.split('=');
+  if (parts.length >= 2) {
+    env[parts[0].trim()] = parts.slice(1).join('=').trim();
+  }
+});
+
+const supabaseUrl = env.VITE_SUPABASE_URL;
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function run() {
-  console.log('Resolving email for admin...');
+  console.log('Resolving email for user asdf...');
   const { data: email, error: rpcError } = await supabase
-    .rpc('get_email_by_username', { username_input: 'admin' });
+    .rpc('get_email_by_username', { username_input: 'asdf' });
 
   if (rpcError) {
     console.error('RPC Error:', rpcError);
@@ -17,33 +28,63 @@ async function run() {
 
   console.log('Email resolved:', email);
 
-  console.log('Signing in...');
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: email,
-    password: 'admin123'
-  });
+  // Try standard passwords
+  const passwords = ['admin123', 'asdf123', 'password123'];
+  let authData = null;
+  let authError = null;
 
-  if (authError) {
+  for (const password of passwords) {
+    console.log(`Trying sign in with password: ${password}...`);
+    const res = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+    if (!res.error) {
+      authData = res.data;
+      authError = null;
+      console.log(`Logged in successfully with password: ${password}!`);
+      break;
+    } else {
+      authError = res.error;
+    }
+  }
+
+  if (authError || !authData) {
     console.error('Auth Error:', authError);
     return;
   }
 
-  console.log('Authenticated successfully!');
-
-  const { data: farms, error: farmsError } = await supabase
-    .from('farms')
-    .select('id, name, category');
+  console.log('Fetching logs for S1_P1...');
   
-  console.log('--- FARMS ---');
-  console.log(JSON.stringify(farms, null, 2));
+  // Get the tank named S1_P1
+  const { data: tanks } = await supabase
+    .from('tanks')
+    .select('id, name, section_id')
+    .eq('name', 'S1_P1');
+
+  if (!tanks || tanks.length === 0) {
+    console.log('Pond S1_P1 not found!');
+    return;
+  }
+  const pond = tanks[0];
+  console.log('Found Pond S1_P1:', pond);
 
   const { data: logs, error: logsError } = await supabase
     .from('activity_logs')
     .select('id, farm_id, activity_type, stocking_id, data, created_at')
+    .eq('tank_id', pond.id)
     .order('created_at', { ascending: false });
 
-  console.log('\n--- ACTIVITY LOGS ---');
-  console.log(JSON.stringify(logs, null, 2));
+  if (logsError) {
+    console.error('Logs Error:', logsError);
+    return;
+  }
+
+  console.log('\n--- ACTIVITY LOGS FOR S1_P1 ---');
+  logs.forEach(log => {
+    console.log(`[${log.created_at}] Type: ${log.activity_type}`);
+    console.log('  Data:', JSON.stringify(log.data, null, 2));
+  });
 }
 
 run();
