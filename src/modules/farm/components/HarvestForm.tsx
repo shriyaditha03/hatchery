@@ -51,7 +51,7 @@ const FarmHarvestForm = ({
     if (data.samples && data.samples.length > 0) {
       return data.samples;
     }
-    return [{ weight: '', weightUnit: 'gms', count: '', abw: 0 }];
+    return [{ weight: '', weightUnit: 'Kgs', count: '', abw: 0 }];
   });
 
   const handleChange = (field: string, value: any) => {
@@ -60,7 +60,7 @@ const FarmHarvestForm = ({
 
   // Add a new sample row
   const addSample = () => {
-    setSamples([...samples, { weight: '', weightUnit: 'gms', count: '', abw: 0 }]);
+    setSamples([...samples, { weight: '', weightUnit: 'Kgs', count: '', abw: 0 }]);
   };
 
   // Remove a sample row
@@ -121,7 +121,11 @@ const FarmHarvestForm = ({
   // Run all dependency calculations and update parent state once
   useEffect(() => {
     const populationAfterHarvestCalc = Math.max(0, preharvestPopulation - harvestedPopulation);
-    const biomassAfterHarvestCalc = Math.max(0, preharvestEstimatedBiomass - harvestedBiomass);
+    const currentPopAfter = data.populationAfterHarvest !== undefined && data.populationAfterHarvest !== ''
+      ? parseFloat(data.populationAfterHarvest) || 0
+      : populationAfterHarvestCalc;
+    const activeAbw = harvestedAbw > 0 ? harvestedAbw : abwAutoPopulated;
+    const biomassAfterHarvestCalc = parseFloat(((currentPopAfter * activeAbw) / 1000).toFixed(2));
 
     onDataChange((prev: any) => {
       // Avoid infinite state update loops by checking if calculations are actually different
@@ -170,7 +174,9 @@ const FarmHarvestForm = ({
     agreedPrice,
     receivedAmount,
     totalAmountDue,
-    balanceAmount
+    balanceAmount,
+    data.populationAfterHarvest,
+    data.isPopulationAfterHarvestManuallyEdited
   ]);
 
   return (
@@ -467,7 +473,7 @@ const FarmHarvestForm = ({
                   }}
                   className={`h-11 rounded-xl font-bold ${data.isBiomassAfterHarvestManuallyEdited ? 'border-amber-400 focus-visible:ring-amber-400' : ''}`}
                 />
-                <p className="text-[9px] text-muted-foreground">Auto-calculated (Preharvest Biomass - Harvested Biomass) but editable</p>
+                <p className="text-[9px] text-muted-foreground">Auto-calculated (Population Balance × ABW / 1000) but editable</p>
               </div>
             </div>
           </div>
