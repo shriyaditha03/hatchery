@@ -35,6 +35,7 @@ import ArtemiaForm from '@/modules/lrt/components/ArtemiaForm';
 import AlgaeForm from '@/modules/lrt/components/AlgaeForm';
 import HarvestForm from '@/modules/lrt/components/HarvestForm';
 import FarmHarvestForm from '@/modules/farm/components/HarvestForm';
+import CheckTrayForm from '@/modules/farm/components/CheckTrayForm';
 import OrderBookingForm from '@/modules/lrt/components/OrderBookingForm';
 import TankShiftingForm from '@/modules/lrt/components/TankShiftingForm';
 import SourcingMatingForm from '@/modules/maturation/components/SourcingMatingForm';
@@ -60,7 +61,7 @@ const TIME_SLOTS = [
 ];
 
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
-const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management', 'Order Booking'] as const;
+const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management', 'Order Booking', 'Check Tray'] as const;
 type ActivityType = typeof ACTIVITIES[number];
 
 const FEED_TYPES = ['Starter Feed', 'Grower Feed', 'Finisher Feed', 'Supplement'];
@@ -261,7 +262,9 @@ const RecordActivity = () => {
         'broodstock-discard': 'Broodstock Discard',
         'discard': 'Broodstock Discard',
         'water-mgmt': 'Water Management',
-        'animal-sampling': 'Animals Sampling & Observation'
+        'animal-sampling': 'Animals Sampling & Observation',
+        'check-tray': 'Check Tray',
+        'check_tray': 'Check Tray'
       };
       
       const mappedActivity = typeMap[type.toLowerCase()];
@@ -895,6 +898,7 @@ const RecordActivity = () => {
         if (actType === 'Tank Shifting' && pd.tankShiftingData) setTankShiftingData(pd.tankShiftingData);
         if (actType === 'Nauplii Sale' && pd.naupliiSaleData) setNaupliiSaleData(pd.naupliiSaleData);
         if (actType === 'Order Booking' && pd.orderBookingData) setOrderBookingData(pd.orderBookingData);
+        if (actType === 'Check Tray' && pd.checkTrayData) setCheckTrayData(pd.checkTrayData);
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
@@ -1007,6 +1011,8 @@ const RecordActivity = () => {
       setNaupliiSaleData(planned_data.naupliiSaleData);
     } else if (currentAct === 'Order Booking' && planned_data.orderBookingData) {
       setOrderBookingData(planned_data.orderBookingData);
+    } else if (currentAct === 'Check Tray' && planned_data.checkTrayData) {
+      setCheckTrayData(planned_data.checkTrayData);
     } else if (currentAct === 'Animals Sampling & Observation' && planned_data.animalSamplingData) {
       setAnimalSamplingData(planned_data.animalSamplingData);
     }
@@ -1076,6 +1082,8 @@ const RecordActivity = () => {
           setTankShiftingData(data.data);
         } else if (actType === 'Order Booking') {
           setOrderBookingData(data.data);
+        } else if (actType === 'Check Tray') {
+          setCheckTrayData(data.data);
         } else if (actType === 'Sourcing & Mating') {
           setSourcingMatingData(data.data);
         } else if (actType === 'Spawning') {
@@ -1464,6 +1472,8 @@ const RecordActivity = () => {
         'water-management': 'Water Management',
         'order booking': 'Order Booking',
         'order-booking': 'Order Booking',
+        'check tray': 'Check Tray',
+        'check-tray': 'Check Tray',
       };
       if (map[type.toLowerCase()]) {
         setActivity(map[type.toLowerCase()]);
@@ -1513,6 +1523,7 @@ const RecordActivity = () => {
   const [algaeData, setAlgaeData] = useState<any>({ phase: 'new' });
   const [harvestData, setHarvestData] = useState<any>({});
   const [orderBookingData, setOrderBookingData] = useState<any>({});
+  const [checkTrayData, setCheckTrayData] = useState<any>({ numTrays: '', trays: [] });
   const [tankShiftingData, setTankShiftingData] = useState<any>({ destinations: [{ id: Date.now() }] });
 
   // Water Management data
@@ -1758,6 +1769,7 @@ const RecordActivity = () => {
       case 'Algae': return { ...baseData, ...algaeData };
       case 'Harvest': return { ...baseData, ...harvestData };
       case 'Order Booking': return { ...baseData, ...orderBookingData };
+      case 'Check Tray': return { ...baseData, ...checkTrayData };
       case 'Tank Shifting': return { ...baseData, ...tankShiftingData };
       case 'Sourcing & Mating': return { ...baseData, ...sourcingMatingData };
       case 'Spawning': return { ...baseData, ...spawningData };
@@ -1920,10 +1932,10 @@ const RecordActivity = () => {
           scheduled_date: date,
           scheduled_time: time,
           planned_data: {
-            item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : 'Instruction'),
+            item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : (activity === 'Check Tray' ? 'Check Tray' : 'Instruction')),
             amount: activity === 'Feed' ? feedQty : (activity === 'Treatment' ? treatmentDosage : ''),
             unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
-            timeSlot: (activity === 'Feed' || activity === 'Treatment') ? timeSlot : undefined,
+            timeSlot: (activity === 'Feed' || activity === 'Treatment' || activity === 'Check Tray') ? timeSlot : undefined,
             instructions: comments,
             stockingData: activity === 'Stocking' ? stockingData : undefined,
             observationData: activity === 'Observation' ? observationData : undefined,
@@ -1937,7 +1949,8 @@ const RecordActivity = () => {
             naupliiHarvestData: activity === 'Nauplii Harvest' ? naupliiHarvestData : undefined,
             naupliiSaleData: activity === 'Nauplii Sale' ? naupliiSaleData : undefined,
             broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined,
-            animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined
+            animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined,
+            checkTrayData: activity === 'Check Tray' ? checkTrayData : undefined
           },
           created_by: user?.id || null,
           is_completed: false,
@@ -1951,10 +1964,10 @@ const RecordActivity = () => {
       if (editInstructionId) {
         // UPDATE existing instruction
         const plannedData = {
-          item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : 'Instruction'),
+          item: activity === 'Feed' ? feedType : (activity === 'Treatment' ? treatmentType : (activity === 'Check Tray' ? 'Check Tray' : 'Instruction')),
           amount: activity === 'Feed' ? feedQty : (activity === 'Treatment' ? treatmentDosage : ''),
           unit: activity === 'Feed' ? feedUnit : (activity === 'Treatment' ? treatmentUnit : ''),
-          timeSlot: (activity === 'Feed' || activity === 'Treatment') ? timeSlot : undefined,
+          timeSlot: (activity === 'Feed' || activity === 'Treatment' || activity === 'Check Tray') ? timeSlot : undefined,
           instructions: comments,
           stockingData: activity === 'Stocking' ? stockingData : undefined,
           observationData: activity === 'Observation' ? observationData : undefined,
@@ -1962,7 +1975,8 @@ const RecordActivity = () => {
           algaeData: activity === 'Algae' ? algaeData : undefined,
           sourcingMatingData: activity === 'Sourcing & Mating' ? sourcingMatingData : undefined,
           broodstockDiscardData: activity === 'Broodstock Discard' ? broodstockDiscardData : undefined,
-          animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined
+          animalSamplingData: activity === 'Animals Sampling & Observation' ? animalSamplingData : undefined,
+          checkTrayData: activity === 'Check Tray' ? checkTrayData : undefined
         };
         console.log('DEBUG - Updating Instruction:', { id: editInstructionId, plannedData, time, date });
         const { error } = await supabase
@@ -2021,6 +2035,27 @@ const RecordActivity = () => {
       return;
     }
 
+
+    if (activity === 'Check Tray') {
+      if (!timeSlot) {
+        toast.error('Feed Time Slot is required');
+        return;
+      }
+      if (checkTrayData.numTrays === undefined || checkTrayData.numTrays === null || checkTrayData.numTrays === '' || parseInt(checkTrayData.numTrays) <= 0) {
+        toast.error('Number of Check Trays is required and must be greater than 0');
+        return;
+      }
+      const trays = checkTrayData.trays || [];
+      if (trays.length === 0) {
+        toast.error('At least one Check Tray score is required');
+        return;
+      }
+      const hasInvalidTray = trays.some((t: any) => t.score === undefined || t.score === null || t.score === '');
+      if (hasInvalidTray) {
+        toast.error('Please select a score for all check trays');
+        return;
+      }
+    }
 
     if (activity === 'Feed' && (!feedQty.trim() || !feedType.trim() || !timeSlot)) {
       toast.error('Feed Type, Quantity, and Time Slot are required');
@@ -3531,7 +3566,8 @@ const RecordActivity = () => {
         a !== 'Algae' && 
         a !== 'Harvest' && 
         a !== 'Tank Shifting' && 
-        a !== 'Order Booking'
+        a !== 'Order Booking' &&
+        a !== 'Check Tray'
       );
     } else if (activeFarmCategory === 'LRT' || activeFarmCategory === 'LRI') {
       return ACTIVITIES.filter(a => 
@@ -3541,7 +3577,8 @@ const RecordActivity = () => {
         a !== 'Nauplii Harvest' && 
         a !== 'Nauplii Sale' && 
         a !== 'Broodstock Discard' && 
-        a !== 'Water Management'
+        a !== 'Water Management' &&
+        a !== 'Check Tray'
       );
     } else { // FARMS
       return ACTIVITIES.filter(a => 
@@ -3717,7 +3754,7 @@ const RecordActivity = () => {
               </div>
             </div>
           </div>
-          {(activity === 'Feed' || activity === 'Treatment') && (
+          {(activity === 'Feed' || activity === 'Treatment' || activity === 'Check Tray') && (
             <div className="space-y-1.5 pt-3 border-t border-dashed animate-in fade-in slide-in-from-top-2">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                 Time Slot <span className="text-destructive">*</span>
@@ -4428,6 +4465,18 @@ const RecordActivity = () => {
               isPlanningMode={isPlanningMode}
             />
           )
+        )}
+
+        {activity === 'Check Tray' && (
+          <CheckTrayForm
+            data={checkTrayData}
+            onDataChange={setCheckTrayData}
+            comments={comments}
+            onCommentsChange={setComments}
+            photoUrl={photoUrl}
+            onPhotoUrlChange={setPhotoUrl}
+            isPlanningMode={isPlanningMode}
+          />
         )}
 
         {activity === 'Order Booking' && (
