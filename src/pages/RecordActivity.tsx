@@ -46,7 +46,15 @@ import NaupliiSaleForm from '@/modules/maturation/components/NaupliiSaleForm';
 import BroodstockDiscardForm from '@/modules/maturation/components/BroodstockDiscardForm';
 import ImageUpload from '@/modules/shared/components/ImageUpload';
 import Breadcrumbs from '@/modules/shared/components/Breadcrumbs';
-import { ANIMAL_RATING_FIELDS, waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
+import { 
+  ANIMAL_RATING_FIELDS, 
+  waterFields, 
+  WATER_QUALITY_RANGES,
+  checkWaterParameterCompliance,
+  REQUIRED_WATER_FIELDS,
+  POND_REQUIRED_WATER_FIELDS
+} from '@/modules/shared/constants/activity';
+import { WaterQualityAssessment } from '@/modules/shared/components/WaterQualityAssessment';
 import { toast } from 'sonner';
 import { formatDate, getNowLocal, getTodayStr } from '@/lib/date-utils';
 import { useActivities } from '@/hooks/useActivities';
@@ -857,12 +865,16 @@ const RecordActivity = () => {
         }
 
         setSelectedInstructionId(data.id);
-        setSelectedInstructionData(data); // Store the data directly
+        const actType = (data.planned_data?.item === 'Check Tray' || data.planned_data?.checkTrayData) 
+          ? 'Check Tray' 
+          : data.activity_type;
+        const mappedData = { ...data, activity_type: actType };
+        setSelectedInstructionData(mappedData); // Store the mapped data
         setAssignedTo(data.assigned_to || null);
-        setActivity(data.activity_type as ActivityType);
-        applyInstruction(data);
+        setActivity(actType as ActivityType);
+        applyInstruction(mappedData);
         setIsPlanningMode(false);
-        toast.info(`Applied instruction for ${data.activity_type}`);
+        toast.info(`Applied instruction for ${actType}`);
       }
     } catch (err) {
       console.error('Error loading initial instruction:', err);
@@ -886,8 +898,12 @@ const RecordActivity = () => {
         else if (data.section_id) { setSelectionScope('all'); }
         setAssignedTo(data.assigned_to || null);
         const pd = data.planned_data || {};
-        const actType = data.activity_type as ActivityType;
+        const actType = (pd.item === 'Check Tray' || pd.checkTrayData) 
+          ? 'Check Tray' 
+          : (data.activity_type as ActivityType);
         setActivity(actType);
+        const mappedData = { ...data, activity_type: actType };
+        setSelectedInstructionData(mappedData);
         if (actType === 'Feed') { setFeedType(pd.item || ''); setFeedQty(pd.amount || ''); setFeedUnit(pd.unit || 'gms'); }
         if (actType === 'Treatment') { setTreatmentType(pd.item || ''); setTreatmentDosage(pd.amount || ''); setTreatmentUnit(pd.unit || 'ml'); }
         if (actType === 'Algae' && pd.algaeData) setAlgaeData(pd.algaeData);
@@ -932,7 +948,7 @@ const RecordActivity = () => {
         .from('activity_charts')
         .select('*')
         .or(`section_id.eq.${sectionId},and(farm_id.eq.${currentSection.farm_id},section_id.is.null,tank_id.is.null),tank_id.in.(${currentSection.tanks.map((t: any) => `"${t.id}"`).join(',')})`)
-        .eq('activity_type', activity)
+        .eq('activity_type', activity === 'Check Tray' ? 'Observation' : activity)
         .eq('scheduled_date', date)
         .eq('is_completed', false);
 
@@ -944,14 +960,32 @@ const RecordActivity = () => {
       const { data, error } = await query.order('scheduled_time', { ascending: true });
 
       if (!error && data) {
+        // Map any mapped Check Tray instructions back to 'Check Tray' activity type
+        const mappedData = data.map((instr: any) => {
+          if (instr.planned_data?.item === 'Check Tray' || instr.planned_data?.checkTrayData) {
+            return { ...instr, activity_type: 'Check Tray' };
+          }
+          return instr;
+        });
+
+        // Filter based on active activity type
+        const activityFiltered = mappedData.filter(instr => {
+          if (activity === 'Check Tray') {
+            return instr.activity_type === 'Check Tray';
+          } else if (activity === 'Observation') {
+            return instr.activity_type === 'Observation';
+          }
+          return true;
+        });
+
         // Filter instructions based on selection scope
         if (selectionScope === 'single' && tankId) {
           // In single mode, only show if it's general to section/farm OR specific to this tank
-          const filtered = data.filter(instr => !instr.tank_id || instr.tank_id === tankId);
+          const filtered = activityFiltered.filter(instr => !instr.tank_id || instr.tank_id === tankId);
           setActiveInstructions(filtered);
         } else {
           // In All/Custom mode, show everything for the section
-          setActiveInstructions(data);
+          setActiveInstructions(activityFiltered);
         }
       } else {
         setActiveInstructions([]);
@@ -1064,6 +1098,7 @@ const RecordActivity = () => {
           setTreatmentUnit(data.data.treatmentUnit || 'ml');
         } else if (actType === 'Water Quality') {
           setWaterData(data.data.waterData || {});
+          setWeatherReport(data.data.weatherReport || '');
         } else if (actType === 'Animal Quality') {
           setAnimalSize(data.data.animalSize || '');
           setAnimalStage(data.data.animalStage || '');
@@ -1512,6 +1547,8 @@ const RecordActivity = () => {
 
   // Water quality fields
   const [waterData, setWaterData] = useState<Record<string, string>>({});
+  const [weatherReport, setWeatherReport] = useState('');
+  const [waterQualityScore, setWaterQualityScore] = useState(0);
 
   // Stocking & Observation extra data
   const [stockingData, setStockingData] = useState<any>({});
@@ -1582,26 +1619,7 @@ const RecordActivity = () => {
   const waterMgmtValues = waterFields.map(field => {
     const valStr = String(waterMgmtData.waterQualityData?.[field] || '').trim();
     if (valStr === '') return null;
-    const val = parseFloat(valStr);
-    if (isNaN(val)) return 10;
-    const range = WATER_QUALITY_RANGES[field] || '';
-    let isOk = true;
-    if (field === 'Vibrio Count') {
-      isOk = val < 1000;
-    } else if (field === 'Yellow Green Bacteria') {
-      isOk = val < 100;
-    } else if (range === '[Nil]') {
-      isOk = val === 0;
-    } else if (range.includes(' - ')) {
-      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
-      if (matches) { isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]); }
-    } else if (range.includes('>')) {
-      const matches = range.match(/>\s*(\d+\.?\d*)/);
-      if (matches) isOk = val > parseFloat(matches[1]);
-    } else if (range.includes('<')) {
-      const matches = range.match(/<\s*(\d+\.?\d*)/);
-      if (matches) isOk = val < parseFloat(matches[1]);
-    }
+    const isOk = checkWaterParameterCompliance(field, valStr);
     return isOk ? 10 : 0;
   });
 
@@ -1761,7 +1779,7 @@ const RecordActivity = () => {
     switch (activity) {
       case 'Feed': return { ...baseData, feedType, feedQty, feedUnit, timeSlot };
       case 'Treatment': return { ...baseData, treatmentType, treatmentDosage, treatmentUnit, timeSlot };
-      case 'Water Quality': return { ...baseData, waterData };
+      case 'Water Quality': return { ...baseData, weatherReport, waterData, waterQualityScore };
       case 'Animal Quality': return { ...baseData, animalSize, animalStage, animalDoc, animalRatings, hasDiseaseIdentified, diseaseSymptoms, additionalObservations };
       case 'Stocking': return { ...baseData, ...stockingData, photo_url: photoUrl };
       case 'Observation': return { ...baseData, ...observationData, photo_url: photoUrl };
@@ -1928,7 +1946,7 @@ const RecordActivity = () => {
           farm_id: farmId,
           section_id: sectionId,
           tank_id: tId || null,
-          activity_type: activity === 'Broodstock Discard' ? 'Observation' : activity.trim(),
+          activity_type: (activity === 'Broodstock Discard' || activity === 'Check Tray') ? 'Observation' : activity.trim(),
           scheduled_date: date,
           scheduled_time: time,
           planned_data: {
@@ -1958,8 +1976,31 @@ const RecordActivity = () => {
         };
 
         console.log('DEBUG - Saving Instruction Record:', record);
+        if (activity === 'Feed') {
+          const checkTrayRecord = {
+            hatchery_id: hatcheryId,
+            farm_id: farmId,
+            section_id: sectionId,
+            tank_id: tId || null,
+            activity_type: 'Observation',
+            scheduled_date: date,
+            scheduled_time: time,
+            planned_data: {
+              item: 'Check Tray',
+              amount: '',
+              unit: '',
+              timeSlot: timeSlot,
+              instructions: 'Auto-generated check tray instruction for feed entry.',
+              checkTrayData: { numTrays: '4', trays: [] }
+            },
+            created_by: user?.id || null,
+            is_completed: false,
+            assigned_to: assignedTo || null
+          };
+          return [record, checkTrayRecord];
+        }
         return record;
-      }).filter(Boolean);
+      }).flat().filter(Boolean);
 
       if (editInstructionId) {
         // UPDATE existing instruction
@@ -2167,9 +2208,22 @@ const RecordActivity = () => {
     }
 
     if (activity === 'Water Quality') {
-      const missing = waterFields.filter(f => !waterData[f]?.trim());
+      const isFarmModule = activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM';
+      const requiredList = [
+        ...REQUIRED_WATER_FIELDS,
+        ...(isFarmModule ? POND_REQUIRED_WATER_FIELDS : [])
+      ];
+      const missing = requiredList.filter(f => !waterData[f]?.trim());
       if (missing.length > 0) {
-        toast.error(`Please fill all water quality parameters: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}`);
+        toast.error(`Please fill all required water quality parameters: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}`);
+        return;
+      }
+      if (!weatherReport) {
+        toast.error('Weather report is required');
+        return;
+      }
+      if (!timeSlot) {
+        toast.error('Time slot is required');
         return;
       }
     }
@@ -3420,6 +3474,52 @@ const RecordActivity = () => {
             data: currentBuildData
           });
 
+          // Auto-generate a Check Tray instruction if this is a completed Feed activity
+          if (activity === 'Feed' && tId) {
+            try {
+              // Check if a Check Tray instruction already exists for this tank, date, and timeSlot
+              const { data: existing } = await supabase
+                .from('activity_charts')
+                .select('id, planned_data')
+                .eq('tank_id', tId)
+                .eq('scheduled_date', date)
+                .eq('activity_type', 'Observation')
+                .eq('is_completed', false);
+
+              const alreadyExists = existing?.some((item: any) => item.planned_data?.timeSlot === timeSlot && (item.planned_data?.item === 'Check Tray' || item.planned_data?.checkTrayData));
+
+              if (!alreadyExists) {
+                const { error: chartError } = await supabase
+                  .from('activity_charts')
+                  .insert([{
+                    hatchery_id: hatcheryId || user?.hatchery_id || null,
+                    farm_id: fId,
+                    section_id: sId,
+                    tank_id: tId,
+                    activity_type: 'Observation',
+                    scheduled_date: date,
+                    scheduled_time: time,
+                    planned_data: {
+                      item: 'Check Tray',
+                      amount: '',
+                      unit: '',
+                      timeSlot: timeSlot,
+                      instructions: 'Auto-generated check tray instruction for feed entry.',
+                      checkTrayData: { numTrays: '4', trays: [] }
+                    },
+                    created_by: user?.id || null,
+                    is_completed: false,
+                    assigned_to: assignedTo || null
+                  }]);
+                if (chartError) {
+                  console.error('Error auto-generating check tray instruction:', chartError);
+                }
+              }
+            } catch (err) {
+              console.error('Failed to check or auto-generate check tray instruction:', err);
+            }
+          }
+
           // If this is a Stocking activity, also save the detailed animal quality to its separate table
           if (activity === 'Stocking' && currentBuildData.animalRatings) {
             try {
@@ -3754,7 +3854,7 @@ const RecordActivity = () => {
               </div>
             </div>
           </div>
-          {(activity === 'Feed' || activity === 'Treatment' || activity === 'Check Tray') && (
+          {(activity === 'Feed' || activity === 'Treatment' || activity === 'Check Tray' || activity === 'Water Quality') && (
             <div className="space-y-1.5 pt-3 border-t border-dashed animate-in fade-in slide-in-from-top-2">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                 Time Slot <span className="text-destructive">*</span>
@@ -4215,79 +4315,15 @@ const RecordActivity = () => {
           <div className="glass-card rounded-2xl p-4 space-y-4 animate-fade-in-up">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Water Quality Parameters</h2>
             {!isPlanningMode ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                  {waterFields.map(field => {
-                    const rangeLabel = WATER_QUALITY_RANGES[field];
-
-                    return (
-                      <div key={field} className="space-y-1">
-                        <Label className="text-[10px] font-medium flex justify-between uppercase">
-                          {field} *
-                          {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
-                        </Label>
-                        <Input
-                          type={field === 'Other' ? 'text' : 'number'}
-                          min="0"
-                          step="any"
-                          value={waterData[field] || ''}
-                          onChange={e => setWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                          placeholder=""
-                          className="h-10 text-sm border-muted-foreground/20 focus:border-primary/50"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Overall Quality Score - always visible during recording */}
-                {(() => {
-                  const total = waterFields.length;
-                  const values = waterFields.map(field => {
-                    const valStr = String(waterData[field] || '').trim();
-                    if (valStr === '') return null;
-                    const val = parseFloat(valStr);
-                    if (isNaN(val)) return 10; // Non-numeric or "Other" counts as 10 if filled
-
-                    const range = WATER_QUALITY_RANGES[field] || '';
-                    let isOk = true;
-                    
-                    // Specific parsing for hatchery ranges
-                    if (field === 'Vibrio Count') {
-                      isOk = val < 1000;
-                    } else if (field === 'Yellow Green Bacteria') {
-                      isOk = val < 100;
-                    } else if (range === '[Nil]') {
-                      isOk = val === 0;
-                    } else if (range.includes(' - ')) {
-                      const matches = range.match(/(d+.?d*)s*-s*(d+.?d*)/);
-                      if (matches) {
-                        isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]);
-                      }
-                    } else if (range.includes('>')) {
-                      const matches = range.match(/>s*(d+.?d*)/);
-                      if (matches) isOk = val > parseFloat(matches[1]);
-                    } else if (range.includes('<')) {
-                      const matches = range.match(/<s*(d+.?d*)/);
-                      if (matches) isOk = val < parseFloat(matches[1]);
-                    }
-                    return isOk ? 10 : 0;
-                  });
-
-                  const filled = values.filter(v => v !== null);
-                  const score = filled.length > 0 ? filled.reduce((a, b) => (a || 0) + (b || 0), 0) / filled.length : 0;
-
-                  return (
-                    <div className="rounded-xl border bg-muted/30 p-3 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overall Score</span>
-                        <span className="text-lg font-black text-foreground">{score.toFixed(1)} <span className="text-xs font-semibold text-muted-foreground">/ 10</span></span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{filled.length} of {total} parameters recorded</p>
-                    </div>
-                  );
-                })()}
-              </>
+              <WaterQualityAssessment
+                waterData={waterData}
+                onWaterDataChange={setWaterData}
+                weatherReport={weatherReport}
+                onWeatherReportChange={setWeatherReport}
+                isFarmModule={isFarmModule}
+                showWeather={true}
+                onScoreChange={setWaterQualityScore}
+              />
             ) : null}
             {!isPlanningMode && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
@@ -6066,55 +6102,24 @@ const RecordActivity = () => {
                             Water Quality Assessment
                           </DialogTitle>
                         </DialogHeader>
-                        <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                          <div className="grid grid-cols-1 gap-5">
-                            {waterFields.map(field => {
-                              const rangeLabel = WATER_QUALITY_RANGES[field];
-                              const isFilled = waterMgmtData.waterQualityData?.[field] !== undefined && waterMgmtData.waterQualityData?.[field] !== '';
-                              return (
-                                <div key={field} className="space-y-1.5 group">
-                                  <Label className={`text-[10px] font-black flex justify-between uppercase tracking-wider transition-colors ${isFilled ? 'text-emerald-700' : 'text-muted-foreground group-focus-within:text-emerald-600'}`}>
-                                    {field} *
-                                    {rangeLabel && <span className="text-[9px] font-bold opacity-60 font-mono">{rangeLabel}</span>}
-                                  </Label>
-                                  <Input
-                                    type={field === 'Other' ? 'text' : 'number'}
-                                    min="0"
-                                    step="any"
-                                    value={waterMgmtData.waterQualityData?.[field] || ''}
-                                    onChange={e => {
-                                      setWaterMgmtData(prev => ({
-                                        ...prev,
-                                        waterQualityData: {
-                                          ...prev.waterQualityData,
-                                          [field]: e.target.value
-                                        }
-                                      }));
-                                    }}
-                                    placeholder="0.0"
-                                    className={`h-11 font-bold text-sm rounded-xl transition-all ${isFilled ? 'border-emerald-200 bg-emerald-50/20 focus:border-emerald-500' : 'border-muted-foreground/10 focus:border-emerald-400'}`}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Summary Score Card inside Modal */}
-                          <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5 space-y-3 shadow-inner">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-emerald-900 uppercase tracking-widest">Compliance Score</span>
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-4xl font-black text-emerald-600">{waterMgmtAvg.toFixed(1)}</span>
-                                <span className="text-sm font-black text-emerald-600/40">/ 10</span>
-                              </div>
-                            </div>
-                            <div className="w-full h-2.5 bg-emerald-200/50 rounded-full overflow-hidden border border-emerald-200">
-                              <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${(waterMgmtAvg / 10) * 100}%` }} />
-                            </div>
-                            <p className="text-[10px] text-emerald-700/70 text-center font-bold italic tracking-wide">
-                              Calculated compliance average of {waterMgmtFilledCount} parameters
-                            </p>
-                          </div>
+                        <div className="overflow-y-auto p-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                          <WaterQualityAssessment
+                            waterData={waterMgmtData.waterQualityData || {}}
+                            onWaterDataChange={(newData) => {
+                              setWaterMgmtData(prev => ({
+                                ...prev,
+                                waterQualityData: newData
+                              }));
+                            }}
+                            isFarmModule={isFarmModule}
+                            showWeather={false}
+                            onScoreChange={(score) => {
+                              setWaterMgmtData(prev => ({
+                                ...prev,
+                                waterQualityScore: score
+                              }));
+                            }}
+                          />
                         </div>
                         <DialogFooter className="p-4 bg-emerald-50/50 border-t border-emerald-100 sticky bottom-0 z-10">
                           <DialogClose asChild>

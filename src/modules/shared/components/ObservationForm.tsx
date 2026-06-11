@@ -6,7 +6,8 @@ import { AnimalQualityScore } from './AnimalQualityScore';
 import { Button } from '@/components/ui/button';
 import { Plus, Activity, Scale, Droplets, TrendingDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
+import { waterFields, WATER_QUALITY_RANGES, checkWaterParameterCompliance } from '@/modules/shared/constants/activity';
+import { WaterQualityAssessment } from './WaterQualityAssessment';
 import { useState, useEffect } from 'react';
 
 interface ObservationFormProps {
@@ -74,26 +75,7 @@ const ObservationForm = ({
   const waterValues = waterFields.map(field => {
     const valStr = String(observationWaterData[field] || '').trim();
     if (valStr === '') return null;
-    const val = parseFloat(valStr);
-    if (isNaN(val)) return 10;
-    const range = WATER_QUALITY_RANGES[field] || '';
-    let isOk = true;
-    if (field === 'Vibrio Count') {
-      isOk = val < 1000;
-    } else if (field === 'Yellow Green Bacteria') {
-      isOk = val < 100;
-    } else if (range === '[Nil]') {
-      isOk = val === 0;
-    } else if (range.includes(' - ')) {
-      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
-      if (matches) { isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]); }
-    } else if (range.includes('>')) {
-      const matches = range.match(/>\s*(\d+\.?\d*)/);
-      if (matches) isOk = val > parseFloat(matches[1]);
-    } else if (range.includes('<')) {
-      const matches = range.match(/<\s*(\d+\.?\d*)/);
-      if (matches) isOk = val < parseFloat(matches[1]);
-    }
+    const isOk = checkWaterParameterCompliance(field, valStr);
     return isOk ? 10 : 0;
   });
 
@@ -339,42 +321,13 @@ const ObservationForm = ({
                       Water Quality Assessment
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                    <div className="grid grid-cols-1 gap-4">
-                      {waterFields.map(field => {
-                        const rangeLabel = WATER_QUALITY_RANGES[field];
-                        return (
-                          <div key={field} className="space-y-1.5">
-                            <Label className="text-[10px] font-medium flex justify-between uppercase">
-                              {field} *
-                              {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
-                            </Label>
-                            <Input
-                              type={field === 'Other' ? 'text' : 'number'}
-                              min="0"
-                              step="any"
-                              value={observationWaterData[field] || ''}
-                              onChange={e => setObservationWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                              placeholder=""
-                              className="h-10 text-sm"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Compliance Score</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-black text-primary">{waterAvg.toFixed(1)}</span>
-                          <span className="text-xs font-bold text-muted-foreground">/ 10</span>
-                        </div>
-                      </div>
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(waterAvg / 10) * 100}%` }} />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground text-center italic">Compliance average of {waterFilledCount} parameters</p>
-                    </div>
+                  <div className="overflow-y-auto p-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                    <WaterQualityAssessment
+                      waterData={observationWaterData}
+                      onWaterDataChange={setObservationWaterData}
+                      isFarmModule={activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM'}
+                      showWeather={false}
+                    />
                   </div>
                   <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
                     <DialogClose asChild>
@@ -601,42 +554,13 @@ const ObservationForm = ({
                     Water Quality Assessment
                   </DialogTitle>
                 </DialogHeader>
-                <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                  <div className="grid grid-cols-1 gap-4">
-                    {waterFields.map(field => {
-                      const rangeLabel = WATER_QUALITY_RANGES[field];
-                      return (
-                        <div key={field} className="space-y-1.5">
-                          <Label className="text-[10px] font-medium flex justify-between uppercase">
-                            {field} *
-                            {rangeLabel && <span className="text-[9px] text-muted-foreground">{rangeLabel}</span>}
-                          </Label>
-                          <Input
-                            type={field === 'Other' ? 'text' : 'number'}
-                            min="0"
-                            step="any"
-                            value={observationWaterData[field] || ''}
-                            onChange={e => setObservationWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                            placeholder=""
-                            className="h-10 text-sm"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-montserrat">Compliance Score</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-primary font-montserrat tracking-tight">{waterAvg.toFixed(1)}</span>
-                        <span className="text-xs font-bold text-muted-foreground">/ 10</span>
-                      </div>
-                    </div>
-                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${(waterAvg / 10) * 100}%` }} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground text-center italic">Compliance average of {waterFilledCount} parameters</p>
-                  </div>
+                <div className="overflow-y-auto p-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                  <WaterQualityAssessment
+                    waterData={observationWaterData}
+                    onWaterDataChange={setObservationWaterData}
+                    isFarmModule={activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM'}
+                    showWeather={false}
+                  />
                 </div>
                 <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
                   <DialogClose asChild>

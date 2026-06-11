@@ -255,6 +255,7 @@ const UserDashboard = () => {
             // 3. Combine them manually
             const mappedInstructions = chartData.map((instr: any) => ({
                 ...instr,
+                activity_type: (instr.planned_data?.item === 'Check Tray' || instr.planned_data?.checkTrayData) ? 'Check Tray' : instr.activity_type,
                 farms: farms?.find(f => f.id === instr.farm_id) || null,
                 sections: sections?.find(s => s.id === instr.section_id) || null,
                 tanks: tanks?.find(t => t.id === instr.tank_id) || null
@@ -311,6 +312,7 @@ const UserDashboard = () => {
             // 3. Combine in memory
             const mapped = rawData.map((instr: any) => ({
                 ...instr,
+                activity_type: (instr.planned_data?.item === 'Check Tray' || instr.planned_data?.checkTrayData) ? 'Check Tray' : instr.activity_type,
                 farms: farms?.find(f => f.id === instr.farm_id) || null,
                 sections: sections?.find(s => s.id === instr.section_id) || null,
                 tanks: tanks?.find(t => t.id === instr.tank_id) || null,

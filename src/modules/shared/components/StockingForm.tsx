@@ -9,7 +9,8 @@ import ImageUpload from './ImageUpload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ClipboardList, Database, Layers, CheckCircle2, AlertCircle, Info } from 'lucide-react';
-import { waterFields, WATER_QUALITY_RANGES } from '@/modules/shared/constants/activity';
+import { waterFields, WATER_QUALITY_RANGES, checkWaterParameterCompliance } from '@/modules/shared/constants/activity';
+import { WaterQualityAssessment } from './WaterQualityAssessment';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface StockingFormProps {
@@ -219,30 +220,7 @@ const StockingForm = ({
   const waterValues = waterFields.map(field => {
     const valStr = String(stockingWaterData[field] || '').trim();
     if (valStr === '') return null;
-    const val = parseFloat(valStr);
-    if (isNaN(val)) return 10;
-
-    const range = WATER_QUALITY_RANGES[field] || '';
-    let isOk = true;
-    
-    if (field === 'Vibrio Count') {
-      isOk = val < 1000;
-    } else if (field === 'Yellow Green Bacteria') {
-      isOk = val < 100;
-    } else if (range === '[Nil]') {
-      isOk = val === 0;
-    } else if (range.includes(' - ')) {
-      const matches = range.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
-      if (matches) {
-        isOk = val >= parseFloat(matches[1]) && val <= parseFloat(matches[2]);
-      }
-    } else if (range.includes('>')) {
-      const matches = range.match(/>\s*(\d+\.?\d*)/);
-      if (matches) isOk = val > parseFloat(matches[1]);
-    } else if (range.includes('<')) {
-      const matches = range.match(/<\s*(\d+\.?\d*)/);
-      if (matches) isOk = val < parseFloat(matches[1]);
-    }
+    const isOk = checkWaterParameterCompliance(field, valStr);
     return isOk ? 10 : 0;
   });
 
@@ -960,24 +938,13 @@ const StockingForm = ({
                   Water Quality Assessment
                 </DialogTitle>
               </DialogHeader>
-              <div className="overflow-y-auto p-6 space-y-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
-                <div className="grid grid-cols-1 gap-5">
-                  {waterFields.map(field => (
-                    <div key={field} className="space-y-1.5">
-                      <div className="flex justify-between items-center px-1">
-                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{field}</Label>
-                        <span className="text-[10px] font-bold text-primary/60">{WATER_QUALITY_RANGES[field] || ''}</span>
-                      </div>
-                      <Input
-                        type="number" step="any"
-                        value={stockingWaterData[field] || ''}
-                        onChange={e => setStockingWaterData(prev => ({ ...prev, [field]: e.target.value }))}
-                        className="h-11 rounded-xl bg-muted/10 border-muted focus:bg-background"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  ))}
-                </div>
+              <div className="overflow-y-auto p-6 bg-background custom-scrollbar" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+                <WaterQualityAssessment
+                  waterData={stockingWaterData}
+                  onWaterDataChange={setStockingWaterData}
+                  isFarmModule={activeFarmCategory === 'FARMS' || activeFarmCategory === 'FARM'}
+                  showWeather={false}
+                />
               </div>
               <DialogFooter className="p-4 bg-muted/30 border-t sticky bottom-0 z-10">
                  <DialogClose asChild>
@@ -987,6 +954,7 @@ const StockingForm = ({
                       onDataChange((prev: any) => ({
                         ...prev,
                         waterComplianceScore: parseFloat(waterDataAvg.toFixed(1)),
+                        waterQualityScore: parseFloat(waterDataAvg.toFixed(1)),
                         stockingWaterData: stockingWaterData
                       }));
                     }}

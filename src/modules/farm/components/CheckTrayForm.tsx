@@ -22,31 +22,31 @@ interface CheckTrayFormProps {
 }
 
 const TRAY_OPTIONS = [
-  { value: '1', label: '1. No Feed < 2%', description: 'Excellent Consumption' },
-  { value: '2', label: '2. Trace Feed Residual <10%', description: 'Good Consumption' },
+  { value: '5', label: '5. No Feed < 2%', description: 'Excellent Consumption' },
+  { value: '4', label: '4. Trace Feed Residual <10%', description: 'Good Consumption' },
   { value: '3', label: '3. Moderate Feed Residual - 25 to 50%', description: 'Moderate Consumption' },
-  { value: '4', label: '4. High Feed Residual 75%', description: 'Poor Consumption' },
-  { value: '5', label: '5. No Feed Consumption 0%', description: 'Critical (No Consumption)' }
+  { value: '2', label: '2. High Feed Residual 75%', description: 'Poor Consumption' },
+  { value: '0', label: '0. No Feed Consumption 0%', description: 'Critical (No Consumption)' }
 ];
 
 const getScoreColor = (score: string) => {
   switch (score) {
-    case '1': return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400';
-    case '2': return 'border-teal-200 bg-teal-50 text-teal-800 dark:bg-teal-950/20 dark:text-teal-400';
+    case '5': return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400';
+    case '4': return 'border-teal-200 bg-teal-50 text-teal-800 dark:bg-teal-950/20 dark:text-teal-400';
     case '3': return 'border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-400';
-    case '4': return 'border-orange-200 bg-orange-50 text-orange-800 dark:bg-orange-950/20 dark:text-orange-400';
-    case '5': return 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/20 dark:text-rose-400';
+    case '2': return 'border-orange-200 bg-orange-50 text-orange-800 dark:bg-orange-950/20 dark:text-orange-400';
+    case '0': return 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/20 dark:text-rose-400';
     default: return 'border-slate-200 bg-slate-50 text-slate-700';
   }
 };
 
 const getScoreBadge = (score: string) => {
   switch (score) {
-    case '1': return 'bg-emerald-500 text-white';
-    case '2': return 'bg-teal-500 text-white';
+    case '5': return 'bg-emerald-500 text-white';
+    case '4': return 'bg-teal-500 text-white';
     case '3': return 'bg-amber-500 text-white';
-    case '4': return 'bg-orange-500 text-white';
-    case '5': return 'bg-rose-500 text-white';
+    case '2': return 'bg-orange-500 text-white';
+    case '0': return 'bg-rose-500 text-white';
     default: return 'bg-slate-400 text-white';
   }
 };
@@ -63,6 +63,16 @@ const CheckTrayForm = ({
 
   const [numTrays, setNumTrays] = useState<string>(() => data.numTrays || '');
   const [trays, setTrays] = useState<TrayEntry[]>(() => data.trays || []);
+
+  // Sync changes from parent data prop (e.g. when an instruction is applied)
+  useEffect(() => {
+    if (data.numTrays !== undefined && data.numTrays !== numTrays) {
+      setNumTrays(data.numTrays || '');
+    }
+    if (data.trays && JSON.stringify(data.trays) !== JSON.stringify(trays)) {
+      setTrays(data.trays || []);
+    }
+  }, [data.numTrays, data.trays]);
 
   const handleNumTraysChange = (val: string) => {
     setNumTrays(val);
