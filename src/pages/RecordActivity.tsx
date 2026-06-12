@@ -68,6 +68,20 @@ const TIME_SLOTS = [
   "8pm - 12am"
 ];
 
+const getTimeSlotFromTime = (timeStr: string): string => {
+  if (!timeStr) return '';
+  const [hStr] = timeStr.split(':');
+  const hour = parseInt(hStr, 10);
+  if (isNaN(hour)) return '';
+  
+  if (hour >= 0 && hour < 4) return "0am - 4am";
+  if (hour >= 4 && hour < 8) return "4am - 8am";
+  if (hour >= 8 && hour < 12) return "8am - 12pm";
+  if (hour >= 12 && hour < 16) return "12pm - 4pm";
+  if (hour >= 16 && hour < 20) return "4pm - 8pm";
+  return "8pm - 12am";
+};
+
 const TANKS = ['T1', 'T2', 'T3', 'T4'];
 const ACTIVITIES = ['Feed', 'Treatment', 'Water Quality', 'Stocking', 'Animals Sampling & Observation', 'Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard', 'Water Management', 'Order Booking', 'Check Tray'] as const;
 type ActivityType = typeof ACTIVITIES[number];
@@ -226,6 +240,17 @@ const RecordActivity = () => {
       setActiveSectionId(sectionParam);
     }
   }, [sectionParam]);
+
+  // Auto-sync timeSlot with time when creating a new record/activity (not in planning mode for setting instructions)
+  useEffect(() => {
+    if (editId || editInstructionId || instructionIdParam || isPlanningMode) return;
+    if (time) {
+      const derivedSlot = getTimeSlotFromTime(time);
+      if (derivedSlot) {
+        setTimeSlot(derivedSlot);
+      }
+    }
+  }, [time, editId, editInstructionId, instructionIdParam, isPlanningMode]);
 
   useEffect(() => {
     if ((categoryParam === 'MATURATION' || categoryParam === 'LRT' || categoryParam === 'FARMS' || categoryParam === 'FARM') && categoryParam !== activeModule) {
@@ -915,6 +940,7 @@ const RecordActivity = () => {
         if (actType === 'Nauplii Sale' && pd.naupliiSaleData) setNaupliiSaleData(pd.naupliiSaleData);
         if (actType === 'Order Booking' && pd.orderBookingData) setOrderBookingData(pd.orderBookingData);
         if (actType === 'Check Tray' && pd.checkTrayData) setCheckTrayData(pd.checkTrayData);
+        if (pd.timeSlot) setTimeSlot(pd.timeSlot);
         
         if (pd.instructions) setComments(pd.instructions);
         if (data.scheduled_time) setTime(data.scheduled_time.slice(0, 5));
@@ -1047,6 +1073,7 @@ const RecordActivity = () => {
       setOrderBookingData(planned_data.orderBookingData);
     } else if (currentAct === 'Check Tray' && planned_data.checkTrayData) {
       setCheckTrayData(planned_data.checkTrayData);
+      if (planned_data.timeSlot) setTimeSlot(planned_data.timeSlot);
     } else if (currentAct === 'Animals Sampling & Observation' && planned_data.animalSamplingData) {
       setAnimalSamplingData(planned_data.animalSamplingData);
     }
@@ -4536,7 +4563,7 @@ const RecordActivity = () => {
           <TankShiftingForm
             data={tankShiftingData}
             onDataChange={setTankShiftingData}
-            availableTanks={availableTanks}
+            availableTanks={availableTanks.filter(s => currentFarmId ? s.farm_id === currentFarmId : true)}
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}

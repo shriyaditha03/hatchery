@@ -106,14 +106,10 @@ export const WATER_QUALITY_RANGES: Record<string, string> = {
 };
 
 export const REQUIRED_WATER_FIELDS = [
-  'pH', 'Salinity', 'Temperature', 'Dissolved Oxygen',
-  'Alkalinity', 'Ammonia', 'Nitrite', 'Carbonate', 'Bicarbonate',
-  'Green Algae', 'Blue Green Algae', 'Yellow Colonies', 'Green Colonies'
+  'pH', 'Salinity', 'Temperature', 'Dissolved Oxygen'
 ];
 
-export const POND_REQUIRED_WATER_FIELDS = [
-  'Water Colour', 'Transparency'
-];
+export const POND_REQUIRED_WATER_FIELDS: string[] = [];
 
 export function checkWaterParameterCompliance(key: string, valStr: string): boolean | null {
   const value = String(valStr || '').trim();
