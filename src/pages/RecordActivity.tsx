@@ -260,11 +260,14 @@ const RecordActivity = () => {
     const lrtActivities = ['Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Order Booking'];
     const maturationActivities = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
     
-    // Only auto-switch to LRT or MATURATION if not in the FARMS/FARM module context
     const isFarmModule = categoryParam === 'FARMS' || categoryParam === 'FARM' || activeModule === 'FARMS' || activeModule === 'FARM';
     if (!isFarmModule) {
       if (activity && lrtActivities.includes(activity) && activeModule !== 'LRT') {
-        setActiveModule('LRT');
+        if (activity === 'Order Booking' && (categoryParam === 'MATURATION' || activeModule === 'MATURATION')) {
+          // Keep Maturation context
+        } else {
+          setActiveModule('LRT');
+        }
       } else if (activity && maturationActivities.includes(activity) && activeModule !== 'MATURATION') {
         setActiveModule('MATURATION');
       }
@@ -369,6 +372,7 @@ const RecordActivity = () => {
     if (categoryParam) return categoryParam;
     const lrtActivities = ['Artemia', 'Algae', 'Harvest', 'Tank Shifting', 'Order Booking'];
     const maturationActivities = ['Sourcing & Mating', 'Spawning', 'Egg Count', 'Nauplii Harvest', 'Nauplii Sale', 'Broodstock Discard'];
+    if (activity === 'Order Booking' && activeModule === 'MATURATION') return 'MATURATION';
     if (activity && lrtActivities.includes(activity)) return 'LRT';
     if (activity && maturationActivities.includes(activity)) return 'MATURATION';
     return activeSection?.farm_category || activeModule || 'LRT';
@@ -2395,38 +2399,49 @@ const RecordActivity = () => {
         return;
       }
       if (!orderBookingData.farmLocation) {
-        toast.error('Farm Location / Address is required');
+        toast.error(activeFarmCategory === 'MATURATION' ? 'Hatchery Location / Address is required' : 'Farm Location / Address is required');
         return;
       }
-      const numBatches = parseInt(orderBookingData.numBatches || '0');
-      if (numBatches <= 0) {
-        toast.error('Number of Batches required must be at least 1');
-        return;
+      const numBatches = parseInt(orderBookingData.numBatches || (activeFarmCategory === 'MATURATION' ? '-1' : '1'));
+      if (activeFarmCategory === 'MATURATION') {
+        if (numBatches < -1 || numBatches === 0) {
+          toast.error('Number of Batches required must be -1 or a positive number');
+          return;
+        }
+      } else {
+        if (numBatches <= 0) {
+          toast.error('Number of Batches required must be at least 1');
+          return;
+        }
       }
 
       // Validate batches list
       const batches = orderBookingData.batches || [];
-      if (batches.length === 0) {
-        toast.error('At least one Batch Specification is required');
-        return;
-      }
-      for (let i = 0; i < batches.length; i++) {
-        const b = batches[i];
-        if (!b.geneticLine) {
-          toast.error(`Genetic Line is required for Batch #${i + 1}`);
+      if (!(activeFarmCategory === 'MATURATION' && numBatches === -1)) {
+        if (batches.length === 0) {
+          toast.error('At least one Batch Specification is required');
           return;
         }
-        if (!b.seedQuantityGross || parseFloat(b.seedQuantityGross) <= 0) {
-          toast.error(`Valid Seed Quantity is required for Batch #${i + 1}`);
-          return;
-        }
-        if (!b.salinity) {
-          toast.error(`Salinity is required for Batch #${i + 1}`);
-          return;
-        }
-        if (!b.deliveryDate1 || !b.deliveryDate2) {
-          toast.error(`Both Delivery range dates are required for Batch #${i + 1}`);
-          return;
+        for (let i = 0; i < batches.length; i++) {
+          const b = batches[i];
+          if (!b.geneticLine) {
+            toast.error(`Genetic Line is required for Batch #${i + 1}`);
+            return;
+          }
+          if (!b.seedQuantityGross || parseFloat(b.seedQuantityGross) <= 0) {
+            toast.error(`Valid Seed Quantity is required for Batch #${i + 1}`);
+            return;
+          }
+          if (activeFarmCategory !== 'MATURATION') {
+            if (!b.salinity) {
+              toast.error(`Salinity is required for Batch #${i + 1}`);
+              return;
+            }
+          }
+          if (!b.deliveryDate1 || !b.deliveryDate2) {
+            toast.error(`Both Delivery range dates are required for Batch #${i + 1}`);
+            return;
+          }
         }
       }
 
@@ -2434,9 +2449,11 @@ const RecordActivity = () => {
         toast.error('Status of Order is required');
         return;
       }
-      if (!orderBookingData.priorityNumber) {
-        toast.error('Priority Number Allocation is required');
-        return;
+      if (activeFarmCategory !== 'MATURATION') {
+        if (!orderBookingData.priorityNumber) {
+          toast.error('Priority Number Allocation is required');
+          return;
+        }
       }
 
       // Confirmed status allocations validation
@@ -2445,32 +2462,47 @@ const RecordActivity = () => {
           toast.error('Order ID is required for Confirmed status');
           return;
         }
-        const allocatedTanks = orderBookingData.allocatedTanks || [];
-        if (allocatedTanks.length === 0) {
-          toast.error('At least one Tank Allocation is required for Confirmed status');
-          return;
-        }
-        for (let i = 0; i < allocatedTanks.length; i++) {
-          const t = allocatedTanks[i];
-          if (!t.allocatedStockingId) {
-            toast.error(`Allocated Batch/Stocking ID is required for Allocation #${i + 1}`);
+        if (activeFarmCategory === 'MATURATION') {
+          if (!orderBookingData.allocatedStockingId) {
+            toast.error('Allocated Batch/Stocking ID is required for Confirmed status');
             return;
           }
-          if (!t.tankId) {
-            toast.error(`Tank selection is required for Allocation #${i + 1}`);
+          if (!orderBookingData.allocatedDate1 || !orderBookingData.allocatedDate2) {
+            toast.error('Both Allocated range dates are required for Confirmed status');
             return;
           }
-          if (!t.presentLarvalStage) {
-            toast.error(`Present Larval Stage is required for Allocation #${i + 1}`);
+          if (!orderBookingData.grossExpected || parseFloat(orderBookingData.grossExpected) <= 0) {
+            toast.error('Valid Gross Expected Approx is required for Confirmed status');
             return;
           }
-          if (!t.grossExpected || parseFloat(t.grossExpected) <= 0) {
-            toast.error(`Valid Gross Expected Qty is required for Allocation #${i + 1}`);
+        } else {
+          const allocatedTanks = orderBookingData.allocatedTanks || [];
+          if (allocatedTanks.length === 0) {
+            toast.error('At least one Tank Allocation is required for Confirmed status');
             return;
           }
-          if (!t.larvalStagePacking) {
-            toast.error(`Larval Stage at Packing is required for Allocation #${i + 1}`);
-            return;
+          for (let i = 0; i < allocatedTanks.length; i++) {
+            const t = allocatedTanks[i];
+            if (!t.allocatedStockingId) {
+              toast.error(`Allocated Batch/Stocking ID is required for Allocation #${i + 1}`);
+              return;
+            }
+            if (!t.populationAllocated || parseFloat(t.populationAllocated) <= 0) {
+              toast.error(`Valid Number(Population) Allocated is required for Allocation #${i + 1}`);
+              return;
+            }
+            if (!t.presentLarvalStage) {
+              toast.error(`Present Larval Stage is required for Allocation #${i + 1}`);
+              return;
+            }
+            if (!t.grossExpected || parseFloat(t.grossExpected) <= 0) {
+              toast.error(`Valid Gross Expected Qty is required for Allocation #${i + 1}`);
+              return;
+            }
+            if (!t.larvalStagePacking) {
+              toast.error(`Larval Stage at Packing is required for Allocation #${i + 1}`);
+              return;
+            }
           }
         }
       }
@@ -4556,6 +4588,7 @@ const RecordActivity = () => {
             isPlanningMode={isPlanningMode}
             date={date}
             isEditMode={!!editId || !!editInstructionId}
+            farmCategory={activeFarmCategory}
           />
         )}
 

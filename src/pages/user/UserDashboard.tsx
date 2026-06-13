@@ -414,6 +414,7 @@ const UserDashboard = () => {
                 { name: 'Egg Count', icon: Database, route: '/user/activity/egg-count', color: 'bg-indigo-100 text-indigo-600' },
                 { name: 'Nauplii Harvest', icon: ArrowUpRight, route: '/user/activity/nauplii-harvest', color: 'bg-emerald-100 text-emerald-600' },
                 { name: 'Nauplii Sale', icon: ShoppingCart, route: '/user/activity/nauplii-sale', color: 'bg-blue-100 text-blue-600' },
+                { name: 'Order Booking', icon: ShoppingCart, route: '/user/activity/order-booking', color: 'bg-rose-100 text-rose-600' },
                 { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' },
                 { name: 'Broodstock Discard', icon: Trash2, route: '/user/activity/broodstock-discard', color: 'bg-red-100 text-red-600' }
             ];

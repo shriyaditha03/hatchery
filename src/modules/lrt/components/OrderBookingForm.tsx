@@ -76,6 +76,7 @@ interface OrderBookingFormProps {
   isPlanningMode?: boolean;
   date?: string;
   isEditMode?: boolean;
+  farmCategory?: string;
 }
 
 const PACKING_TYPES = ['Tank Packing', 'Bubble packing'];
@@ -150,8 +151,10 @@ export const OrderBookingForm = ({
   availableBatches = [],
   isPlanningMode = false,
   date = '',
-  isEditMode = false
+  isEditMode = false,
+  farmCategory
 }: OrderBookingFormProps) => {
+  const isMaturation = farmCategory === 'MATURATION';
   const [isUserEdited, setIsUserEdited] = useState(isEditMode || !!data.bookingId);
   const [mapOpen, setMapOpen] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
@@ -295,9 +298,11 @@ export const OrderBookingForm = ({
     const totalAmount = netQtyVal * unitPriceVal;
     const balanceDue = totalAmount - advanceVal;
 
-    const rawNumBatches = parseInt(data.numBatches);
+    const isMaturation = farmCategory === 'MATURATION';
+    const defaultNumBatches = '1';
+    const rawNumBatches = parseInt(data.numBatches !== undefined ? data.numBatches : defaultNumBatches);
     const isValidNum = !isNaN(rawNumBatches) && rawNumBatches >= 1;
-    const numBatches = isValidNum ? rawNumBatches : (data.batches?.length || 1);
+    const numBatches = isValidNum ? rawNumBatches : 0;
     const currentBatches = data.batches || [];
 
     let updatedBatches = [...currentBatches];
@@ -311,7 +316,7 @@ export const OrderBookingForm = ({
           salinity: '',
           deliveryDate1: '',
           deliveryDate2: '',
-          packingType: 'Tank Packing',
+          packingType: isMaturation ? 'Bubble packing' : 'Tank Packing',
           transportationOrganiser: 'Owner'
         });
       }
@@ -319,6 +324,7 @@ export const OrderBookingForm = ({
       updatedBatches = updatedBatches.slice(0, numBatches);
     }
 
+    const currentNumBatchesVal = data.numBatches !== undefined ? data.numBatches : defaultNumBatches;
     const needsUpdate =
       data.totalAmount !== parseFloat(totalAmount.toFixed(2)) ||
       data.balanceDue !== parseFloat(balanceDue.toFixed(2)) ||
@@ -328,7 +334,7 @@ export const OrderBookingForm = ({
     if (needsUpdate) {
       onDataChange({
         ...data,
-        numBatches: data.numBatches === undefined ? '1' : data.numBatches,
+        numBatches: currentNumBatchesVal,
         batches: updatedBatches,
         totalAmount: parseFloat(totalAmount.toFixed(2)),
         balanceDue: parseFloat(balanceDue.toFixed(2)),
@@ -340,7 +346,8 @@ export const OrderBookingForm = ({
     data.unitPriceAgreed,
     data.advanceReceived,
     data.numBatches,
-    data.batches
+    data.batches,
+    farmCategory
   ]);
 
   const handleChange = (field: string, value: any) => {
@@ -359,7 +366,7 @@ export const OrderBookingForm = ({
     const current = data.allocatedTanks || [];
     handleChange('allocatedTanks', [
       ...current,
-      { allocatedStockingId: '', tankId: '', presentLarvalStage: 'Nauplii', grossExpected: '', larvalStagePacking: 'PL' }
+      { allocatedStockingId: '', populationAllocated: '', presentLarvalStage: 'Nauplii', grossExpected: '', larvalStagePacking: 'PL' }
     ]);
   };
 
@@ -475,19 +482,19 @@ export const OrderBookingForm = ({
           </div>
 
           <div className="space-y-1.5 md:col-span-2">
-            <Label className="text-xs font-bold text-slate-700">Alternate Contact <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+            <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Alternate Contact person: Name and Number" : "Alternate Contact"} <span className="text-muted-foreground font-normal">(Optional)</span></Label>
             <Input
               type="text"
               value={data.alternateContact || ''}
               onChange={e => handleChange('alternateContact', e.target.value)}
-              placeholder="e.g. Raj (9876543210)"
+              placeholder={isMaturation ? "e.g. Raj (9876543210)" : "e.g. Raj (9876543210)"}
               className="h-11 border-slate-200 rounded-xl"
             />
           </div>
 
           <div className="space-y-1.5 md:col-span-2 pt-2 border-t border-dashed">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-slate-700">Farm Location / Address *</Label>
+              <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Hatchery Location / Address *" : "Farm Location / Address *"}</Label>
               <Dialog open={mapOpen} onOpenChange={setMapOpen}>
                 <DialogTrigger asChild>
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 rounded-xl text-[10px] uppercase font-bold">
@@ -498,7 +505,7 @@ export const OrderBookingForm = ({
                   <DialogHeader className="p-6 pb-2">
                     <DialogTitle className="text-2xl font-bold flex items-center gap-3">
                       <LocateFixed className="w-6 h-6 text-primary" />
-                      Select Farm Location
+                      {isMaturation ? "Select Hatchery Location" : "Select Farm Location"}
                     </DialogTitle>
                   </DialogHeader>
                   <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
@@ -535,42 +542,44 @@ export const OrderBookingForm = ({
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3 bg-muted/20 p-3 rounded-xl border border-dashed md:col-span-2 animate-in fade-in slide-in-from-top-1">
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-slate-700">Plot Area (m²)</Label>
-              <Input
-                type="number"
-                value={data.plotArea || ''}
-                onChange={e => handleChange('plotArea', parseFloat(e.target.value) || 0)}
-                className="h-8 text-sm bg-background border-slate-200 font-bold"
-              />
+          {!isMaturation && (
+            <div className="grid grid-cols-3 gap-3 bg-muted/20 p-3 rounded-xl border border-dashed md:col-span-2 animate-in fade-in slide-in-from-top-1">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-700">Plot Area (m²)</Label>
+                <Input
+                  type="number"
+                  value={data.plotArea || ''}
+                  onChange={e => handleChange('plotArea', parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm bg-background border-slate-200 font-bold"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-700">Length (m)</Label>
+                <Input
+                  type="number"
+                  value={data.plotLength || ''}
+                  onChange={e => handleChange('plotLength', parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm bg-background border-slate-200 font-bold"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-slate-700">Width (m)</Label>
+                <Input
+                  type="number"
+                  value={data.plotWidth || ''}
+                  onChange={e => handleChange('plotWidth', parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm bg-background border-slate-200 font-bold"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-slate-700">Length (m)</Label>
-              <Input
-                type="number"
-                value={data.plotLength || ''}
-                onChange={e => handleChange('plotLength', parseFloat(e.target.value) || 0)}
-                className="h-8 text-sm bg-background border-slate-200 font-bold"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-slate-700">Width (m)</Label>
-              <Input
-                type="number"
-                value={data.plotWidth || ''}
-                onChange={e => handleChange('plotWidth', parseFloat(e.target.value) || 0)}
-                className="h-8 text-sm bg-background border-slate-200 font-bold"
-              />
-            </div>
-          </div>
+          )}
 
           <div className="space-y-1.5 md:col-span-2">
-            <Label className="text-xs font-bold text-slate-700">Number of Batches Required *</Label>
+            <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Number of Batches required *" : "Number of Batches Required *"}</Label>
             <Input
               type="number"
-              min="1"
-              value={data.numBatches === undefined ? '1' : data.numBatches}
+              min={isMaturation ? "-1" : "1"}
+              value={data.numBatches === undefined ? (isMaturation ? '-1' : '1') : data.numBatches}
               onChange={e => handleChange('numBatches', e.target.value)}
               className="h-11 border-slate-200 rounded-xl font-bold"
             />
@@ -595,7 +604,7 @@ export const OrderBookingForm = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Species *</Label>
+                <Label className="text-xs font-bold text-slate-700">{isMaturation ? "BS Species *" : "Species *"}</Label>
                 <Select
                   value={batch.species || ''}
                   onValueChange={val => {
@@ -618,14 +627,14 @@ export const OrderBookingForm = ({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Genetic Line Required *</Label>
+                <Label className="text-xs font-bold text-slate-700">{isMaturation ? "BS Genetic Line required *" : "Genetic Line Required *"}</Label>
                 <Select
                   value={batch.geneticLine || ''}
                   onValueChange={val => handleBatchChange(index, 'geneticLine', val)}
                   disabled={!batch.species}
                 >
                   <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
-                    <SelectValue placeholder={batch.species ? 'Select genetic line' : 'Select species first'} />
+                    <SelectValue placeholder={batch.species ? (isMaturation ? 'Select BS genetic line' : 'Select genetic line') : 'Select species first'} />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl">
                     {getGeneticLines(batch.species || '').map(line => (
@@ -636,54 +645,80 @@ export const OrderBookingForm = ({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Seed Quantity Required *</Label>
-                <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white">
+                <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Nauplii Quantity Required Gross (million) *" : "Seed Quantity Required *"}</Label>
+                {isMaturation ? (
+                  <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={batch.seedQuantityGross || ''}
+                      onChange={e => {
+                        handleBatchChange(index, 'seedQuantityGross', e.target.value);
+                        handleBatchChange(index, 'seedQuantityUnit', 'Million');
+                      }}
+                      placeholder="Quantity"
+                      className="flex-grow flex-1 min-w-0 w-full h-11 border-none shadow-none focus-visible:ring-0 px-3"
+                    />
+                    <span className="h-11 flex items-center justify-center bg-slate-100 text-xs font-bold px-4 text-slate-500 border-l border-slate-200 shrink-0">
+                      Million
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={batch.seedQuantityGross || ''}
+                      onChange={e => handleBatchChange(index, 'seedQuantityGross', e.target.value)}
+                      placeholder="Quantity"
+                      className="flex-grow flex-1 min-w-0 w-full h-11 border-none shadow-none focus-visible:ring-0 px-3"
+                    />
+                    <select
+                      value={batch.seedQuantityUnit || 'Million'}
+                      onChange={e => handleBatchChange(index, 'seedQuantityUnit', e.target.value)}
+                      className="h-11 border-none bg-slate-100 text-xs font-bold px-3 cursor-pointer focus:outline-none w-24 shrink-0"
+                    >
+                      <option value="Lakhs">Lakhs</option>
+                      <option value="Million">Million</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {!isMaturation && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700">Salinity Required (ppt) *</Label>
                   <Input
                     type="number"
                     min="0"
                     step="any"
-                    value={batch.seedQuantityGross || ''}
-                    onChange={e => handleBatchChange(index, 'seedQuantityGross', e.target.value)}
-                    placeholder="Quantity"
-                    className="flex-grow flex-1 min-w-0 w-full h-11 border-none shadow-none focus-visible:ring-0 px-3"
+                    value={batch.salinity || ''}
+                    onChange={e => handleBatchChange(index, 'salinity', e.target.value)}
+                    placeholder="e.g. 30"
+                    className="h-11 border-slate-200 rounded-xl"
                   />
-                  <select
-                    value={batch.seedQuantityUnit || 'Million'}
-                    onChange={e => handleBatchChange(index, 'seedQuantityUnit', e.target.value)}
-                    className="h-11 border-none bg-slate-100 text-xs font-bold px-3 cursor-pointer focus:outline-none w-24 shrink-0"
-                  >
-                    <option value="Lakhs">Lakhs</option>
-                    <option value="Million">Million</option>
-                  </select>
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Salinity Required (ppt) *</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={batch.salinity || ''}
-                  onChange={e => handleBatchChange(index, 'salinity', e.target.value)}
-                  placeholder="e.g. 30"
-                  className="h-11 border-slate-200 rounded-xl"
-                />
-              </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700">Type of Packing *</Label>
                 <Select
-                  value={batch.packingType || 'Tank Packing'}
+                  value={batch.packingType || (isMaturation ? 'Bubble packing' : 'Tank Packing')}
                   onValueChange={val => handleBatchChange(index, 'packingType', val)}
                 >
                   <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                    {PACKING_TYPES.map(opt => (
-                      <SelectItem key={opt} value={opt} className="rounded-lg">{opt}</SelectItem>
-                    ))}
+                    {isMaturation ? (
+                      <SelectItem value="Bubble packing" className="rounded-lg">Bubble packing</SelectItem>
+                    ) : (
+                      PACKING_TYPES.map(opt => (
+                        <SelectItem key={opt} value={opt} className="rounded-lg">{opt}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -722,7 +757,6 @@ export const OrderBookingForm = ({
           </div>
         ))}
       </div>
-
       {/* 3. Order Status & Allocation details */}
       <div className="glass-card rounded-2xl p-5 border space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b">
@@ -730,7 +764,7 @@ export const OrderBookingForm = ({
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Status & Allocations</h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={cn("grid grid-cols-1 gap-4", !isMaturation && "md:grid-cols-2")}>
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700">Status of Order *</Label>
             <Select
@@ -741,180 +775,253 @@ export const OrderBookingForm = ({
                 <SelectValue placeholder="Select Status" />
               </SelectTrigger>
               <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                {STATUS_OPTIONS.map(opt => (
+                {(isMaturation ? ['Confirmed', 'Pending', 'Rescheduled', 'Cancelled'] : STATUS_OPTIONS).map(opt => (
                   <SelectItem key={opt} value={opt} className="rounded-lg">{opt}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-slate-700">Priority Number Allocation *</Label>
-            <Input
-              type="number"
-              value={data.priorityNumber || ''}
-              onChange={e => handleChange('priorityNumber', e.target.value)}
-              placeholder="e.g. 1"
-              className="h-11 border-slate-200 rounded-xl"
-            />
-          </div>
-        </div>
-
-        {/* Seed Allocation - Always visible (On order confirmation) */}
-        <div className="space-y-4 pt-4 border-t border-dashed">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-amber-600 uppercase tracking-widest">
-              Seed Allocation (On order confirmation)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
+          {!isMaturation && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">Order ID *</Label>
+              <Label className="text-xs font-bold text-slate-700">Priority Number Allocation *</Label>
               <Input
-                type="text"
-                value={data.orderId || ''}
-                onChange={e => handleChange('orderId', e.target.value)}
-                placeholder="Enter order identification code"
+                type="number"
+                value={data.priorityNumber || ''}
+                onChange={e => handleChange('priorityNumber', e.target.value)}
+                placeholder="e.g. 1"
                 className="h-11 border-slate-200 rounded-xl"
               />
             </div>
-          </div>
-
-          {/* Allocated Tanks List */}
-          <div className="space-y-3 pt-2">
-            <div className="flex justify-between items-center">
-              <Label className="text-xs font-black text-slate-700 uppercase tracking-wider">Tanks Allocated *</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddTank}
-                className="h-8 rounded-lg border-dashed text-xs font-bold flex items-center gap-1 text-primary border-primary/30 hover:bg-primary/5 hover:border-primary"
-              >
-                <Plus className="w-3.5 h-3.5" /> Allocate Tank
-              </Button>
-            </div>
-
-            <div className="space-y-3">
-              {allocatedTanks.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-muted-foreground bg-slate-50/50">
-                  No tanks allocated yet. Click "Allocate Tank" to allocate rearing tanks.
-                </div>
-              ) : (
-                allocatedTanks.map((item: any, idx: number) => (
-                  <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 relative group animate-fade-in-up">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-                      <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
-                        Tank Allocation #{idx + 1}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveTank(idx)}
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive rounded-xl"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 w-full">
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-[10px] font-semibold text-slate-500 block">Batch ID / Stocking ID Allocated *</Label>
-                        <Select
-                          value={item.allocatedStockingId || ''}
-                          onValueChange={val => handleTankChange(idx, 'allocatedStockingId', val)}
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200 font-bold text-xs">
-                            <SelectValue placeholder="Select Stocking ID" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                            {availableBatches && availableBatches.length > 0 ? (
-                              availableBatches.map(batchId => (
-                                <SelectItem key={batchId} value={batchId} className="rounded-lg font-bold">
-                                  {batchId}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled className="rounded-lg text-muted-foreground">
-                                No stocking IDs found
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-semibold text-slate-500 block">Tank Num *</Label>
-                        <Select
-                          value={item.tankId || ''}
-                          onValueChange={val => handleTankChange(idx, 'tankId', val)}
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200">
-                            <SelectValue placeholder="Select tank" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                            {flatTanks.map(t => (
-                              <SelectItem key={t.id} value={t.id} className="rounded-lg">{t.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-semibold text-slate-500 block">Present Larval Stage *</Label>
-                        <Select
-                          value={item.presentLarvalStage || 'Nauplii'}
-                          onValueChange={val => handleTankChange(idx, 'presentLarvalStage', val)}
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                            {LARVAL_STAGES.map(stage => (
-                              <SelectItem key={stage} value={stage} className="rounded-lg">{stage}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-semibold text-slate-500 block">Gross Expected Approx. *</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={item.grossExpected || ''}
-                          onChange={e => handleTankChange(idx, 'grossExpected', e.target.value)}
-                          placeholder="Qty"
-                          className="h-9 border-slate-200 bg-white rounded-xl"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-semibold text-slate-500 block">Larval Stage at Packing *</Label>
-                        <Select
-                          value={item.larvalStagePacking || 'PL'}
-                          onValueChange={val => handleTankChange(idx, 'larvalStagePacking', val)}
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                            {LARVAL_STAGES.map(stage => (
-                              <SelectItem key={stage} value={stage} className="rounded-lg">{stage}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
+        {isMaturation ? (
+          /* Nauplii Allocation - Always visible for Maturation (On order confirmation) */
+          <div className="space-y-4 pt-4 border-t border-dashed">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-amber-600 uppercase tracking-widest">
+                Nauplii Allocation: (On order confirmation)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Order id *</Label>
+                <Input
+                  type="text"
+                  value={data.orderId || ''}
+                  onChange={e => handleChange('orderId', e.target.value)}
+                  placeholder="Enter order identification code"
+                  className="h-11 border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Batch ID /Stocking ID Allocated *</Label>
+                <Select
+                  value={data.allocatedStockingId || ''}
+                  onValueChange={val => handleChange('allocatedStockingId', val)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold">
+                    <SelectValue placeholder="Select Stocking ID" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                    {availableBatches && availableBatches.length > 0 ? (
+                      availableBatches.map(batchId => (
+                        <SelectItem key={batchId} value={batchId} className="rounded-lg font-bold">
+                          {batchId}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled className="rounded-lg text-muted-foreground">
+                        No stocking IDs found
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-xs font-bold text-slate-700">Dates allocated Between *</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <DatePicker
+                    value={data.allocatedDate1 || ''}
+                    onChange={val => handleChange('allocatedDate1', val)}
+                    placeholder="Start Date"
+                  />
+                  <DatePicker
+                    value={data.allocatedDate2 || ''}
+                    onChange={val => handleChange('allocatedDate2', val)}
+                    placeholder="End Date"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-xs font-bold text-slate-700">Gross Expected Approx. *</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={data.grossExpected || ''}
+                  onChange={e => handleChange('grossExpected', e.target.value)}
+                  placeholder="Enter gross expected approx quantity"
+                  className="h-11 border-slate-200 rounded-xl font-bold"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Seed Allocation - Always visible for LRT (On order confirmation) */
+          <div className="space-y-4 pt-4 border-t border-dashed">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-amber-600 uppercase tracking-widest">
+                Seed Allocation (On order confirmation)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Order ID *</Label>
+                <Input
+                  type="text"
+                  value={data.orderId || ''}
+                  onChange={e => handleChange('orderId', e.target.value)}
+                  placeholder="Enter order identification code"
+                  className="h-11 border-slate-200 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Allocated Tanks List */}
+            <div className="space-y-3 pt-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs font-black text-slate-700 uppercase tracking-wider">Tanks Allocated *</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddTank}
+                  className="h-8 rounded-lg border-dashed text-xs font-bold flex items-center gap-1 text-primary border-primary/30 hover:bg-primary/5 hover:border-primary"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Allocate Tank
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {allocatedTanks.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-muted-foreground bg-slate-50/50">
+                    No tanks allocated yet. Click "Allocate Tank" to allocate rearing tanks.
+                  </div>
+                ) : (
+                  allocatedTanks.map((item: any, idx: number) => (
+                    <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 relative group animate-fade-in-up">
+                      <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                        <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
+                          Tank Allocation #{idx + 1}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveTank(idx)}
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive rounded-xl"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 w-full">
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-[10px] font-semibold text-slate-500 block">Batch ID / Stocking ID Allocated *</Label>
+                          <Select
+                            value={item.allocatedStockingId || ''}
+                            onValueChange={val => handleTankChange(idx, 'allocatedStockingId', val)}
+                          >
+                            <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200 font-bold text-xs">
+                              <SelectValue placeholder="Select Stocking ID" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                              {availableBatches && availableBatches.length > 0 ? (
+                                availableBatches.map(batchId => (
+                                  <SelectItem key={batchId} value={batchId} className="rounded-lg font-bold">
+                                    {batchId}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="none" disabled className="rounded-lg text-muted-foreground">
+                                  No stocking IDs found
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold text-slate-500 block">Number(Population) Allocated *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.populationAllocated || ''}
+                            onChange={e => handleTankChange(idx, 'populationAllocated', e.target.value)}
+                            placeholder="e.g. 100000"
+                            className="h-9 border-slate-200 bg-white rounded-xl"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold text-slate-500 block">Present Larval Stage *</Label>
+                          <Select
+                            value={item.presentLarvalStage || 'Nauplii'}
+                            onValueChange={val => handleTankChange(idx, 'presentLarvalStage', val)}
+                          >
+                            <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                              {LARVAL_STAGES.map(stage => (
+                                <SelectItem key={stage} value={stage} className="rounded-lg">{stage}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold text-slate-500 block">Gross Expected Approx. *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.grossExpected || ''}
+                            onChange={e => handleTankChange(idx, 'grossExpected', e.target.value)}
+                            placeholder="Qty"
+                            className="h-9 border-slate-200 bg-white rounded-xl"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold text-slate-500 block">Larval Stage at Packing *</Label>
+                          <Select
+                            value={item.larvalStagePacking || 'PL'}
+                            onValueChange={val => handleTankChange(idx, 'larvalStagePacking', val)}
+                          >
+                            <SelectTrigger className="h-9 rounded-xl bg-white border-slate-200">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                              {LARVAL_STAGES.map(stage => (
+                                <SelectItem key={stage} value={stage} className="rounded-lg">{stage}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. Payment & Financial details */}
