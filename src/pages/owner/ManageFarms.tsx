@@ -67,7 +67,7 @@ interface Farm {
     id: string;
     hatchery_id: string;
     name: string;
-    category?: 'LRT' | 'MATURATION';
+    category?: 'LRT' | 'MATURATION' | 'FARM';
     sections: Section[];
 }
 

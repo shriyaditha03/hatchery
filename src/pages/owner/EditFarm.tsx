@@ -84,7 +84,7 @@ const EditFarm = () => {
     const [saving, setSaving] = useState(false);
 
     const [farmName, setFarmName] = useState('');
-    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION'>('LRT');
+    const [farmCategory, setFarmCategory] = useState<'LRT' | 'MATURATION' | 'FARMS'>('LRT');
     const [sections, setSections] = useState<SectionConfig[]>([]);
     const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
 
@@ -107,7 +107,8 @@ const EditFarm = () => {
 
             if (farmError) throw farmError;
             setFarmName(farm.name);
-            setFarmCategory(farm.category || 'LRT');
+            const dbCategory = farm.category || 'LRT';
+            setFarmCategory(dbCategory === 'FARM' ? 'FARMS' : dbCategory);
 
             // 2. Get Sections
             const { data: sectionsData, error: sectionError } = await supabase
@@ -250,10 +251,10 @@ const EditFarm = () => {
 
         if (type === 'LRT') {
             name = `Section ${nextNum}`;
-            typeLabel = 'Section';
+            typeLabel = farmCategory === 'FARMS' ? 'Grow-out Ponds' : 'Section';
         } else if (type === 'WATER') {
             name = `Water Storage Section ${nextNum}`;
-            typeLabel = 'Water Storage';
+            typeLabel = farmCategory === 'FARMS' ? 'Water Storage Ponds' : 'Water Storage';
         } else {
             typeLabel = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
             name = `${typeLabel} Section ${nextNum}`;
@@ -302,7 +303,7 @@ const EditFarm = () => {
             } else {
                 tankName = farmCategory === 'MATURATION'
                     ? `${farmPrefix}_${prefix}_T${currentTanks.length + 1}`
-                    : `${prefix}_T${currentTanks.length + 1}`;
+                    : (farmCategory === 'FARMS' ? `${prefix}_P${currentTanks.length + 1}` : `${prefix}_T${currentTanks.length + 1}`);
             }
 
             newSections[sIdx].tanks.push({
@@ -364,7 +365,7 @@ const EditFarm = () => {
                 } else {
                     newName = farmCategory === 'MATURATION'
                         ? `${farmPrefix}_${prefix}_T${currentTanks.length + i + 1}`
-                        : `${prefix}_T${currentTanks.length + i + 1}`;
+                        : (farmCategory === 'FARMS' ? `${prefix}_P${currentTanks.length + i + 1}` : `${prefix}_T${currentTanks.length + i + 1}`);
                 }
                 return { ...tankToCopy, id: undefined, name: newName };
             });
@@ -405,14 +406,23 @@ const EditFarm = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Type</Label>
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">{farmCategory === 'FARMS' ? 'Pond Type' : 'Type'}</Label>
                         <Select value={tank.type} onValueChange={(val: any) => updateTank(sIdx, tIdx, { type: val })}>
                             <SelectTrigger className="h-9 text-xs">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="FRP">FRP</SelectItem>
-                                <SelectItem value="CONCRETE">Concrete</SelectItem>
+                                {farmCategory === 'FARMS' ? (
+                                    <>
+                                        <SelectItem value="EARTHEN">Earthen</SelectItem>
+                                        <SelectItem value="SHEETED">Sheeted</SelectItem>
+                                    </>
+                                ) : (
+                                    <>
+                                        <SelectItem value="FRP">FRP</SelectItem>
+                                        <SelectItem value="CONCRETE">Concrete</SelectItem>
+                                    </>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
@@ -472,7 +482,7 @@ const EditFarm = () => {
 
                 <div className={`grid ${tank.shape === 'CIRCLE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Height (m)</Label>
+                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">{farmCategory === 'FARMS' ? 'Depth (m)' : 'Height (m)'}</Label>
                         <Input
                             type="number"
                             min="0"
@@ -584,7 +594,7 @@ const EditFarm = () => {
 
             const { error: farmError } = await supabase
                 .from('farms')
-                .update({ name: farmName, category: farmCategory })
+                .update({ name: farmName, category: farmCategory === 'FARMS' ? 'FARM' : farmCategory })
                 .eq('id', farmId);
             if (farmError) throw farmError;
 
@@ -714,6 +724,7 @@ const EditFarm = () => {
                                     <SelectContent>
                                         <SelectItem value="LRT">LRT (Larval Rearing)</SelectItem>
                                         <SelectItem value="MATURATION">Maturation</SelectItem>
+                                        <SelectItem value="FARMS">Farm</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -793,7 +804,7 @@ const EditFarm = () => {
                                                         onClick={() => addTank(sIdx)}
                                                         className="h-7 sm:h-8 px-2 border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 font-bold text-[9px] sm:text-[10px] rounded-lg transition-all"
                                                     >
-                                                        <Plus className="w-3 h-3 mr-1" /> TANK
+                                                        <Plus className="w-3 h-3 mr-1" /> {farmCategory === 'FARMS' ? 'POND' : 'TANK'}
                                                     </Button>
                                                 )}
                                             </div>
