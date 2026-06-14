@@ -4600,6 +4600,7 @@ const RecordActivity = () => {
             comments={comments}
             onCommentsChange={setComments}
             isPlanningMode={isPlanningMode}
+            sourceTankId={tankId}
             stockedTankIds={stockedTankIds}
             fetchLatestPopulation={fetchLatestPopulation}
             farmId={selectedFarmId || activeFarmId || ''}
