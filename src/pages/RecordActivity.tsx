@@ -4070,7 +4070,7 @@ const RecordActivity = () => {
                                   }
 
                                   // 3. Fallback for other activities
-                                  return isFarmModule || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                                  return activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                                 })
                                 .map((t: any) => {
                                   const section = availableTanks.find(s => s.tanks.some((tk:any) => tk.id === t.id));
@@ -4145,7 +4145,7 @@ const RecordActivity = () => {
                             }
 
                             // 3. Fallback for other activities
-                            return isFarmModule || activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
+                            return activity === 'Sourcing & Mating' || editId || activeFarmCategory === 'MATURATION' || stockedTankIds.includes(t.id);
                           })
                           .map((t: any) => (
                         <div 

@@ -85,6 +85,20 @@ const TankShiftingForm = ({
     }
   }, [totalShifted, remainingInSource]);
 
+  // Auto-clear destination if it matches the selected source tank
+  useEffect(() => {
+    const sId = sourceTankId || data.sourceTankId;
+    if (sId) {
+      const hasMatchingDest = destinations.some(d => d.tankId === sId);
+      if (hasMatchingDest) {
+        const cleanedDests = destinations.map(d => 
+          d.tankId === sId ? { ...d, tankId: '', currentPopulation: '0' } : d
+        );
+        updateDestinations(cleanedDests);
+      }
+    }
+  }, [sourceTankId, data.sourceTankId, destinations]);
+
   return (
     <div className="glass-card rounded-2xl p-4 space-y-6 animate-fade-in-up">
       <div className="flex items-center justify-between border-b border-border pb-2">
@@ -174,7 +188,10 @@ const TankShiftingForm = ({
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     {availableTanks.find(s => s.id === dest.sectionId)?.tanks
-                      .filter((tank: any) => tank.id !== sourceTankId)
+                      .filter((tank: any) => {
+                        const sId = (sourceTankId || data.sourceTankId || '').toString();
+                        return tank.id.toString() !== sId;
+                      })
                       .map((tank: any) => (
                       <SelectItem key={tank.id} value={tank.id} className="text-xs">
                         {tank.name}

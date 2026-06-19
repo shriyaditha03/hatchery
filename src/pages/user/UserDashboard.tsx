@@ -421,13 +421,13 @@ const UserDashboard = () => {
         } else if (activeModule.toUpperCase() === 'FARMS') {
             return [
                  { name: 'Stocking', icon: Layers, route: '/user/activity/stocking', color: 'bg-emerald-100 text-emerald-600' },
-                 { name: 'Animals Sampling & Observation', icon: Eye, route: '/user/activity/animals-sampling', color: 'bg-purple-100 text-purple-600' },
                  { name: 'Feed', icon: Utensils, route: '/user/activity/feed', color: 'bg-orange-100 text-orange-600' },
-                 { name: 'Check Tray', icon: Search, route: '/user/activity/check-tray', color: 'bg-yellow-100 text-yellow-600' },
                  { name: 'Treatment', icon: Beaker, route: '/user/activity/treatment', color: 'bg-blue-100 text-blue-600' },
                  { name: 'Water Quality', icon: Waves, route: '/user/activity/water', color: 'bg-cyan-100 text-cyan-600' },
-                 { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
+                 { name: 'Animals Sampling & Observation', icon: Eye, route: '/user/activity/animals-sampling', color: 'bg-purple-100 text-purple-600' },
                  { name: 'Tank Shift', icon: MoveRight, route: '/user/activity/shifting', color: 'bg-indigo-100 text-indigo-600' },
+                 { name: 'Check Tray', icon: Search, route: '/user/activity/check-tray', color: 'bg-yellow-100 text-yellow-600' },
+                 { name: 'Harvest', icon: Scissors, route: '/user/activity/harvest', color: 'bg-amber-100 text-amber-600' },
                  { name: 'Water Management', icon: Droplets, route: '/user/activity/water-management', color: 'bg-sky-100 text-sky-600' }
             ];
         }

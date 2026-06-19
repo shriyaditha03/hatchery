@@ -137,13 +137,13 @@ const OwnerDashboard = () => {
 
     const farmActivities = [
         { name: 'Stocking', icon: Layers, route: '/owner/reports/stocking', color: 'bg-emerald-100 text-emerald-600' },
-        { name: 'Animals Sampling & Observation', icon: Eye, route: '/owner/reports/animals-sampling', color: 'bg-purple-100 text-purple-600' },
         { name: 'Feed', icon: Utensils, route: '/owner/reports/feed', color: 'bg-orange-100 text-orange-600' },
-        { name: 'Check Tray', icon: Search, route: '/owner/reports/check-tray', color: 'bg-yellow-100 text-yellow-600' },
         { name: 'Treatment', icon: Beaker, route: '/owner/reports/treatment', color: 'bg-blue-100 text-blue-600' },
         { name: 'Water Quality', icon: Waves, route: '/owner/reports/water', color: 'bg-cyan-100 text-cyan-600' },
-        { name: 'Harvest', icon: Scissors, route: '/owner/reports/harvest', color: 'bg-amber-100 text-amber-600' },
+        { name: 'Animals Sampling & Observation', icon: Eye, route: '/owner/reports/animals-sampling', color: 'bg-purple-100 text-purple-600' },
         { name: 'Tank Shift', icon: MoveRight, route: '/owner/reports/shifting', color: 'bg-indigo-100 text-indigo-600' },
+        { name: 'Check Tray', icon: Search, route: '/owner/reports/check-tray', color: 'bg-yellow-100 text-yellow-600' },
+        { name: 'Harvest', icon: Scissors, route: '/owner/reports/harvest', color: 'bg-amber-100 text-amber-600' },
         { name: 'Water Management', icon: Droplets, route: '/owner/reports/water management', color: 'bg-blue-100 text-blue-700' },
     ];
 
