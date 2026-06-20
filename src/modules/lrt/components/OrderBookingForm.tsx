@@ -14,6 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { format, parse, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { decode as decodePlusCode, isValid as isValidPlusCode, isFull as isFullPlusCode } from '@erikmichelson/open-location-code-ts';
+
 
 interface DatePickerProps {
   value: string;
@@ -158,6 +160,8 @@ export const OrderBookingForm = ({
   const [isUserEdited, setIsUserEdited] = useState(isEditMode || !!data.bookingId);
   const [mapOpen, setMapOpen] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [plusCodeLoading, setPlusCodeLoading] = useState(false);
+
 
   useEffect(() => {
     if (isEditMode) {
@@ -288,6 +292,63 @@ export const OrderBookingForm = ({
     }));
     toast.info(`Plot area detected: ${area.toFixed(2)} sqm`);
   }, [onDataChange]);
+
+  const handlePlusCodeFetch = async () => {
+    const trimmedCode = (data.plusCode || '').trim();
+    if (!trimmedCode) {
+      toast.error("Please enter a Google Plus Code");
+      return;
+    }
+
+    if (!isValidPlusCode(trimmedCode)) {
+      toast.error("Invalid Google Plus Code format");
+      return;
+    }
+
+    if (!isFullPlusCode(trimmedCode)) {
+      toast.error("Please enter a full Plus Code (including prefix, e.g. 7M8J6RP9+5M)");
+      return;
+    }
+
+    try {
+      setPlusCodeLoading(true);
+      const decoded = decodePlusCode(trimmedCode);
+      const lat = decoded.latitudeCenter;
+      const lng = decoded.longitudeCenter;
+
+      // Update coordinates
+      onDataChange((prev: any) => ({
+        ...prev,
+        latitude: lat,
+        longitude: lng
+      }));
+
+      // Fetch address info
+      await handleLocationSelect(lat, lng);
+
+      // Compute dimensions in meters
+      const length = (decoded.latitudeHi - decoded.latitudeLo) * 111132;
+      const width = (decoded.longitudeHi - decoded.longitudeLo) * 111132 * Math.cos(lat * Math.PI / 180);
+      const area = length * width;
+
+      onDataChange((prev: any) => ({
+        ...prev,
+        latitude: lat,
+        longitude: lng,
+        plotArea: Math.round(area * 100) / 100,
+        plotLength: Math.round(length * 100) / 100,
+        plotWidth: Math.round(width * 100) / 100
+      }));
+
+      toast.success("Resolved address and dimensions from Plus Code successfully!");
+    } catch (error: any) {
+      console.error("Plus Code resolution failed:", error);
+      toast.error("Failed to decode Plus Code or fetch location data");
+    } finally {
+      setPlusCodeLoading(false);
+    }
+  };
+
 
   // Pricing calculations and default lists initiation
   const netQtyVal = parseFloat(data.netQty || '0');
@@ -493,54 +554,80 @@ export const OrderBookingForm = ({
           </div>
 
           <div className="space-y-1.5 md:col-span-2 pt-2 border-t border-dashed">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Hatchery Location / Address *" : "Farm Location / Address *"}</Label>
-              <Dialog open={mapOpen} onOpenChange={setMapOpen}>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 rounded-xl text-[10px] uppercase font-bold">
-                    <LocateFixed className="w-3.5 h-3.5" /> Pick on Map
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
-                  <DialogHeader className="p-6 pb-2">
-                    <DialogTitle className="text-2xl font-bold flex items-center gap-3">
-                      <LocateFixed className="w-6 h-6 text-primary" />
-                      {isMaturation ? "Select Hatchery Location" : "Select Farm Location"}
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
-                    <MapPicker
-                      onLocationSelect={handleLocationSelect}
-                      onPlotAreaSelect={handlePlotAreaSelect}
-                    />
-                  </div>
-                  <div className="p-4 bg-card flex justify-end gap-3">
-                    <Button type="button" variant="outline" className="rounded-xl" onClick={() => setMapOpen(false)}>Cancel</Button>
-                    <Button type="button" className="px-8 shadow-lg shadow-primary/20 rounded-xl" onClick={() => setMapOpen(false)}>Confirm Location</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
+            <Label className="text-xs font-bold text-slate-700">{isMaturation ? "Hatchery Location & Details *" : "Farm Location & Details *"}</Label>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-200/60">
+              {/* Option 1: Pick on Map */}
+              <div className="space-y-2 flex flex-col justify-between">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Option 1: Pick on Map</Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Click to visually select location on map and trace boundaries.</p>
+                </div>
+                <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+                  <DialogTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full h-11 gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 rounded-xl text-xs font-bold mt-2">
+                      <LocateFixed className="w-3.5 h-3.5" /> Pick on Map
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
+                    <DialogHeader className="p-6 pb-2">
+                      <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                        <LocateFixed className="w-6 h-6 text-primary" />
+                        {isMaturation ? "Select Hatchery Location" : "Select Farm Location"}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
+                      <MapPicker
+                        onLocationSelect={handleLocationSelect}
+                        onPlotAreaSelect={handlePlotAreaSelect}
+                      />
+                    </div>
+                    <div className="p-4 bg-card flex justify-end gap-3">
+                      <Button type="button" variant="outline" className="rounded-xl" onClick={() => setMapOpen(false)}>Cancel</Button>
+                      <Button type="button" className="px-8 shadow-lg shadow-primary/20 rounded-xl" onClick={() => setMapOpen(false)}>Confirm Location</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
 
+              {/* Option 2: Plus Code */}
+              <div className="space-y-2 flex flex-col justify-between">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Option 2: Google Plus Code</Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Enter a full Plus Code to decode coordinates, address, and dimensions.</p>
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    type="text"
+                    value={data.plusCode || ''}
+                    onChange={e => handleChange('plusCode', e.target.value)}
+                    placeholder="e.g. 8FVC9G8F+VX"
+                    className="h-11 border-slate-200 bg-background rounded-xl font-bold flex-1 text-xs"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handlePlusCodeFetch}
+                    disabled={plusCodeLoading || !(data.plusCode || '').trim()}
+                    className="h-11 px-4 rounded-xl text-xs font-bold shadow-md shadow-primary/10"
+                  >
+                    {plusCodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
+            <Label className="text-xs font-bold text-slate-700">Full Address {addressLoading && <Loader2 className="w-3 h-3 animate-spin text-primary inline ml-1" />}</Label>
             <Textarea
               value={data.farmLocation || ''}
               onChange={e => handleChange('farmLocation', e.target.value)}
               placeholder={addressLoading ? "Fetching address..." : "Complete address with landmark, city, etc."}
               rows={2}
-              className="rounded-xl border-slate-200 resize-none"
+              className="rounded-xl border-slate-200 resize-none animate-in fade-in"
             />
           </div>
 
-          <div className="space-y-1.5 md:col-span-2">
-            <Label className="text-xs font-bold text-slate-700">Plus Code (e.g. 8FVC9G8F+VX) <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-            <Input
-              type="text"
-              value={data.plusCode || ''}
-              onChange={e => handleChange('plusCode', e.target.value)}
-              placeholder="e.g. 8FVC9G8F+VX"
-              className="h-11 border-slate-200 rounded-xl font-bold"
-            />
-          </div>
 
           {!isMaturation && (
             <div className="grid grid-cols-3 gap-3 bg-muted/20 p-3 rounded-xl border border-dashed md:col-span-2 animate-in fade-in slide-in-from-top-1">

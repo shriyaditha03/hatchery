@@ -1550,12 +1550,14 @@ const RecordActivity = () => {
   // Auto-set selectionScope to 'all' for Maturation Stocking
   // Auto-set selectionScope to 'custom' for Maturation Observation
   useEffect(() => {
-    if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
+    if (activity === 'Animals Sampling & Observation' || activity === 'Check Tray' || activity === 'Water Quality') {
+      setSelectionScope('single');
+    } else if (activeFarmCategory === 'MATURATION' && activity === 'Stocking' && !editId) {
       setSelectionScope('all');
     } else if (activeFarmCategory === 'MATURATION' && activity === 'Observation' && !editId) {
       setSelectionScope('custom');
     }
-  }, [activeFarmCategory, activity]);
+  }, [activeFarmCategory, activity, editId]);
 
   // Feed fields
   const [feedType, setFeedType] = useState('');
@@ -3953,7 +3955,7 @@ const RecordActivity = () => {
                     {type ? 'Location & Scope' : 'Location & Activity'}
                   </h2>
                   
-                  {!editId && (
+                  {!editId && activity !== 'Animals Sampling & Observation' && activity !== 'Check Tray' && activity !== 'Water Quality' && (
                     <Tabs value={selectionScope} onValueChange={(val: any) => setSelectionScope(val)} className="h-8">
                       <TabsList className="bg-muted/50 h-8 p-0.5">
                         <TabsTrigger value="single" className="text-[10px] px-2 h-7">Single</TabsTrigger>

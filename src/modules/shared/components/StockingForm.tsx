@@ -886,16 +886,45 @@ const StockingForm = ({
             </Select>
           </div>
 
-          {/* 5. Stocking Number (Population) */}
+          {/* 5. Number of Animals Stocked in Million */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Stocking Number (Population) *</Label>
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Number of Animals Stocked in Million *</Label>
+            <Input
+              type="number" min="0" step="any" value={data.naupliiStocked || ''}
+              onChange={e => {
+                const val = e.target.value;
+                handleChange('naupliiStocked', val);
+                // Auto-fill total stocking number (millions → individual count)
+                const millions = parseFloat(val);
+                handleChange('tankStockingNumber', isNaN(millions) ? '' : String(Math.round(millions * 1_000_000)));
+              }}
+              placeholder="e.g. 2"
+              className="h-11"
+            />
+          </div>
+
+          {/* 6. Stocking Number (Population) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Stocking Number (Population) *</Label>
+              {data.naupliiStocked && (
+                <span className="text-[10px] font-bold text-primary/70 bg-primary/8 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  Auto-filled
+                </span>
+              )}
+            </div>
             <Input
               type="number" min="0"
               value={data.tankStockingNumber || ''}
               onChange={e => handleChange('tankStockingNumber', e.target.value)}
               placeholder="0"
-              className="h-11"
+              className={`h-11 ${data.naupliiStocked ? 'bg-primary/5 border-primary/30 font-bold text-primary' : ''}`}
             />
+            {data.naupliiStocked && (
+              <p className="text-[10px] text-muted-foreground ml-1">
+                = {parseFloat(data.naupliiStocked || '0').toLocaleString()} M × 1,000,000
+              </p>
+            )}
           </div>
 
         </div>

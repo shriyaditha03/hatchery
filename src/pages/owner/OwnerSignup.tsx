@@ -247,9 +247,21 @@ const OwnerSignup = () => {
     const isHatcherySelected = selectedModules.includes('LRT') || selectedModules.includes('MATURATION');
     
     let entityLabel = "Farm Name";
-    let entityPlaceholder = "e.g. Sunrise Aquaculture Group";
+    let entityPlaceholder = "e.g. Sunrise Farm";
     let pageTitle = "Farm Registration";
     let pageSubtitle = "Create your Farm Account";
+
+    if (isHatcherySelected && !isFarmSelected) {
+        entityLabel = "Hatchery Name";
+        entityPlaceholder = "e.g. Sunrise Hatchery";
+        pageTitle = "Hatchery Registration";
+        pageSubtitle = "Create your Hatchery Account";
+    } else if (isHatcherySelected && isFarmSelected) {
+        entityLabel = "Hatchery & Farm Group Name";
+        entityPlaceholder = "e.g. Sunrise Aquaculture Group";
+        pageTitle = "Aquaculture Registration";
+        pageSubtitle = "Create your Aquaculture Account";
+    }
 
     return (
         <div className="min-h-screen ocean-gradient flex items-center justify-center p-4">
@@ -262,7 +274,7 @@ const OwnerSignup = () => {
                     <h1 className="text-2xl font-bold text-foreground">
                         {step === 1 ? "Select Modules" : pageTitle}
                     </h1>
-                    <p className="text-muted-foreground text-sm">
+                    <p className="text-muted-foreground text-sm text-center">
                         {step === 1 ? "Choose which modules will be active for your account" : pageSubtitle}
                     </p>
                 </div>
@@ -285,11 +297,15 @@ const OwnerSignup = () => {
                                 <div className="flex-1 space-y-1">
                                     <div className="flex justify-between items-center">
                                         <h3 className="font-bold text-base text-foreground">Farm / Culture</h3>
-                                        {selectedModules.includes('FARMS') && (
-                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                                            selectedModules.includes('FARMS') 
+                                                ? 'border-primary bg-primary text-white scale-110 shadow-sm' 
+                                                : 'border-muted-foreground/30 bg-transparent'
+                                        }`}>
+                                            {selectedModules.includes('FARMS') && (
                                                 <Check className="w-3 h-3 stroke-[3]" />
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Activate the standalone Farm/Culture module to configure customized grow-out operations, pond tracking, and site management.
@@ -318,11 +334,15 @@ const OwnerSignup = () => {
                                 <div className="flex-1 space-y-1">
                                     <div className="flex justify-between items-center">
                                         <h3 className="font-bold text-base text-foreground">Larval Rearing (LRT)</h3>
-                                        {selectedModules.includes('LRT') && (
-                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                                            selectedModules.includes('LRT') 
+                                                ? 'border-primary bg-primary text-white scale-110 shadow-sm' 
+                                                : 'border-muted-foreground/30 bg-transparent'
+                                        }`}>
+                                            {selectedModules.includes('LRT') && (
                                                 <Check className="w-3 h-3 stroke-[3]" />
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Track larval cycles, water quality metrics, feeding regimes, Artemia/Algae preparation, stocking, observations, and shifting activities.
@@ -345,11 +365,15 @@ const OwnerSignup = () => {
                                 <div className="flex-1 space-y-1">
                                     <div className="flex justify-between items-center">
                                         <h3 className="font-bold text-base text-foreground">Maturation</h3>
-                                        {selectedModules.includes('MATURATION') && (
-                                            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-white">
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                                            selectedModules.includes('MATURATION') 
+                                                ? 'border-primary bg-primary text-white scale-110 shadow-sm' 
+                                                : 'border-muted-foreground/30 bg-transparent'
+                                        }`}>
+                                            {selectedModules.includes('MATURATION') && (
                                                 <Check className="w-3 h-3 stroke-[3]" />
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Advanced broodstock tracking, sourcing & mating, spawning logs, egg count records, nauplii harvest entries, and sales tracking.

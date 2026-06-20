@@ -13,6 +13,8 @@ import { MapPicker } from '@/modules/shared/components/MapPicker';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Layers, Plus, Copy, Trash2, ArrowRight, LocateFixed, MapPin, ChevronUp, ChevronDown, Utensils, Waves, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { decode, isValid, isFull } from '@erikmichelson/open-location-code-ts';
+
 
 interface TankConfig {
     name: string;
@@ -165,8 +167,48 @@ const CreateFarm = () => {
         plotLength: 0,
         plotWidth: 0
     });
+    const [existingFarms, setExistingFarms] = useState<any[]>([]);
     const [addressLoading, setAddressLoading] = useState(false);
     const [mapOpen, setMapOpen] = useState(false);
+    const [plusCodeInput, setPlusCodeInput] = useState('');
+    const [plusCodeLoading, setPlusCodeLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchExistingFarms = async () => {
+            if (!user?.hatchery_id) return;
+            try {
+                const { data, error } = await supabase
+                    .from('farms')
+                    .select('*')
+                    .eq('hatchery_id', user.hatchery_id);
+                if (error) throw error;
+                if (data) {
+                    setExistingFarms(data);
+                }
+            } catch (err) {
+                console.error('Error fetching existing farms:', err);
+            }
+        };
+        fetchExistingFarms();
+    }, [user?.hatchery_id]);
+
+    const handleCopyAddress = (sourceFarm: any) => {
+        setAddress({
+            plotNumber: '',
+            areaName: '',
+            street: '',
+            city: '',
+            state: '',
+            pincode: '',
+            fullAddress: sourceFarm.address || '',
+            latitude: sourceFarm.latitude || null,
+            longitude: sourceFarm.longitude || null,
+            plotArea: sourceFarm.plot_area_sqm || 0,
+            plotLength: sourceFarm.plot_length_m || 0,
+            plotWidth: sourceFarm.plot_width_m || 0
+        });
+        toast.success(`Copied address and location from "${sourceFarm.name}"`);
+    };
 
     const handleLocationSelect = useCallback(async (lat: number, lng: number, providedAddress?: string) => {
         setAddress(prev => ({
@@ -251,6 +293,56 @@ const CreateFarm = () => {
         }));
         toast.info(`Plot area detected: ${area.toFixed(2)} sqm`);
     }, []);
+
+    const handlePlusCodeFetch = async () => {
+        const trimmedCode = plusCodeInput.trim();
+        if (!trimmedCode) {
+            toast.error("Please enter a Google Plus Code");
+            return;
+        }
+
+        if (!isValid(trimmedCode)) {
+            toast.error("Invalid Google Plus Code format");
+            return;
+        }
+
+        if (!isFull(trimmedCode)) {
+            toast.error("Please enter a full Plus Code (including prefix, e.g. 7M8J6RP9+5M)");
+            return;
+        }
+
+        try {
+            setPlusCodeLoading(true);
+            const decoded = decode(trimmedCode);
+            const lat = decoded.latitudeCenter;
+            const lng = decoded.longitudeCenter;
+
+            // Fetch address information using reverse geocoding
+            await handleLocationSelect(lat, lng);
+
+            // Compute dimensions in meters using 1 degree ~ 111,132 meters
+            const length = (decoded.latitudeHi - decoded.latitudeLo) * 111132;
+            const width = (decoded.longitudeHi - decoded.longitudeLo) * 111132 * Math.cos(lat * Math.PI / 180);
+            const area = length * width;
+
+            setAddress(prev => ({
+                ...prev,
+                latitude: lat,
+                longitude: lng,
+                plotArea: Math.round(area * 100) / 100,
+                plotLength: Math.round(length * 100) / 100,
+                plotWidth: Math.round(width * 100) / 100
+            }));
+
+            toast.success("Resolved address and dimensions from Plus Code successfully!");
+        } catch (error: any) {
+            console.error("Plus code resolution failed:", error);
+            toast.error("Failed to decode Plus Code or fetch location data");
+        } finally {
+            setPlusCodeLoading(false);
+        }
+    };
+
 
     const calculateTank = (tank: TankConfig): { volume: number, area: number } => {
         let volume = 0;
@@ -485,6 +577,89 @@ const CreateFarm = () => {
         });
     };
 
+    const updateWaterTankCount = (sIdx: number, type: 'OPEN' | 'CLOSED', count: number) => {
+        setSections(prev => {
+            const newSections = [...prev];
+            const currentTanks = newSections[sIdx].tanks;
+            const targetTanks = currentTanks.filter(t => t.waterTankType === type);
+            const otherTanks = currentTanks.filter(t => t.waterTankType !== type);
+
+            if (count > targetTanks.length) {
+                const additionalCount = count - targetTanks.length;
+                const sectionPrefix = getTankPrefix(newSections[sIdx], sIdx);
+                const modulePrefix = farmCategory === 'MATURATION' ? 'Mat' : 'LRT';
+                const typeLabel = type === 'OPEN' ? 'Open' : 'Close';
+
+                const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => {
+                    const newName = `${modulePrefix}_${typeLabel}_Storage_${sectionPrefix}_ST${targetTanks.length + i + 1}`;
+                    return {
+                        name: newName,
+                        waterTankType: type,
+                        usageCategory: 'Storage',
+                        usageOther: '',
+                        waterType: 'SEA',
+                        type: (targetTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
+                        shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
+                        length: 0,
+                        width: 0,
+                        height: 0,
+                        radius: 0,
+                        volume: 0,
+                        area: 0
+                    };
+                });
+                newSections[sIdx].tanks = [...currentTanks, ...additionalTanks];
+            } else if (count < targetTanks.length) {
+                const keepCount = Math.max(0, count);
+                const keptTargetTanks = targetTanks.slice(0, keepCount);
+                newSections[sIdx].tanks = [...otherTanks, ...keptTargetTanks];
+            }
+
+            return newSections;
+        });
+    };
+
+    const updateAnimalTankCount = (sIdx: number, gender: 'MALE' | 'FEMALE', count: number) => {
+        setSections(prev => {
+            const newSections = [...prev];
+            const currentTanks = newSections[sIdx].tanks;
+            const targetTanks = currentTanks.filter(t => t.gender === gender);
+            const otherTanks = currentTanks.filter(t => t.gender !== gender);
+
+            if (count > targetTanks.length) {
+                const additionalCount = count - targetTanks.length;
+                const prefix = getTankPrefix(newSections[sIdx], sIdx);
+                const farmPrefix = getFarmPrefix(farmName);
+                const genderCode = gender === 'MALE' ? 'MT' : 'FT';
+
+                const additionalTanks = Array.from({ length: additionalCount }).map((_, i) => {
+                    const name = farmCategory === 'MATURATION'
+                        ? `${farmPrefix}_${prefix}_${genderCode}${targetTanks.length + i + 1}`
+                        : `${prefix}_${genderCode}${targetTanks.length + i + 1}`;
+                    return {
+                        name: name,
+                        gender: gender,
+                        type: (targetTanks[0]?.type || 'FRP') as 'FRP' | 'CONCRETE',
+                        shape: 'RECTANGLE' as 'CIRCLE' | 'RECTANGLE',
+                        length: 0,
+                        width: 0,
+                        height: 0,
+                        radius: 0,
+                        volume: 0,
+                        area: 0
+                    };
+                });
+                newSections[sIdx].tanks = [...currentTanks, ...additionalTanks];
+            } else if (count < targetTanks.length) {
+                const keepCount = Math.max(0, count);
+                const keptTargetTanks = targetTanks.slice(0, keepCount);
+                newSections[sIdx].tanks = [...otherTanks, ...keptTargetTanks];
+            }
+
+            return newSections;
+        });
+    };
+
     const updateTank = (sIdx: number, tIdx: number, updates: Partial<TankConfig>) => {
         setSections(prev => {
             const newSections = [...prev];
@@ -559,6 +734,15 @@ const CreateFarm = () => {
         });
         setCollapsedSections(prev => prev.filter(idx => idx !== sIdx));
         toast.success(`Duplicated tank ${count} times`);
+    };
+
+    const removeTank = (sIdx: number, tIdx: number) => {
+        setSections(prev => {
+            const newSections = [...prev];
+            newSections[sIdx].tanks = newSections[sIdx].tanks.filter((_, idx) => idx !== tIdx);
+            return newSections;
+        });
+        toast.info("Tank removed");
     };
 
     const toggleSection = (sIdx: number) => {
@@ -686,8 +870,18 @@ const CreateFarm = () => {
                             onChange={(e) => updateTank(sIdx, tIdx, { name: e.target.value })}
                         />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                         <DuplicateTankPopover onDuplicate={(count) => duplicateTank(sIdx, tIdx, count)} />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeTank(sIdx, tIdx)}
+                            className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Delete Tank"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
                         {tank.gender && (
                             <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${tank.gender === 'MALE' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
                                 {tank.gender}
@@ -1017,32 +1211,96 @@ const CreateFarm = () => {
                                     <h3 className="font-semibold text-lg flex items-center gap-2">
                                         <MapPin className="w-5 h-5 text-primary" /> Location & Address
                                     </h3>
-                                    <Dialog open={mapOpen} onOpenChange={setMapOpen}>
-                                        <DialogTrigger asChild>
-                                            <Button type="button" variant="outline" size="sm" className="gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
-                                                <LocateFixed className="w-4 h-4" /> Pick on Map
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
-                                            <DialogHeader className="p-6 pb-2">
-                                                <DialogTitle className="text-2xl font-bold flex items-center gap-3">
-                                                    <LocateFixed className="w-6 h-6 text-primary" />
-                                                    Select Location & Plot Area
-                                                </DialogTitle>
-                                            </DialogHeader>
-                                            <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
-                                                <MapPicker
-                                                    onLocationSelect={handleLocationSelect}
-                                                    onPlotAreaSelect={handlePlotAreaSelect}
-                                                />
-                                            </div>
-                                            <div className="p-4 bg-card flex justify-end gap-3">
-                                                <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
-                                                <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
-                                            </div>
-                                        </DialogContent>
-                                    </Dialog>
                                 </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/10 p-4 rounded-2xl border border-muted/50">
+                                    <div className="space-y-2 flex flex-col justify-between">
+                                        <div>
+                                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Option 1: Pick on Map</Label>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">Click to visually select location and trace plot boundaries directly on a map.</p>
+                                        </div>
+                                        <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+                                            <DialogTrigger asChild>
+                                                <Button type="button" variant="outline" className="w-full h-11 gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 rounded-xl font-bold text-xs mt-2">
+                                                    <LocateFixed className="w-4 h-4" /> Pick on Map
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl">
+                                                <DialogHeader className="p-6 pb-2">
+                                                    <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                                                        <LocateFixed className="w-6 h-6 text-primary" />
+                                                        Select Location & Plot Area
+                                                    </DialogTitle>
+                                                </DialogHeader>
+                                                <div className="flex-1 min-h-0 relative bg-slate-50 border-y border-slate-100">
+                                                    <MapPicker
+                                                        onLocationSelect={handleLocationSelect}
+                                                        onPlotAreaSelect={handlePlotAreaSelect}
+                                                    />
+                                                </div>
+                                                <div className="p-4 bg-card flex justify-end gap-3">
+                                                    <Button type="button" variant="outline" onClick={() => setMapOpen(false)}>Cancel</Button>
+                                                    <Button type="button" className="px-8 shadow-lg shadow-primary/20" onClick={() => setMapOpen(false)}>Confirm Location</Button>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+                                    </div>
+
+                                    <div className="space-y-2 flex flex-col justify-between">
+                                        <div>
+                                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Option 2: Enter Google Plus Code</Label>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">Enter a full Plus Code to auto-fill address and plot dimensions instantly.</p>
+                                        </div>
+                                        <div className="flex gap-2 mt-2">
+                                            <Input
+                                                type="text"
+                                                placeholder="e.g. 7M8J6RP9+5M"
+                                                value={plusCodeInput}
+                                                onChange={(e) => setPlusCodeInput(e.target.value)}
+                                                className="h-11 text-xs rounded-xl bg-background border-muted shadow-none flex-1 font-bold tracking-wide"
+                                            />
+                                            <Button
+                                                type="button"
+                                                onClick={handlePlusCodeFetch}
+                                                disabled={plusCodeLoading || !plusCodeInput.trim()}
+                                                className="h-11 px-4 rounded-xl text-xs font-bold shadow-md shadow-primary/10"
+                                            >
+                                                {plusCodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                {existingFarms.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1.5 py-1 text-xs bg-muted/20 p-2.5 rounded-xl border border-dashed border-muted-foreground/15">
+                                        <span className="text-muted-foreground font-bold text-[10px] uppercase tracking-wider block w-full mb-1">Quick copy address from existing setup:</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {existingFarms.map(f => {
+                                                const fCat = f.category || 'LRT';
+                                                const displayCat = fCat === 'FARM' ? 'Farm' : fCat;
+                                                const isOpposite = (farmCategory === 'LRT' && fCat === 'MATURATION') || 
+                                                                   (farmCategory === 'MATURATION' && fCat === 'LRT');
+                                                return (
+                                                    <button
+                                                        key={f.id}
+                                                        type="button"
+                                                        onClick={() => handleCopyAddress(f)}
+                                                        className={`px-3 py-1 rounded-full border text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer select-none ${
+                                                            isOpposite 
+                                                                ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 hover:scale-102 active:scale-95' 
+                                                                : 'bg-muted border-muted-foreground/15 text-muted-foreground hover:bg-muted/80 active:scale-95'
+                                                        }`}
+                                                        title={`Copy address & location from ${f.name} (${displayCat})`}
+                                                    >
+                                                        <Copy className="w-2.5 h-2.5" />
+                                                        {f.name} ({displayCat})
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-2 relative">
                                     <Label htmlFor="fullAddress" className="text-muted-foreground text-xs uppercase font-bold flex items-center gap-2">
@@ -1143,46 +1401,8 @@ const CreateFarm = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0 flex-wrap">
-                                        <div onClick={(e) => e.stopPropagation()} className="flex gap-2 items-center flex-wrap">
-                                            {section.type === 'ANIMAL' ? (
-                                                <div className="flex gap-1.5 md:gap-2 flex-wrap">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => addTank(sIdx, 'MALE')}
-                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Male
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => addTank(sIdx, 'FEMALE')}
-                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Female
-                                                    </Button>
-                                                </div>
-                                            ) : section.type === 'WATER' ? (
-                                                <div className="flex gap-1.5 md:gap-2 flex-wrap">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => addTank(sIdx, 'OPEN' as any)}
-                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-cyan-200 bg-cyan-50 text-cyan-600 hover:bg-cyan-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Open
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => addTank(sIdx, 'CLOSED' as any)}
-                                                        className="h-8 sm:h-9 px-2 sm:px-3 border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5 mr-1" /> Closed
-                                                    </Button>
-                                                </div>
-                                            ) : (
+                                        {section.type !== 'ANIMAL' && section.type !== 'WATER' && (
+                                            <div onClick={(e) => e.stopPropagation()} className="flex gap-2 items-center flex-wrap">
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -1191,20 +1411,90 @@ const CreateFarm = () => {
                                                 >
                                                     <Plus className="w-3.5 h-3.5 mr-1" /> {farmCategory === 'FARMS' ? 'Pond' : 'Tank'}
                                                 </Button>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-1 bg-muted/40 p-0.5 sm:p-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
-                                            <TankCountInput
-                                                count={section.tanks.length}
-                                                onChange={(val) => updateTankCount(sIdx, val)}
-                                            />
-                                        </div>
+                                            </div>
+                                        )}
+                                        {section.type === 'WATER' ? (
+                                              <div className="flex items-center gap-2 bg-muted/40 px-2 py-0.5 sm:py-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
+                                                  <div className="flex items-center gap-1">
+                                                      <span className="text-[9px] font-black text-cyan-600 uppercase select-none">Open</span>
+                                                      <TankCountInput
+                                                          count={section.tanks.filter(t => t.waterTankType === 'OPEN').length}
+                                                          onChange={(val) => updateWaterTankCount(sIdx, 'OPEN', val)}
+                                                      />
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => addTank(sIdx, 'OPEN' as any)}
+                                                          className="w-5 h-5 rounded-full bg-cyan-50 text-cyan-600 hover:bg-cyan-100 flex items-center justify-center font-bold transition-all active:scale-90 border border-cyan-200 flex-shrink-0"
+                                                          title="Add Open Tank"
+                                                      >
+                                                          <Plus className="w-2.5 h-2.5" />
+                                                      </button>
+                                                  </div>
+                                                  <div className="h-4 w-px bg-muted-foreground/20" />
+                                                  <div className="flex items-center gap-1">
+                                                      <span className="text-[9px] font-black text-indigo-600 uppercase select-none">Closed</span>
+                                                      <TankCountInput
+                                                          count={section.tanks.filter(t => t.waterTankType === 'CLOSED').length}
+                                                          onChange={(val) => updateWaterTankCount(sIdx, 'CLOSED', val)}
+                                                      />
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => addTank(sIdx, 'CLOSED' as any)}
+                                                          className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center font-bold transition-all active:scale-90 border border-indigo-200 flex-shrink-0"
+                                                          title="Add Closed Tank"
+                                                      >
+                                                          <Plus className="w-2.5 h-2.5" />
+                                                      </button>
+                                                  </div>
+                                              </div>
+                                          ) : section.type === 'ANIMAL' ? (
+                                              <div className="flex items-center gap-2 bg-muted/40 px-2 py-0.5 sm:py-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
+                                                  <div className="flex items-center gap-1">
+                                                      <span className="text-[9px] font-black text-blue-600 uppercase select-none">Male</span>
+                                                      <TankCountInput
+                                                          count={section.tanks.filter(t => t.gender === 'MALE').length}
+                                                          onChange={(val) => updateAnimalTankCount(sIdx, 'MALE', val)}
+                                                      />
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => addTank(sIdx, 'MALE' as any)}
+                                                          className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center font-bold transition-all active:scale-90 border border-blue-200 flex-shrink-0"
+                                                          title="Add Male Tank"
+                                                      >
+                                                          <Plus className="w-2.5 h-2.5" />
+                                                      </button>
+                                                  </div>
+                                                  <div className="h-4 w-px bg-muted-foreground/20" />
+                                                  <div className="flex items-center gap-1">
+                                                      <span className="text-[9px] font-black text-pink-600 uppercase select-none">Female</span>
+                                                      <TankCountInput
+                                                          count={section.tanks.filter(t => t.gender === 'FEMALE').length}
+                                                          onChange={(val) => updateAnimalTankCount(sIdx, 'FEMALE', val)}
+                                                      />
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => addTank(sIdx, 'FEMALE' as any)}
+                                                          className="w-5 h-5 rounded-full bg-pink-50 text-pink-600 hover:bg-pink-100 flex items-center justify-center font-bold transition-all active:scale-90 border border-pink-200 flex-shrink-0"
+                                                          title="Add Female Tank"
+                                                      >
+                                                          <Plus className="w-2.5 h-2.5" />
+                                                      </button>
+                                                  </div>
+                                              </div>
+                                          ) : (
+                                             <div className="flex items-center gap-1 bg-muted/40 p-0.5 sm:p-1 rounded-xl border border-muted" onClick={(e) => e.stopPropagation()}>
+                                                 <TankCountInput
+                                                     count={section.tanks.length}
+                                                     onChange={(val) => updateTankCount(sIdx, val)}
+                                                 />
+                                             </div>
+                                         )}
                                         <div className="ml-1 text-muted-foreground flex-shrink-0">
                                             {collapsedSections.includes(sIdx) ? <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" /> : <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />}
                                         </div>
                                     </div>
                                 </div>
-                                 {!collapsedSections.includes(sIdx) && (
+                                 {!collapsedSections.includes(sIdx) && (
                                     <div className="grid gap-6 pl-4 border-l-2 border-dashed border-muted ml-5 animate-in slide-in-from-top-2 duration-300">
                                         {section.tanks.length === 0 ? (
                                             <div className="py-8 bg-muted/20 border border-dashed rounded-2xl text-center">
